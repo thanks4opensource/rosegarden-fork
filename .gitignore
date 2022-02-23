@@ -21,4 +21,3 @@ data/AutoloadStrings.cpp
 data/InstrumentStrings.cpp
 data/QMenuStrings.cpp
 *.user
-RCS/
