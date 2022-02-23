@@ -1397,11 +1397,14 @@ MatrixWidget::slotSegmentChangerMoved(int v)
     int steps = v - m_lastSegmentChangerValue;
     if (steps < 0) steps *= -1;
 
+    bool    segment_changed = true;
     for (int i = 0; i < steps; ++i) {
         if (v < m_lastSegmentChangerValue)
             nextSegment();
         else if (v > m_lastSegmentChangerValue)
             previousSegment();
+        else
+            segment_changed = false;
     }
 
     m_lastSegmentChangerValue = v;
@@ -1412,6 +1415,20 @@ MatrixWidget::slotSegmentChangerMoved(int v)
     // sets, the pitch ruler may need to be regenerated.
     // TODO : test if regeneration is really needed before doing it
     generatePitchRuler();
+
+    // Set active track so that external MIDI notes play with
+    // correct instrument (regardless whether Step Recording is on or off)
+    if (segment_changed) {
+        Segment *segment = m_scene->getCurrentSegment();
+        if (segment) {
+            Composition *composition = segment->getComposition();
+            if (composition) {
+                TrackId track_id = segment->getTrack();
+                // No need to check: always succeeds, and 0 is a valid track
+                composition->setSelectedTrack(track_id);
+            }
+        }
+    }
 }
 
 void
