@@ -4,13 +4,13 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     This file is Copyright 2005
         Toni Arnold         <toni__arnold@bluewin.ch>
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -171,40 +171,40 @@ void LircCommander::slotExecute(const char *command)
             emit trackUp();
             break;
         case cmd_trackMute:
-            emit trackMute(); 
+            emit trackMute();
             break;
         case cmd_trackRecord:
-            emit trackRecord(); 
+            emit trackRecord();
             break;
         case cmd_undo:
-            emit undo(); 
+            emit undo();
             break;
         case cmd_redo:
-            emit redo(); 
+            emit redo();
             break;
         case cmd_aboutrg:
-            emit aboutrg(); 
+            emit aboutrg();
             break;
         case cmd_editInEventList:
-            emit editInEventList(); 
+            emit editInEventList();
             break;
         case cmd_editInMatrix:
-            emit editInMatrix(); 
+            emit editInMatrix();
             break;
         case cmd_editInPercussionMatrix:
-            emit editInPercussionMatrix(); 
+            emit editInPercussionMatrix();
             break;
         case cmd_editAsNotation:
-            emit editAsNotation(); 
+            emit editAsNotation();
             break;
         case cmd_quit:
-            emit quit(); 
+            emit quit();
             break;
         case cmd_closeTransport:
-            emit closeTransport(); 
+            emit closeTransport();
             break;
         case cmd_toggleTransportVisibility:
-            emit toggleTransportVisibility(); 
+            emit toggleTransportVisibility();
             break;
         default:
             RG_DEBUG <<  "LircCommander::slotExecute: unhandled command " << command;

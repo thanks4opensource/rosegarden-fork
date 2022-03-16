@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -177,7 +177,7 @@ void EditViewBase::closeEvent(QCloseEvent* /* e */)
         e->ignore();
     } else {
 //         KMainWindow::closeEvent(e);
-		close(e);
+                close(e);
     }
 */
 }
@@ -192,9 +192,9 @@ void EditViewBase::slotToggleToolBar()
     TmpStatusMsg msg(tr("Toggle the toolbar..."), this);
 
     if (m_toolBar->isVisible())
-		m_toolBar->hide();
+                m_toolBar->hide();
     else
-		m_toolBar->show();
+                m_toolBar->show();
 }
 */
 void EditViewBase::slotToggleStatusBar()
@@ -212,7 +212,7 @@ void EditViewBase::slotStatusMsg(const QString &text)
     ///////////////////////////////////////////////////////////////////
     // change status message permanently
     statusBar()->clearMessage();
-    statusBar()->showMessage(text);	//, ID_STATUS_MSG);
+    statusBar()->showMessage(text);     //, ID_STATUS_MSG);
 }
 
 void EditViewBase::slotStatusHelpMsg(const QString &text)
@@ -292,7 +292,7 @@ EditViewBase::slotSetSegmentDuration()
     TimeDialog dialog(this, tr("Segment Duration"),
                       &RosegardenDocument::currentDocument->getComposition(),
                       s->getStartTime(),
-                      s->getEndMarkerTime() - s->getStartTime(), 
+                      s->getEndMarkerTime() - s->getStartTime(),
                       Note(Note::Shortest).getDuration(), false);
 
     if (dialog.exec() == QDialog::Accepted) {
@@ -328,22 +328,22 @@ EditViewBase::getTitle(const QString& view)
     QString title;
     QString indicator = (RosegardenDocument::currentDocument->isModified() ? "*" : "");
     if (m_segments.size() == 1) {
-        
+
         TrackId trackId = m_segments[0]->getTrack();
         Track *track =
             m_segments[0]->getComposition()->getTrackById(trackId);
-        
+
         int trackPosition = -1;
         if (track)
             trackPosition = track->getPosition();
-        
+
         QString segLabel = strtoqstr(m_segments[0]->getLabel());
         if (segLabel.isEmpty()) {
             segLabel = " ";
         } else {
             segLabel = QString(" \"%1\" ").arg(segLabel);
         }
-        
+
         QString trkLabel = strtoqstr(track->getLabel());
         if (trkLabel.isEmpty() || trkLabel == tr("<untitled>")) {
             trkLabel = " ";
@@ -370,7 +370,7 @@ EditViewBase::getTitle(const QString& view)
             .arg(m_segments.size())
             .arg(view);
     }
-    
+
     return title;
 }
 
