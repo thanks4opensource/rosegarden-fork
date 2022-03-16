@@ -61,7 +61,6 @@ signals:
     void aboutrg();
     void editInEventList();
     void editInMatrix();
-    void editInPercussionMatrix();
     void editAsNotation();
     void quit();
     void closeTransport();
@@ -95,7 +94,6 @@ private:
         cmd_aboutrg,
         cmd_editInEventList,
         cmd_editInMatrix,
-        cmd_editInPercussionMatrix,
         cmd_editAsNotation,
         cmd_quit,
         cmd_closeTransport,

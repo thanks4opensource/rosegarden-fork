@@ -100,6 +100,7 @@ MatrixViewSegment::makeViewElement(Event* e)
     return new MatrixElement(m_scene, e, m_drum, pitchOffset, &getSegment());
 }
 
+// This is invoked via Composition::addObserver() notifications.
 void
 MatrixViewSegment::endMarkerTimeChanged(const Segment *s, bool shorten)
 {
@@ -128,6 +129,20 @@ MatrixViewSegment::updateAll()
         i != m_viewElementList->end();
         ++i) {
         MatrixElement *e = static_cast<MatrixElement *>(*i);
+        e->reconfigure();
+    }
+}
+
+void
+MatrixViewSegment::setDrumMode(
+bool drumMode)
+{
+    m_drum = drumMode;
+    for(ViewElementList::iterator i = m_viewElementList->begin();
+        i != m_viewElementList->end();
+        ++i) {
+        MatrixElement *e = static_cast<MatrixElement *>(*i);
+        e->setDrumMode(drumMode);
         e->reconfigure();
     }
 }

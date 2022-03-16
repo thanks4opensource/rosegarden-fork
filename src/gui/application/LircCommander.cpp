@@ -78,8 +78,6 @@ LircCommander::LircCommander(LircClient *lirc, RosegardenMainWindow *rgGUIApp)
             m_rgGUIApp, &RosegardenMainWindow::slotHelpAbout );
     connect(this, &LircCommander::editInMatrix,
             m_rgGUIApp, &RosegardenMainWindow::slotEditInMatrix );
-    connect(this, &LircCommander::editInPercussionMatrix,
-            m_rgGUIApp, &RosegardenMainWindow::slotEditInPercussionMatrix );
     connect(this, &LircCommander::editInEventList,
             m_rgGUIApp, &RosegardenMainWindow::slotEditInEventList );
     connect(this, &LircCommander::editAsNotation,
@@ -99,7 +97,6 @@ LircCommander::command LircCommander::commands[] =
         { "EDITEVLIST",         cmd_editInEventList },
         { "EDITMATRIX",         cmd_editInMatrix },
         { "EDITNOTATION",       cmd_editAsNotation },
-        { "EDITPMATRIX",        cmd_editInPercussionMatrix },
         { "FORWARD",            cmd_fastForward },
         { "FORWARDTOEND",       cmd_fastForwardToEnd },
         { "PLAY",               cmd_play },
@@ -190,9 +187,6 @@ void LircCommander::slotExecute(const char *command)
             break;
         case cmd_editInMatrix:
             emit editInMatrix();
-            break;
-        case cmd_editInPercussionMatrix:
-            emit editInPercussionMatrix();
             break;
         case cmd_editAsNotation:
             emit editAsNotation();

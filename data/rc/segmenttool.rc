@@ -8,7 +8,6 @@
   <Action name="edit_default" text="Open in &amp;Default Editor" shortcut="Return" />
 <Separator/>
   <Action name="edit_matrix" text="Open in Matri&amp;x Editor" icon="matrix" shortcut="M" />
-  <Action name="edit_percussion_matrix" text="Open in &amp;Percussion Matrix Editor" icon="matrix-percussion" shortcut="D" />
   <Action name="edit_notation" text="Open in &amp;Notation Editor" icon="notation" shortcut="N" />
   <Action name="edit_event_list" text="Open in &amp;Event List Editor" icon="eventlist" shortcut="E" />
   <Action name="edit_pitch_tracker" text="Open in &amp;Pitch Tracker" icon="pitchtracker" shortcut="I" />

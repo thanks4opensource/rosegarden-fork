@@ -114,7 +114,7 @@ public:
     void setZoomSize(double size);
 
     void initChordNameRuler();
-    
+
     bool haveSelection();
     SegmentSelection getSelection();
     void updateSelectedSegments();
@@ -130,8 +130,6 @@ public slots:
     void slotEditSegmentsNotation(std::vector<Segment*>);
     void slotEditSegmentMatrix(Segment*);
     void slotEditSegmentsMatrix(std::vector<Segment*>);
-    void slotEditSegmentPercussionMatrix(Segment*);
-    void slotEditSegmentsPercussionMatrix(std::vector<Segment*>);
     void slotEditSegmentEventList(Segment*);
     void slotEditSegmentsEventList(std::vector<Segment*>);
     void slotEditSegmentPitchTracker(Segment*);
@@ -256,7 +254,7 @@ signals:
      * to edit views
      */
     void compositionStateUpdate();
-    
+
 
     /**
      * This signal is used to dispatch a notification for a request to
@@ -279,7 +277,7 @@ signals:
 private:
 
     void createNotationView(std::vector<Segment *>);
-    void createMatrixView(std::vector<Segment *>, bool drumMode);
+    void createMatrixView(std::vector<Segment *>);
     EventView *createEventView(std::vector<Segment *>);
     PitchTrackerView *createPitchTrackerView(std::vector<Segment *>);
 

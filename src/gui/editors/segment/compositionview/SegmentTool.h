@@ -98,7 +98,6 @@ private slots:
     // RosegardenMainWindow?
     void slotEdit();
     void slotEditInMatrix();
-    void slotEditInPercussionMatrix();
     void slotEditAsNotation();
     void slotEditInEventList();
     void slotEditInPitchTracker();

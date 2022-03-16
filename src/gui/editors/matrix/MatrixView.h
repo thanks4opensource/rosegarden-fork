@@ -63,7 +63,6 @@ class MatrixView : public EditViewBase,
 public:
     MatrixView(RosegardenDocument *doc,
                   std::vector<Segment *> segments,
-                  bool drumMode,
                   QWidget *parent = nullptr);
 
     ~MatrixView() override;
@@ -193,6 +192,7 @@ protected slots:
     // view
     void slotShowNames();
     void slotHighlight();
+    void slotPercussionDurations();
 
     void slotShowContextHelp(const QString &);
 
@@ -281,11 +281,11 @@ private:
     std::vector<timeT> m_quantizations;
     std::vector<timeT> m_snapValues;
 
+    void setShowPercussionDurations();
     void setupActions();
     void initActionsToolbar();
     void initRulersToolbar();
 
-    bool m_drumMode;
     bool m_Thorn;
     bool m_inChordMode;
 

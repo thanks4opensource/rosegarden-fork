@@ -127,17 +127,14 @@ namespace Rosegarden
 
 MatrixView::MatrixView(RosegardenDocument *doc,
                  std::vector<Segment *> segments,
-                 bool drumMode,
                  QWidget *parent) :
     EditViewBase(segments, parent),
     m_quantizations(BasicQuantizer::getStandardQuantizations()),
-    m_drumMode(drumMode),
     m_inChordMode(false)
 {
     m_document = doc;
-    m_matrixWidget = new MatrixWidget(m_drumMode);
+    m_matrixWidget = new MatrixWidget(this);
     setCentralWidget(m_matrixWidget);
-    m_matrixWidget->setSegments(doc, segments);
 
     // Many actions are created here
     // ??? MEMORY LEAK (confirmed)
@@ -146,6 +143,13 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     setupActions();
 
     createMenusAndToolbars("matrix.rc");
+
+    // Ensure that initial display of any percussion segments is
+    // correct with respect to View -> Notes -> Show percussion durations.
+    // Following two calls must be done in order, and both
+    // after createMenusAndToolbars()
+    setShowPercussionDurations();
+    m_matrixWidget->setSegments(doc, segments);
 
     findToolbar("General Toolbar");
 
@@ -223,7 +227,6 @@ MatrixView::MatrixView(RosegardenDocument *doc,
         static_cast<MatrixScene::HighlightType>(
             settings.value("highlight_type",
                            MatrixScene::HT_BlackKeys).toInt());
-    settings.endGroup();
     switch (chosenHighlightType) {
     case MatrixScene::HT_BlackKeys:
         findAction("highlight_black_notes")->setChecked(true);
@@ -235,6 +238,7 @@ MatrixView::MatrixView(RosegardenDocument *doc,
         findAction("highlight_black_notes")->setChecked(true);
         break;
     }
+
     settings.endGroup();
 
     if (segments.size() > 1) {
@@ -243,17 +247,13 @@ MatrixView::MatrixView(RosegardenDocument *doc,
         leaveActionState("have_multiple_segments");
     }
 
-    if (m_drumMode) {
-        enterActionState("in_percussion_matrix");
-    } else {
-        enterActionState("in_standard_matrix");
-    }
+    enterActionState("in_standard_matrix");
 
     // Restore window geometry and toolbar/dock state
     settings.beginGroup(WindowGeometryConfigGroup);
-    QString modeStr = (m_drumMode ? "Percussion_Matrix_View_Geometry" : "Matrix_View_Geometry");
+    QString modeStr = "Matrix_View_Geometry";
     this->restoreGeometry(settings.value(modeStr).toByteArray());
-    modeStr = (m_drumMode ? "Percussion_Matrix_View_State" : "Matrix_View_State");
+    modeStr = "Matrix_View_State";
     this->restoreState(settings.value(modeStr).toByteArray());
     settings.endGroup();
 
@@ -289,6 +289,19 @@ MatrixView::~MatrixView()
 }
 
 void
+MatrixView::setShowPercussionDurations()
+{
+    QSettings settings;
+    settings.beginGroup(MatrixViewConfigGroup);
+    bool showPercussionDurations = qStrToBool(settings.value(
+                                              "show_percussion_durations"));
+    findAction("show_percussion_durations")->setChecked(
+                                             showPercussionDurations);
+    settings.endGroup();
+    m_matrixWidget->setShowPercussionDurations(showPercussionDurations);
+}
+
+void
 MatrixView::launchRulers(std::vector<Segment *> segments)
 {
     if (!m_matrixWidget)
@@ -309,9 +322,9 @@ MatrixView::closeEvent(QCloseEvent *event)
     // Save window geometry and toolbar/dock state
     QSettings settings;
     settings.beginGroup(WindowGeometryConfigGroup);
-    QString modeStr = (m_drumMode ? "Percussion_Matrix_View_Geometry" : "Matrix_View_Geometry");
+    QString modeStr = "Matrix_View_Geometry";
     settings.setValue(modeStr, this->saveGeometry());
-    modeStr = (m_drumMode ? "Percussion_Matrix_View_State" : "Matrix_View_State");
+    modeStr = "Matrix_View_State";
     settings.setValue(modeStr, this->saveState());
     settings.endGroup();
 
@@ -539,6 +552,7 @@ MatrixView::setupActions()
     createAction("donate", SLOT(slotDonate()));
 
     createAction("show_note_names", SLOT(slotShowNames()));
+    createAction("show_percussion_durations", SLOT(slotPercussionDurations()));
     createAction("highlight_black_notes", SLOT(slotHighlight()));
     createAction("highlight_triads", SLOT(slotHighlight()));
     // add the highlight actions to an ActionGroup
@@ -1665,25 +1679,49 @@ MatrixView::slotShowNames()
 }
 
 void
+MatrixView::slotPercussionDurations()
+{
+    bool show = findAction("show_percussion_durations")->isChecked();
+    RG_DEBUG << "show percussion durations:" << show;
+    QSettings settings;
+    settings.beginGroup(MatrixViewConfigGroup);
+    settings.setValue("show_percussion_durations", show);
+    settings.endGroup();
+    m_matrixWidget->setShowPercussionDurations(show);
+    static constexpr bool onlyPercussion = true;
+    m_matrixWidget->getScene()->updateAll(onlyPercussion);
+}
+
+void
 MatrixView::slotHighlight()
 {
+    QSettings settings;
+    settings.beginGroup(MatrixViewConfigGroup);
+    MatrixScene::HighlightType previousHighlightType =
+        static_cast<MatrixScene::HighlightType>(
+            settings.value("highlight_type",
+                           MatrixScene::HT_BlackKeys).toInt());
+    MatrixScene::HighlightType newHighlightType = previousHighlightType;
+
     const QObject *s = sender();
     QString name = s->objectName();
     if (name == "highlight_black_notes") {
         RG_DEBUG << "highlight black notes";
-        QSettings settings;
-        settings.beginGroup(MatrixViewConfigGroup);
         settings.setValue("highlight_type", MatrixScene::HT_BlackKeys);
-        settings.endGroup();
+        newHighlightType = MatrixScene::HT_BlackKeys;
     }
-    if (name == "highlight_triads") {
+    else if (name == "highlight_triads") {
         RG_DEBUG << "highlight triads";
-        QSettings settings;
-        settings.beginGroup(MatrixViewConfigGroup);
         settings.setValue("highlight_type", MatrixScene::HT_Triads);
-        settings.endGroup();
+        newHighlightType = MatrixScene::HT_Triads;
     }
-    m_matrixWidget->getScene()->updateAll();
+
+    settings.endGroup();
+
+    // Only do if changed.
+    if (newHighlightType != previousHighlightType) {
+        m_matrixWidget->getScene()->updateAll();
+    }
 }
 
 void

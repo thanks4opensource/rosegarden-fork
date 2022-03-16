@@ -75,6 +75,8 @@ public:
 
     static MatrixElement *getMatrixElement(QGraphicsItem *);
 
+    void setDrumMode(bool isDrum) { m_drum = isDrum;}
+
     // Z values for occlusion/layering of object in graph display.
     // Diffence between NORMAL_ and ACTIVE_  needed when notes from
     // different segments overlay each other at same pitch and time
@@ -109,7 +111,7 @@ protected:
     long m_pitchOffset;
 
     // Bug #1624: Allows MatrixPainter::handleLeftButtonPress() and
-    // other MatrixSomeClass::handleSomeButtonSomeAction() methods
+    // other MatrixSomeClass::handleSomeButtonSomeAction() methods to tell
     // if existing note at same pitch/time as new one being created is
     // in current active segment or not. Needed because Events lack
     // back-pointers to their parent Segment, and constructor is called

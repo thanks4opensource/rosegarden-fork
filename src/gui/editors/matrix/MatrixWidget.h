@@ -20,6 +20,7 @@
 
 #include "base/Event.h"             // for timeT
 #include "MatrixTool.h"
+#include "MatrixView.h"
 #include "base/MidiTypes.h"         // for MidiByte
 #include "gui/general/AutoScroller.h"
 #include "gui/general/SelectionManager.h"
@@ -72,7 +73,7 @@ class Thumbwheel;
  *   - The tempo ruler
  *   - The top standard ruler
  *   - The pitch ruler, m_pianoView (to the left of the matrix)
- *   - The matrix itself, m_view and m_scene
+ *   - The matrix itself, m_panned and m_scene
  *   - The bottom standard ruler, m_bottomStandardRuler
  *   - The controls widget, m_controlsWidget (optional)
  *   - The Segment label, m_segmentLabel
@@ -88,7 +89,7 @@ class MatrixWidget : public QWidget,
     Q_OBJECT
 
 public:
-    MatrixWidget(bool drumMode);
+    MatrixWidget(MatrixView *matrixView);
     virtual ~MatrixWidget() override;
 
     Device *getCurrentDevice();
@@ -149,6 +150,9 @@ public:
     void setCanvasCursor(QCursor cursor);
 
     bool isDrumMode() const { return m_drumMode; }
+    bool getShowPercussionDurations() const {return m_showPercussionDurations; }
+    void setShowPercussionDurations(bool show) { m_showPercussionDurations =
+                                                 show; }
 
     /// Velocity for new notes.  (And moved notes too.)
     int getCurrentVelocity() const { return m_currentVelocity; }
@@ -303,6 +307,8 @@ private slots:
     void slotInstrumentGone();
 
 private:
+    MatrixView* const m_view;
+
     // ??? Instead of storing the document, which can change, get the
     //     document as needed via RosegardenDocument::currentDocument.
     RosegardenDocument *m_document; // I do not own this
@@ -316,7 +322,7 @@ private:
     MatrixScene *m_scene; // I own this
 
     /// The main view of the MatrixScene (m_scene).
-    Panned *m_view; // I own this
+    Panned *m_panned; // I own this
 
     /// Whether the view will scroll along with the playback position pointer.
     bool m_playTracking;
@@ -369,7 +375,7 @@ private:
      * For the Percussion matrix editor, we ignore key release events from
      * the PitchRuler.
      */
-    bool m_drumMode;
+     bool m_drumMode;
     // For determining if pitch ruler needs to be regenerated when
     // changing segments.
     enum class PrevPitchRulerType {NONE, PIANO, PERCUSSION} m_prevPitchRulerType;
@@ -390,6 +396,15 @@ private:
 
     /// Hide pitch ruler highlight when mouse move is not related to a pitch change.
     bool m_highlightVisible;
+
+
+    // This needs to be accessed by MatrixElement::reconfigure() each
+    // time a percussion segment note moves/etc., and getting from
+    // the QSettings persistent database is too slow.
+    // Will be set from MatrixView constructor when read from database,
+    // and updated each time changed via user GUI interaction as
+    // signaled to MatrixView::slotPercussionDurations().
+    bool    m_showPercussionDurations;
 
 
     // Tools

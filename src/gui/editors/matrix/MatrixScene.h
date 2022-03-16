@@ -132,7 +132,7 @@ public:
     void setVerticalZoomFactor(double factor);
 
     /// update all ViewSegments
-    void updateAll();
+    void updateAll(bool onlyPercussion=false);
 
 signals:
     void mousePressed(const MatrixMouseEvent *e);
@@ -167,11 +167,16 @@ protected:
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *) override;
 
     void segmentRemoved(const Composition *, Segment *) override; // CompositionObserver
+    void trackChanged(const Composition *,Track*) override;  //  CompositionObserver
 
 private:
     MatrixWidget *m_widget; // I do not own this
 
     RosegardenDocument *m_document; // I do not own this
+
+    // To prevent multiple addObserver() calls to same Document.
+    // See comment in setSegments() implementation in .cpp file.
+    bool m_observerAdded;
 
     /// The Segments we are editing.
     std::vector<Segment *> m_segments; // I do not own these

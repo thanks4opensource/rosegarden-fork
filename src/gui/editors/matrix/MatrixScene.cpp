@@ -60,6 +60,7 @@ using namespace BaseProperties;
 MatrixScene::MatrixScene() :
     m_widget(nullptr),
     m_document(nullptr),
+    m_observerAdded(false),
     m_currentSegmentIndex(0),
     m_scale(nullptr),
     m_referenceScale(nullptr),
@@ -123,6 +124,7 @@ MatrixScene::setSegments(RosegardenDocument *document,
 {
     if (m_document && document != m_document) {
         m_document->getComposition().removeObserver(this);
+        m_observerAdded = false;
     }
 
     m_document = document;
@@ -133,7 +135,16 @@ MatrixScene::setSegments(RosegardenDocument *document,
     // (MatrixWidget::m_segmentChanger) easier to understand.
     std::sort(m_segments.begin(), m_segments.end(), TrackPositionLess());
 
-    m_document->getComposition().addObserver(this);
+    // Check before adding self as an observer because there is no guarantee
+    // that this method will not be invoked multiple times, and
+    // Composition::addObserver() doesn't check for duplicates which
+    // in turn would be invoked multiple times -- bad not only for efficiency
+    // but could cause worse problems (multiple instantiations of objects
+    // intended to be done only once, etc).
+    if (!m_observerAdded) {
+        m_document->getComposition().addObserver(this);
+        m_observerAdded = true;
+    }
 
     SegmentSelection selection;
     selection.insert(segments.begin(), segments.end());
@@ -186,6 +197,7 @@ MatrixScene::setSegments(RosegardenDocument *document,
     if (keyMapping) m_resolution = 11;
 
     bool haveSetSnap = false;
+    Composition &composition = m_document->getComposition();
 
     for (unsigned int i = 0; i < m_segments.size(); ++i) {
 
@@ -196,9 +208,19 @@ MatrixScene::setSegments(RosegardenDocument *document,
             haveSetSnap = true;
         }
 
+        // Feature Request #501. Percussion vs normal mode is
+        // now dynamic per segment depending on the segment's
+        // track's instrument.
+        TrackId trackId = m_segments[i]->getTrack();
+        Track *track = composition.getTrackById(trackId);
+        Instrument *instr = m_document->getStudio().getInstrumentById(
+                                                  track->getInstrument());
+        drumMode = instr->getKeyMapping();
+
         MatrixViewSegment *vs = new MatrixViewSegment(this,
                                                       m_segments[i],
                                                       drumMode);
+
         (void)vs->getViewElementList(); // make sure it has been created
         m_viewSegments.push_back(vs);
     }
@@ -775,6 +797,9 @@ MatrixScene::checkUpdate()
     }
 }
 
+// This is invoked from Composition::addObserver() notifications
+// and/or by MatrixViewSegment::endMarkerTimeChanged() (in turn
+// invoked from notifications).
 void
 MatrixScene::segmentEndMarkerTimeChanged(const Segment *, bool)
 {
@@ -782,6 +807,7 @@ MatrixScene::segmentEndMarkerTimeChanged(const Segment *, bool)
     recreateLines();
 }
 
+// This is invoked from Composition::addObserver() notifications.
 void
 MatrixScene::segmentRemoved(const Composition *, Segment *removedSegment)
 {
@@ -829,6 +855,33 @@ MatrixScene::segmentRemoved(const Composition *, Segment *removedSegment)
     // No more Segments?
     if (m_segments.empty())
         emit sceneDeleted();
+}
+
+// A track's instrument might have changed from pitched to percussion
+// or vice-versa, so display of the track's segments notes might need
+// to be update with respect to pitched-vs-percussion and the
+// current "View -> Notes -> Show percussion durations" setting.
+// This method is invoked from Composition::addObserver() notifications.
+void
+MatrixScene::trackChanged(const Composition *composition, Track *track)
+{
+    Instrument *instr = m_document->getStudio().getInstrumentById(
+                                                track->getInstrument());
+    bool trackIsNowDrum = instr->getKeyMapping();
+    bool segmentUpdated = false;
+
+    for (std::vector<MatrixViewSegment *>::iterator i = m_viewSegments.begin();
+         i != m_viewSegments.end(); ++i) {
+        TrackId trackId = (*i)->getSegment().getTrack();
+        Track *segmentTrack = composition->getTrackById(trackId);
+
+        if (segmentTrack == track && (*i)->isDrumMode() != trackIsNowDrum) {
+            (*i)->setDrumMode(trackIsNowDrum);
+            segmentUpdated = true;
+        }
+    }
+
+    if (segmentUpdated) recreatePitchHighlights();
 }
 
 void
@@ -1087,10 +1140,13 @@ MatrixScene::setVerticalZoomFactor(double factor)
 }
 
 void
-MatrixScene::updateAll()
+MatrixScene::updateAll(bool onlyPercussion)
 {
     for (std::vector<MatrixViewSegment *>::iterator i = m_viewSegments.begin();
          i != m_viewSegments.end(); ++i) {
+        if (onlyPercussion && !(*i)->isDrumMode()) {
+            continue;
+        }
         (*i)->updateAll();
     }
     recreatePitchHighlights();

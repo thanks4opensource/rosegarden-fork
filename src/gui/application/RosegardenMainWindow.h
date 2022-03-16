@@ -125,7 +125,7 @@ class ROSEGARDENPRIVATE_EXPORT RosegardenMainWindow :
         public QMainWindow, public ActionFileClient
 {
     Q_OBJECT
-    
+
     friend class RosegardenMainViewWidget;
 
 public:
@@ -143,7 +143,7 @@ public:
 
     /// Global access to the single instance of this class.
     static RosegardenMainWindow *self() { return m_myself; }
-    
+
     RosegardenMainViewWidget *getView() { return m_view; }
 
     TransportDialog *getTransport();
@@ -172,7 +172,7 @@ public:
 
     /// merge a file with the existing document
     virtual void mergeFile(QString filePath) { mergeFile(filePath, ImportCheckType); }
-    
+
     /// merge a file, explicitly specifying its type
     void mergeFile(QString filePath, ImportType type);
 
@@ -299,7 +299,7 @@ protected:
             bool permanent,
             bool lock,
             bool clearHistory);
-    
+
     /**
      * Create a document from RG file
      */
@@ -452,7 +452,7 @@ protected:
 
     /**
      * Returns a suitable location for storing user data, typically
-     * ~/.local/share/ 
+     * ~/.local/share/
      */
     QString getDataLocation();
 
@@ -569,7 +569,7 @@ public slots:
     void slotRevertToSaved();
 
     /**
-     * Let the user select a Rosegarden 2.1 file for import 
+     * Let the user select a Rosegarden 2.1 file for import
      */
     void slotImportRG21();
 
@@ -651,7 +651,7 @@ public slots:
      * saveModified() dialog, the closing breaks.
      */
     void slotQuit();
-    
+
     /**
      * put the marked text/object into the clipboard and remove * it
      * from the document
@@ -667,12 +667,12 @@ public slots:
      * paste the clipboard into the document
      */
     void slotEditPaste();
-    
+
     /**
      * paste the clipboard into the document, as linked segments
      */
     void slotEditPasteAsLinks();
-    
+
     /**
      * Cut a time range (sections of segments, tempo, and time
      * signature events within that range).
@@ -689,12 +689,12 @@ public slots:
      * subsequent material along to make space.
      */
     void slotPasteRange();
-    
+
     /**
      * Delete a time range.
      */
     void slotDeleteRange();
-    
+
     /**
      * Insert a time range (asking the user for a duration).
      */
@@ -710,7 +710,7 @@ public slots:
      * Clear a time range of tempos
      */
     void slotEraseRangeTempos();
-    
+
     /**
      * select all segments on all tracks
      */
@@ -817,7 +817,7 @@ public slots:
      * Update existing figurations
      */
     void slotUpdateFigurations();
-    
+
     /**
      * Tempo to Segment length
      */
@@ -828,7 +828,7 @@ public slots:
      * toggle segment labels
      */
     void slotToggleSegmentLabels();
-    
+
     /**
      * open the default editor for each of the currently-selected segments
      */
@@ -843,11 +843,6 @@ public slots:
      * open a matrix view for each of the currently-selected segments
      */
     void slotEditInMatrix();
-
-    /**
-     * open a percussion matrix view for each of the currently-selected segments
-     */
-    void slotEditInPercussionMatrix();
 
     /**
      * open a pitch tracker view for the currently-selected segments
@@ -896,16 +891,16 @@ public slots:
      * open a dialog for document properties
      */
     void slotEditDocumentProperties();
-    
+
     /**
      * Reset m_configDlg when the configuration dialog is closing.
      */
-    void slotResetConfigDlg(); 
-    
+    void slotResetConfigDlg();
+
     /**
      * Reset m_docConfigDlg when the document properties dialog is closing.
      */
-    void slotResetDocConfigDlg(); 
+    void slotResetDocConfigDlg();
 
     /**
      * Manage MIDI Devices
@@ -922,7 +917,7 @@ public slots:
      */
     void slotOpenAudioMixer();
     void slotOpenMidiMixer();
-    
+
     /**
      * Edit Banks/Programs
      */
@@ -987,7 +982,7 @@ public slots:
      * Send MIDI_RESET to all MIDI devices
      */
     void slotResetMidiNetwork();
-    
+
     /**
      * toggles the toolbar
      */
@@ -1060,12 +1055,12 @@ public slots:
      * segment eraser tool is selected
      */
     void slotEraseSelected();
-    
+
     /**
      * segment draw tool is selected
      */
     void slotDrawSelected();
-    
+
     /**
      * segment move tool is selected
      */
@@ -1155,7 +1150,7 @@ public slots:
     //  current slotSequenceExited implementation doesn't use (or name!) this param
     void slotSequencerExited();
 
-    /// When the transport closes 
+    /// When the transport closes
     void slotCloseTransport();
 
     /**
@@ -1164,7 +1159,7 @@ public slots:
      * a 2nd main window
      */
     void slotDeleteTransport();
-    
+
     /**
      * Put the GUI into a given Tool edit mode
      */
@@ -1243,7 +1238,7 @@ public slots:
      * Toggle arm (record) current track
      */
     void slotToggleRecordCurrentTrack();
-    
+
     /**
      * Show the shortcut configure dialog
      */
@@ -1322,7 +1317,7 @@ public slots:
      * Surf to the bug reporting guidelines
      */
     void slotBugGuidelines();
-    
+
     /**
      * Call the Rosegaden about box.
      */
@@ -1361,7 +1356,7 @@ public slots:
     void slotTransposeSegments();
     void slotTransposeSemitones();
     void slotSwitchPreset();
-    
+
     /// Panic button pressed
     void slotPanic();
 
@@ -1483,21 +1478,21 @@ public slots:
     void slotDocumentDevicesResyncd();
 
     void slotTestStartupTester();
-    
+
     void slotDebugDump();
 
     void slotShowToolHelp(const QString &);
 
     void slotNewerVersionAvailable(QString);
-    
+
     void slotAddMarker2();
     void slotPreviousMarker();
     void slotNextMarker();
 
     void slotSetQuickMarker();
-    
-    void slotJumpToQuickMarker();    
-    
+
+    void slotJumpToQuickMarker();
+
     void slotDisplayWarning(int type,
                             QString text,
                             QString informativeText);
@@ -1550,7 +1545,7 @@ private:
      *    Menus
      */
     RecentFiles m_recentFiles;
-    
+
     SequencerThread *m_sequencerThread;
     bool m_sequencerCheckedIn;
 
@@ -1564,11 +1559,11 @@ private:
      * QProgressDialog for that.
      */
     ProgressBar *m_cpuBar;
-    
+
     ZoomSlider<double> *m_zoomSlider;
     QLabel             *m_zoomLabel;
 
-    
+
 //    QLabel *m_statusBarLabel1;
     // SequenceManager
     //
@@ -1628,13 +1623,13 @@ private:
     bool m_haveAudioImporter;
 
     RosegardenParameterArea *m_parameterArea;
-    
-#ifdef HAVE_LIRC        
+
+#ifdef HAVE_LIRC
     LircClient *m_lircClient;
     LircCommander *m_lircCommander;
-#endif     
+#endif
     TranzportClient *m_tranzport;
-        
+
     QPointer<DeviceManagerDialog> m_deviceManager;
 
     WarningWidget *m_warningWidget;

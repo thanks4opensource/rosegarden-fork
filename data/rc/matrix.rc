@@ -30,7 +30,11 @@
 
   <Menu name="View">
     <text>&amp;View</text>
-    <Action name="show_note_names" text="Show note names" checked="false" />
+    <Menu name="Notes">
+      <text>Notes</text>
+      <Action name="show_note_names" text="Show note names" checked="false" />
+      <Action name="show_percussion_durations" text="Show percussion durations" checked="false" />
+    </Menu>
     <Menu name="Highlight">
       <text>&amp;Highlight</text>
       <Action name="highlight_black_notes" text="Highlight black notes" checked="false" />

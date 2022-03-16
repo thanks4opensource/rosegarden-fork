@@ -47,6 +47,10 @@ public:
 
     MatrixScene* getMatrixScene() const { return m_scene; }
 
+    bool isDrumMode() const { return m_drum; }
+
+    void setDrumMode(bool drumMode);
+
 protected:
 //!!!    const MidiKeyMapping *getKeyMapping() const;
 

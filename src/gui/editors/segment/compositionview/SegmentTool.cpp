@@ -49,7 +49,6 @@ SegmentTool::SegmentTool(CompositionView* canvas, RosegardenDocument *doc)
     // all of these end up simply delegating to RosegardenMainWindow.
     createAction("edit_default", SLOT(slotEdit()));
     createAction("edit_matrix", SLOT(slotEditInMatrix()));
-    createAction("edit_percussion_matrix", SLOT(slotEditInPercussionMatrix()));
     createAction("edit_notation", SLOT(slotEditAsNotation()));
     createAction("edit_event_list", SLOT(slotEditInEventList()));
     createAction("edit_pitch_tracker", SLOT(slotEditInPitchTracker()));
@@ -188,10 +187,6 @@ void SegmentTool::slotEdit()
 void SegmentTool::slotEditInMatrix()
 {
     RosegardenMainWindow::self()->slotEditInMatrix();
-}
-void SegmentTool::slotEditInPercussionMatrix()
-{
-    RosegardenMainWindow::self()->slotEditInPercussionMatrix();
 }
 void SegmentTool::slotEditAsNotation()
 {

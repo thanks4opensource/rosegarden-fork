@@ -70,7 +70,6 @@ signals:
      */
     void openInNotation(std::vector<Segment *>);
     void openInMatrix(std::vector<Segment *>);
-    void openInPercussionMatrix(std::vector<Segment *>);
     void openInEventList(std::vector<Segment *>);
     void slotOpenInPitchTracker(std::vector<Segment *>);
 
@@ -148,7 +147,6 @@ public slots:
     virtual void slotToggleSolo();
 
     virtual void slotOpenInMatrix();
-    virtual void slotOpenInPercussionMatrix();
     virtual void slotOpenInNotation();
     virtual void slotOpenInEventList();
     virtual void slotOpenInPitchTracker();

@@ -40,6 +40,8 @@
 
 #include <Qt>
 
+#include <cmath>
+
 namespace Rosegarden
 {
 
@@ -179,7 +181,19 @@ void MatrixPainter::handleLeftButtonPress(const MatrixMouseEvent *e)
     long pitchOffset = m_currentViewSegment->getSegment().getTranspose();
     long adjustedPitch = e->pitch + (pitchOffset * -1);
 
-    Event *ev = new Event(Note::EventType, e->snappedLeftTime, e->snapUnit);
+    timeT snappedTime = e->snappedLeftTime;
+    if (m_widget->isDrumMode() && !m_widget->getShowPercussionDurations()) {
+        // Snap to closest grid time, left *or* right, because percussion
+        // "notes" in normal/non-duration display mode conceptually fall
+        // on the beat, not as a duration starting at the beat like pitched
+        // notes or percussion ones in "Show percussion duration" mode.
+        if (fabs(e->snappedRightTime - e->time) <
+            fabs(e->snappedLeftTime  - e->time)) {
+            snappedTime = e->snappedRightTime;
+        }
+    }
+
+    Event *ev = new Event(Note::EventType, snappedTime, e->snapUnit);
     ev->set<Int>(BaseProperties::PITCH, adjustedPitch);
     ev->set<Int>(BaseProperties::VELOCITY, velocity);
 
@@ -225,7 +239,22 @@ MatrixPainter::handleMouseMove(const MatrixMouseEvent *e)
     long velocity = m_widget->getCurrentVelocity();
     m_currentElement->event()->get<Int>(BaseProperties::VELOCITY, velocity);
 
-    Event *ev = new Event(Note::EventType, time, endTime - time);
+    timeT duration = endTime - time;
+    if (m_widget->isDrumMode() && !m_widget->getShowPercussionDurations()) {
+        // Just move, don't adjust duration.
+        // See "Snap to closest grid time" comment above for why
+        // left-or-right snapping.
+        if (fabs(e->snappedRightTime - e->time) <
+            fabs(e->snappedLeftTime  - e->time)) {
+            time = e->snappedRightTime;
+        }
+        else {
+            time = e->snappedLeftTime;
+        }
+        duration = e->snapUnit;
+    }
+
+    Event *ev = new Event(Note::EventType, time, duration);
     ev->set<Int>(BaseProperties::PITCH, adjustedPitch);
     ev->set<Int>(BaseProperties::VELOCITY, velocity);
 
@@ -259,15 +288,31 @@ void MatrixPainter::handleMouseRelease(const MatrixMouseEvent *e)
     if (!m_currentElement) return;
 
     timeT time = m_clickTime;
-    timeT endTime = e->snappedRightTime;
-    if (endTime <= time && e->snappedLeftTime < time) endTime = e->snappedLeftTime;
-    if (endTime == time) endTime = time + e->snapUnit;
-    if (time > endTime) std::swap(time, endTime);
-
     if (m_widget->isDrumMode()) {
+        if (m_widget->getShowPercussionDurations()) {
+            // Same as normal pitched segment/notes, below.
+            timeT endTime = e->snappedRightTime;
+            if (endTime <= time && e->snappedLeftTime < time) {
+                endTime = e->snappedLeftTime;
+            }
+            if (endTime == time) endTime = time + e->snapUnit;
+            if (time > endTime) std::swap(time, endTime);
+        } else {
+            // Closest grid time, left or right
+            // See "Snap to closest grid time" comment in
+            // handleLeftButtonPress() above for why left-or-right snapping.
+            if (fabs(e->snappedRightTime - e->time) <
+                fabs(e->snappedLeftTime  - e->time)) {
+                time = e->snappedRightTime;
+            }
+            else {
+                time = e->snappedLeftTime;
+            }
+        }
 
         MatrixPercussionInsertionCommand *command =
-            new MatrixPercussionInsertionCommand(m_currentViewSegment->getSegment(),
+            new MatrixPercussionInsertionCommand(m_currentViewSegment->
+                                                   getSegment(),
                                                  time,
                                                  m_currentElement->event());
         CommandHistory::getInstance()->addCommand(command);
@@ -281,7 +326,13 @@ void MatrixPainter::handleMouseRelease(const MatrixMouseEvent *e)
             m_scene->setSingleSelectedEvent
                 (&m_currentViewSegment->getSegment(), ev, false);
         }
-    } else {
+    } else {  // Normal pitched segment/notes.
+        timeT endTime = e->snappedRightTime;
+        if (endTime <= time && e->snappedLeftTime < time) {
+            endTime = e->snappedLeftTime;
+        }
+        if (endTime == time) endTime = time + e->snapUnit;
+        if (time > endTime) std::swap(time, endTime);
 
         SegmentMatrixHelper helper(m_currentViewSegment->getSegment());
 

@@ -20,6 +20,7 @@
 
 #include "MatrixElement.h"
 #include "MatrixScene.h"
+#include "MatrixWidget.h"
 
 #include "misc/Debug.h"
 #include "base/RulerScale.h"
@@ -150,7 +151,7 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
 
     double fres(resolution);
 
-    if (m_drum) {
+    if (m_drum && !m_scene->getMatrixWidget()->getShowPercussionDurations()) {
         fres = resolution + 1;
         QGraphicsPolygonItem *item = dynamic_cast<QGraphicsPolygonItem *>(m_item);
         if (!item) {
@@ -191,39 +192,47 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
         item->setPen
             (QPen(GUIPalette::getColour(GUIPalette::MatrixElementBorder), 0));
         item->setBrush(QBrush(colour, brushPattern));
+    }
 
-        QSettings settings;
-        settings.beginGroup(MatrixViewConfigGroup);
-        bool showName = settings.value("show_note_names", false).toBool();
-        settings.endGroup();
+    QSettings settings;
+    settings.beginGroup(MatrixViewConfigGroup);
+    bool showName = settings.value("show_note_names", false).toBool();
+    settings.endGroup();
 
-        if (m_textItem) {
-            if (! showName) {
-                RG_DEBUG << "reconfigure deleting text item:" << m_textItem << this;
-                delete m_textItem;
-                m_textItem = nullptr;
-            }
-        } else {
-            if (showName) {
-                m_textItem = new QGraphicsSimpleTextItem;
-                RG_DEBUG << "reconfigure created text item:" << m_textItem << this;
-                m_scene->addItem(m_textItem);
-            }
+    if (m_textItem) {
+        if (!showName ||
+            // Don't show note names on normal diamond percussion notes
+            (m_drum &&
+             !m_scene->getMatrixWidget()->getShowPercussionDurations())) {
+            RG_DEBUG << "reconfigure deleting text item:"
+                     << m_textItem << this;
+            delete m_textItem;
+            m_textItem = nullptr;
         }
-
-        if (m_textItem) {
-            // text above note, see constants in .h file
-            m_textItem->setZValue(m_current ? ACTIVE_SEGMENT_TEXT_Z
-                                            : NORMAL_SEGMENT_TEXT_Z);
-            m_textItem->setBrush(GUIPalette::getColour(GUIPalette::MatrixElementBorder));
-            QString noteName = MidiPitchLabel(pitch).getQString();
-            m_textItem->setText(noteName);
-            QFont font;
-            font.setPixelSize(8);
-            m_textItem->setFont(font);
-            m_textItem->setData(MatrixElementData,
-                                QVariant::fromValue((void *)this));
+    } else {
+        if (showName &&
+            // Don't show note names on normal diamond percussion notes
+            !(m_drum &&
+             !m_scene->getMatrixWidget()->getShowPercussionDurations())) {
+            m_textItem = new QGraphicsSimpleTextItem;
+            RG_DEBUG << "reconfigure created text item:" << m_textItem << this;
+            m_scene->addItem(m_textItem);
         }
+    }
+
+    if (m_textItem) {
+        // Draw text on top of note, see constants in .h file
+        m_textItem->setZValue(m_current ? ACTIVE_SEGMENT_TEXT_Z
+                                        : NORMAL_SEGMENT_TEXT_Z);
+        m_textItem->setBrush(GUIPalette::getColour(
+                    GUIPalette::MatrixElementBorder));
+        QString noteName = MidiPitchLabel(pitch).getQString();
+        m_textItem->setText(noteName);
+        QFont font;
+        font.setPixelSize(8);
+        m_textItem->setFont(font);
+        m_textItem->setData(MatrixElementData,
+                            QVariant::fromValue((void *)this));
     }
 
     setLayoutX(x0);

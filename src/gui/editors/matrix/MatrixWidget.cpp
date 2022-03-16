@@ -30,6 +30,7 @@
 #include "MatrixResizer.h"
 #include "MatrixVelocity.h"
 #include "MatrixMouseEvent.h"
+#include "MatrixView.h"
 #include "MatrixViewSegment.h"
 #include "PianoKeyboard.h"
 
@@ -105,10 +106,11 @@ enum {
     MAIN_COL,
 };
 
-MatrixWidget::MatrixWidget(bool drumMode) :
+MatrixWidget::MatrixWidget(MatrixView *matrixView) :
+    m_view(matrixView),
     m_document(nullptr),
     m_scene(nullptr),
-    m_view(nullptr),
+    m_panned(nullptr),
     m_playTracking(true),
     m_hZoomFactor(1.0),
     m_vZoomFactor(1.0),
@@ -118,11 +120,12 @@ MatrixWidget::MatrixWidget(bool drumMode) :
     m_pianoScene(nullptr),
     m_pianoView(nullptr),
     m_onlyKeyMapping(false),
-    m_drumMode(drumMode),
+    m_drumMode(false),
     m_prevPitchRulerType(PrevPitchRulerType::NONE),
     m_firstNote(0),
     m_lastNote(0),
     m_highlightVisible(true),
+    m_showPercussionDurations(false),
     m_toolBox(nullptr),
     m_currentTool(nullptr),
     m_currentVelocity(100),
@@ -146,10 +149,10 @@ MatrixWidget::MatrixWidget(bool drumMode) :
     // Remove black margins around the matrix
     m_layout->setContentsMargins(0, 0, 0, 0);
 
-    m_view = new Panned;
-    m_view->setBackgroundBrush(Qt::white);
-    m_view->setWheelZoomPan(true);
-    m_layout->addWidget(m_view, PANNED_ROW, MAIN_COL, 1, 1);
+    m_panned = new Panned;
+    m_panned->setBackgroundBrush(Qt::white);
+    m_panned->setWheelZoomPan(true);
+    m_layout->addWidget(m_panned, PANNED_ROW, MAIN_COL, 1, 1);
 
     m_pianoView = new Panned;
     m_pianoView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -266,31 +269,31 @@ MatrixWidget::MatrixWidget(bool drumMode) :
     // Rulers being not defined still, they can't be added to m_layout.
     // This will be done in setSegments().
 
-    // Move the scroll bar from m_view to MatrixWidget
-    m_view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_layout->addWidget(m_view->horizontalScrollBar(),
+    // Move the scroll bar from m_panned to MatrixWidget
+    m_panned->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_layout->addWidget(m_panned->horizontalScrollBar(),
                         HSCROLLBAR_ROW, MAIN_COL, 1, 1);
 
     // Hide or show the horizontal scroll bar when needed
-    connect(m_view->horizontalScrollBar(), &QAbstractSlider::rangeChanged,
+    connect(m_panned->horizontalScrollBar(), &QAbstractSlider::rangeChanged,
             this, &MatrixWidget::slotHScrollBarRangeChanged);
 
-    connect(m_view, &Panned::viewportChanged,
+    connect(m_panned, &Panned::viewportChanged,
             m_panner, &Panner::slotSetPannedRect);
 
-    connect(m_view, &Panned::viewportChanged,
+    connect(m_panned, &Panned::viewportChanged,
             m_pianoView, &Panned::slotSetViewport);
 
-    connect(m_view, &Panned::viewportChanged,
+    connect(m_panned, &Panned::viewportChanged,
             m_controlsWidget, &ControlRulerWidget::slotSetPannedRect);
 
-    connect(m_view, &Panned::zoomIn,
+    connect(m_panned, &Panned::zoomIn,
             this, &MatrixWidget::slotZoomIn);
-    connect(m_view, &Panned::zoomOut,
+    connect(m_panned, &Panned::zoomOut,
             this, &MatrixWidget::slotZoomOut);
 
     connect(m_panner, &Panner::pannedRectChanged,
-            m_view, &Panned::slotSetViewport);
+            m_panned, &Panned::slotSetViewport);
 
     connect(m_panner, &Panner::pannedRectChanged,
             m_pianoView, &Panned::slotSetViewport);
@@ -298,7 +301,7 @@ MatrixWidget::MatrixWidget(bool drumMode) :
     connect(m_panner, &Panner::pannedRectChanged,
             m_controlsWidget, &ControlRulerWidget::slotSetPannedRect);
 
-    connect(m_view, &Panned::pannedContentsScrolled,
+    connect(m_panned, &Panned::pannedContentsScrolled,
             this, &MatrixWidget::slotScrollRulers);
 
     connect(m_panner, &Panner::zoomIn,
@@ -308,7 +311,7 @@ MatrixWidget::MatrixWidget(bool drumMode) :
             this, &MatrixWidget::slotSyncPannerZoomOut);
 
     connect(m_pianoView, &Panned::wheelEventReceived,
-            m_view, &Panned::slotEmulateWheelEvent);
+            m_panned, &Panned::slotEmulateWheelEvent);
 
     // Connect ControlRulerWidget for Auto-Scroll.
     connect(m_controlsWidget, &ControlRulerWidget::mousePress,
@@ -346,14 +349,14 @@ MatrixWidget::MatrixWidget(bool drumMode) :
     // Make sure MatrixScene always gets mouse move events even when the
     // button isn't pressed.  This way the keys on the piano keyboard
     // to the left are always highlighted to show which note we are on.
-    m_view->setMouseTracking(true);
+    m_panned->setMouseTracking(true);
 
     connect(RosegardenDocument::currentDocument,
                 &RosegardenDocument::documentModified,
             this, &MatrixWidget::slotDocumentModified);
 
     // Set up AutoScroller.
-    m_autoScroller.connectScrollArea(m_view);
+    m_autoScroller.connectScrollArea(m_panned);
 }
 
 MatrixWidget::~MatrixWidget()
@@ -424,13 +427,13 @@ MatrixWidget::setSegments(RosegardenDocument *document,
     connect(m_scene, &MatrixScene::sceneDeleted,
             this, &MatrixWidget::sceneDeleted);
 
-    m_view->setScene(m_scene);
+    m_panned->setScene(m_scene);
 
     m_toolBox->setScene(m_scene);
 
     m_panner->setScene(m_scene);
 
-    connect(m_view, &Panned::mouseLeaves,
+    connect(m_panned, &Panned::mouseLeaves,
             this, &MatrixWidget::slotMouseLeavesView);
 
     generatePitchRuler();
@@ -557,9 +560,11 @@ MatrixWidget::generatePitchRuler()
     }
 
     if (isPercussion) {
+        m_drumMode = true;
         if (m_prevPitchRulerType == PrevPitchRulerType::PERCUSSION) return;
         m_prevPitchRulerType = PrevPitchRulerType::PERCUSSION;
     } else {
+        m_drumMode = false;
         if (m_prevPitchRulerType == PrevPitchRulerType::PIANO) return;
         m_prevPitchRulerType = PrevPitchRulerType::PIANO;
     }
@@ -627,7 +632,7 @@ MatrixWidget::generatePitchRuler()
         //     Why isn't this handled elsewhere?  Is it?
         QTransform m;
         m.scale(m_hZoomFactor, m_vZoomFactor);
-        m_view->setTransform(m);
+        m_panned->setTransform(m);
         // Only vertical zoom factor is applied to pitch ruler
         QTransform m2;
         m2.scale(1, m_vZoomFactor);
@@ -642,9 +647,9 @@ MatrixWidget::generatePitchRuler()
     }
 
     // Move vertically the pianoView scene to fit the matrix scene.
-    QRect mr = m_view->rect();
+    QRect mr = m_panned->rect();
     QRect pr = m_pianoView->rect();
-    QRectF smr = m_view->mapToScene(mr).boundingRect();
+    QRectF smr = m_panned->mapToScene(mr).boundingRect();
     QRectF spr = m_pianoView->mapToScene(pr).boundingRect();
     m_pianoView->centerOn(spr.center().x(), smr.center().y());
 
@@ -673,8 +678,8 @@ MatrixWidget::setHorizontalZoomFactor(double factor)
     m_hZoomFactor = factor;
     if (m_referenceScale)
         m_referenceScale->setXZoomFactor(m_hZoomFactor);
-    m_view->resetTransform();
-    m_view->scale(m_hZoomFactor, m_vZoomFactor);
+    m_panned->resetTransform();
+    m_panned->scale(m_hZoomFactor, m_vZoomFactor);
     // Only vertical zoom factor is applied to pitch ruler
     QTransform m;
     m.scale(1.0, m_vZoomFactor);
@@ -693,8 +698,8 @@ MatrixWidget::setVerticalZoomFactor(double factor)
     m_vZoomFactor = factor;
     if (m_referenceScale)
         m_referenceScale->setYZoomFactor(m_vZoomFactor);
-    m_view->resetTransform();
-    m_view->scale(m_hZoomFactor, m_vZoomFactor);
+    m_panned->resetTransform();
+    m_panned->scale(m_hZoomFactor, m_vZoomFactor);
     // Only vertical zoom factor is applied to pitch ruler
     QTransform m;
     m.scale(1.0, m_vZoomFactor);
@@ -715,7 +720,7 @@ MatrixWidget::zoomInFromPanner()
         m_referenceScale->setXZoomFactor(m_hZoomFactor);
     QTransform m;
     m.scale(m_hZoomFactor, m_vZoomFactor);
-    m_view->setTransform(m);
+    m_panned->setTransform(m);
     // Only vertical zoom factor is applied to pitch ruler
     QTransform m2;
     m2.scale(1, m_vZoomFactor);
@@ -739,7 +744,7 @@ MatrixWidget::zoomOutFromPanner()
         m_referenceScale->setXZoomFactor(m_hZoomFactor);
     QTransform m;
     m.scale(m_hZoomFactor, m_vZoomFactor);
-    m_view->setTransform(m);
+    m_panned->setTransform(m);
     // Only vertical zoom factor is applied to pitch ruler
     QTransform m2;
     m2.scale(1, m_vZoomFactor);
@@ -758,7 +763,7 @@ void
 MatrixWidget::slotScrollRulers()
 {
     // Get time of the window left
-    QPointF topLeft = m_view->mapToScene(0, 0);
+    QPointF topLeft = m_panned->mapToScene(0, 0);
 
     // Apply zoom correction
     int x = topLeft.x() * m_hZoomFactor;
@@ -956,8 +961,8 @@ MatrixWidget::showHighlight(bool visible)
 void
 MatrixWidget::setCanvasCursor(QCursor c)
 {
-    if (m_view)
-        m_view->viewport()->setCursor(c);
+    if (m_panned)
+        m_panned->viewport()->setCursor(c);
 }
 
 void
@@ -1029,7 +1034,7 @@ MatrixWidget::setScrollToFollowPlayback(bool tracking)
     m_playTracking = tracking;
 
     if (m_playTracking)
-        m_view->ensurePositionPointerInView(true);
+        m_panned->ensurePositionPointerInView(true);
 }
 
 void
@@ -1112,9 +1117,9 @@ void
 MatrixWidget::slotHScrollBarRangeChanged(int min, int max)
 {
     if (max > min)
-        m_view->horizontalScrollBar()->show();
+        m_panned->horizontalScrollBar()->show();
     else
-        m_view->horizontalScrollBar()->hide();
+        m_panned->horizontalScrollBar()->hide();
 }
 
 void
@@ -1133,10 +1138,10 @@ MatrixWidget::updatePointer(timeT t)
     // If the pointer has gone outside the limits
     if (pointerX < sceneXMin  ||  sceneXMax < pointerX) {
         // Never move the pointer outside the scene (else the scene will grow)
-        m_view->hidePositionPointer();
+        m_panned->hidePositionPointer();
         m_panner->slotHidePositionPointer();
     } else {
-        m_view->showPositionPointer(pointerX);
+        m_panned->showPositionPointer(pointerX);
         m_panner->slotShowPositionPointer(pointerX);
     }
 }
@@ -1152,7 +1157,7 @@ MatrixWidget::slotPointerPositionChanged(timeT t)
     // Auto-scroll
 
     if (m_playTracking)
-        m_view->ensurePositionPointerInView(true);  // page
+        m_panned->ensurePositionPointerInView(true);    // page
 }
 
 void
@@ -1345,11 +1350,11 @@ MatrixWidget::slotResetZoomClicked()
         m_referenceScale->setXZoomFactor(m_hZoomFactor);
         m_referenceScale->setYZoomFactor(m_vZoomFactor);
     }
-    m_view->resetTransform();
+    m_panned->resetTransform();
     QTransform m;
     m.scale(m_hZoomFactor, m_vZoomFactor);
-    m_view->setTransform(m);
-    m_view->scale(m_hZoomFactor, m_vZoomFactor);
+    m_panned->setTransform(m);
+    m_panned->scale(m_hZoomFactor, m_vZoomFactor);
     // Only vertical zoom factor is applied to pitch ruler
     QTransform m2;
     m2.scale(1, m_vZoomFactor);
@@ -1461,9 +1466,16 @@ MatrixWidget::updateSegmentChangerBackground()
     if (trackLabel == "")
         trackLabel = tr("<untitled>");
 
-    const QString segmentText = tr("Track %1 (%2) | %3").
+    Instrument  *instrument = m_document->getStudio().
+                                    getInstrumentById(track->getInstrument());
+    QString programName = QString::fromStdString(instrument->getProgramName());
+    if (programName == "") programName = tr("<unnamed>");
+
+    const QString segmentText = tr("Track %1: (%2) -- %3 -- %4    Segment: %5").
             arg(track->getPosition() + 1).
             arg(trackLabel).
+            arg(instrument->getLocalizedPresentationName()).
+            arg(programName).
             arg(QString::fromStdString(segment->getLabel()));
 
     m_segmentLabel->setText(segmentText);
@@ -1659,7 +1671,7 @@ MatrixWidget::showInitialPointer()
     //     of the selected Segment is at the left edge.  That's a bit
     //     tricky, but if we don't do that, the user might end up someplace
     //     unexpected when editing multiple segments.
-    m_view->centerOn(QPointF(0, m_view->sceneRect().center().y()));
+    m_panned->centerOn(QPointF(0, m_panned->sceneRect().center().y()));
 }
 
 void

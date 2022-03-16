@@ -122,7 +122,6 @@ void EditViewBase::setupBaseActions(bool haveClipboard)
     }
 
     createAction("open_in_matrix", SLOT(slotOpenInMatrix()));
-    createAction("open_in_percussion_matrix", SLOT(slotOpenInPercussionMatrix()));
     createAction("open_in_notation", SLOT(slotOpenInNotation()));
     createAction("open_in_event_list", SLOT(slotOpenInEventList()));
     createAction("open_in_pitch_tracker", SLOT(slotOpenInPitchTracker()));
@@ -148,12 +147,6 @@ void
 EditViewBase::slotOpenInMatrix()
 {
     emit openInMatrix(m_segments);
-}
-
-void
-EditViewBase::slotOpenInPercussionMatrix()
-{
-    emit openInPercussionMatrix(m_segments);
 }
 
 void
