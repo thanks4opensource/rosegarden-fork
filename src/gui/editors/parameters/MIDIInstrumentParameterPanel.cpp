@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -39,6 +39,7 @@
 #include "base/MidiDevice.h"
 #include "base/MidiProgram.h"
 
+#include <QAbstractItemView>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QColor>
@@ -154,6 +155,7 @@ MIDIInstrumentParameterPanel::MIDIInstrumentParameterPanel(QWidget *parent) :
     m_programComboBox->setToolTip(tr("<qt>Set the MIDI program or &quot;patch&quot;</p></qt>"));
     m_programComboBox->setMaxVisibleItems(maxVisibleItems);
     m_programComboBox->setMinimumContentsLength(minimumContentsLength);
+    m_programComboBox->view()->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     connect(m_programComboBox,
                 static_cast<void(QComboBox::*)(int)>(&QComboBox::activated),
             this, &MIDIInstrumentParameterPanel::slotSelectProgram);
@@ -204,7 +206,7 @@ MIDIInstrumentParameterPanel::MIDIInstrumentParameterPanel(QWidget *parent) :
     receiveExternalLabel->setFont(f);
     QString receiveExternalTip = tr("<qt>Use program changes from an external source to manipulate these controls (only valid for the currently-active track) [Shift + P]</qt>");
     receiveExternalLabel->setToolTip(receiveExternalTip);
-    
+
     // Receive External CheckBox
     m_receiveExternalCheckBox = new QCheckBox;
     m_receiveExternalCheckBox->setFont(f);
@@ -324,7 +326,7 @@ MIDIInstrumentParameterPanel::updateWidgets()
 
     // Percussion
     m_percussionCheckBox->setChecked(getSelectedInstrument()->isPercussion());
-    
+
     // Bank
     m_bankCheckBox->setChecked(getSelectedInstrument()->sendsBankSelect());
     updateBankComboBox();

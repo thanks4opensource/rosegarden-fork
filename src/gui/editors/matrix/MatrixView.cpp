@@ -238,7 +238,6 @@ MatrixView::MatrixView(RosegardenDocument *doc,
         findAction("highlight_black_notes")->setChecked(true);
         break;
     }
-
     settings.endGroup();
 
     if (segments.size() > 1) {
@@ -653,6 +652,8 @@ MatrixView::initActionsToolbar()
             m_snapGridCombo->setCurrentIndex(m_snapGridCombo->count() - 1);
         }
     }
+
+    m_snapGridCombo->setMaxVisibleItems(m_snapValues.size());
 
     connect(m_snapGridCombo,
                 static_cast<void(QComboBox::*)(int)>(&QComboBox::activated),
