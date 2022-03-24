@@ -193,6 +193,8 @@ protected slots:
     void slotShowNames();
     void slotHighlight();
     void slotPercussionDurations();
+    void slotNoteColors();
+    void slotNoteColorsAllSegments();
 
     void slotShowContextHelp(const QString &);
 
@@ -282,6 +284,7 @@ private:
     std::vector<timeT> m_snapValues;
 
     void setShowPercussionDurations();
+    void setShowNoteColorTypeAndAll();
     void setupActions();
     void initActionsToolbar();
     void initRulersToolbar();

@@ -34,6 +34,14 @@
       <text>Notes</text>
       <Action name="show_note_names" text="Show note names" checked="false" />
       <Action name="show_percussion_durations" text="Show percussion durations" checked="false" />
+      <Menu name="Color">
+	<text>Color</text>
+        <Action name="velocity_color" text="Velocity" checked="true" />
+        <Action name="segment_color" text="Segment" checked="false" />
+        <Action name="segment_velocity_color" text="Segment+velocity" checked="false" />
+        <Separator/>
+	<Action name="color_only_active" text="Only active" checked="true" />
+      </Menu>
     </Menu>
     <Menu name="Highlight">
       <text>&amp;Highlight</text>

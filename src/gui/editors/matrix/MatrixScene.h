@@ -101,6 +101,9 @@ public:
                                 Event *e,
                                 bool preview);
 
+    // Added for MatrixElement::noteColor()
+    const RosegardenDocument *getDocument() const { return m_document; }
+
     Segment *getCurrentSegment();
     void setCurrentSegment(Segment *);
 

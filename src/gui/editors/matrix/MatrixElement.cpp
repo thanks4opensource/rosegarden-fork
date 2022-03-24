@@ -35,6 +35,7 @@
 #include "base/Event.h"
 #include "base/NotationTypes.h"
 #include "base/BaseProperties.h"
+#include "document/RosegardenDocument.h"
 #include "gui/general/GUIPalette.h"
 #include "gui/rulers/DefaultVelocityColour.h"
 #include "gui/general/MidiPitchLabel.h"
@@ -130,19 +131,7 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
                      event()->has(BaseProperties::TIED_BACKWARD));
     Qt::BrushStyle brushPattern = (tiedNote ? Qt::Dense2Pattern : Qt::SolidPattern);
 
-    QColor colour;
-    if (event()->has(BaseProperties::TRIGGER_SEGMENT_ID)) {
-        //!!! Using gray for trigger events and events from other, non-active
-        // segments won't work.  This should be handled some other way, with a
-        // color outside the range of possible velocity choices, which probably
-        // leaves some kind of curious light blue or something
-        colour = Qt::cyan;
-    } else {
-        colour = DefaultVelocityColour::getInstance()->getColour(velocity);
-    }
-    if (!m_current) {
-        colour = QColor(200, 200, 200);
-    }
+    QColor colour = noteColor();
 
     // Turned off because adds little or no information to user (another
     // segment's notes are underneath?) and generally just confusingly
@@ -292,25 +281,13 @@ MatrixElement::setCurrent(bool current)
         current << m_current;
     if (m_current == current) return;
 
+    m_current = current;  // must be done before call to noteColor()
+
     QAbstractGraphicsShapeItem *item =
         dynamic_cast<QAbstractGraphicsShapeItem *>(m_item);
     if (!item) return;
 
-    QColor colour;
-
-    if (!current) {
-        colour = QColor(200, 200, 200);
-    } else {
-        if (event()->has(BaseProperties::TRIGGER_SEGMENT_ID)) {
-            colour = Qt::gray;
-        } else {
-            long velocity = m_velocity;  // was 100 -- why?
-            event()->get<Int>(BaseProperties::VELOCITY, velocity);
-            colour = DefaultVelocityColour::getInstance()->getColour(velocity);
-        }
-    }
-
-    item->setBrush(colour);
+    item->setBrush(noteColor());
 
     // See constants in .h file
     m_item->setZValue(current ? ACTIVE_SEGMENT_NOTE_Z : NORMAL_SEGMENT_NOTE_Z);
@@ -326,8 +303,6 @@ MatrixElement::setCurrent(bool current)
         item->setPen
             (QPen(GUIPalette::getColour(GUIPalette::MatrixElementLightBorder), 0));
     }
-
-    m_current = current;
 }
 
 MatrixElement *
@@ -338,5 +313,68 @@ MatrixElement::getMatrixElement(QGraphicsItem *item)
     return (MatrixElement *)v.value<void *>();
 }
 
+QColor
+MatrixElement::noteColor()
+const
+{
+    const MatrixWidget* const   widget = m_scene->getMatrixWidget();
+    MatrixWidget::NoteColorType noteColorType = widget->getNoteColorType();
+    bool colorAllSegments = widget->getNoteColorAllSegments();
+    QColor colour;
 
+    if (!m_current && !colorAllSegments) {
+        colour = QColor(GRAY_RED_COMPONENT,
+                        GRAY_GREEN_COMPONENT,
+                        GRAY_BLUE_COMPONENT);
+        return colour;
+    }
+
+    // For darkening non-current segment notes
+    static const int DARKEN  = 133, // >100 is darken  for QColor::darker()
+                     LIGHTEN = 133; // >100 is lighten for QColor::lighter()
+
+    if (event()->has(BaseProperties::TRIGGER_SEGMENT_ID)) {
+        //!!! Using gray for trigger events and events from other,
+        // non-active segments won't work. This should be handled some
+        // other way, with a color outside the range of possible velocity
+        // choices, which probably leaves some kind of curious light
+        // blue or something.
+        //
+        // Was colour = Qt:gray in setCurrent() before refactor into
+        // noteColor()
+        colour = Qt::cyan;
+        if (colorAllSegments && !m_current) {
+            // Make dimmer to differentiate vs current segment
+            colour = colour.darker(DARKEN);
+        }
+        return colour;
+    }
+
+    if (noteColorType == MatrixWidget::NoteColorType::VELOCITY) {
+        colour = DefaultVelocityColour::getInstance()->getColour(m_velocity);
+        if (colorAllSegments) {
+            // Change brightness to differentiate active segment vs others
+            if (m_current) colour = colour.lighter(LIGHTEN);
+            else           colour = colour.darker(DARKEN);
+        }
+    }
+    else {  // MatrixWidget::NoteColorType::SEGMENT || SEGMENT_AND_VELOCITY
+        const RosegardenDocument* document = m_scene->getDocument();
+        const Composition &composition = document->getComposition();
+        colour = composition.getSegmentColourMap().
+                 getColour(m_segment->getColourIndex());
+        if (noteColorType == MatrixWidget::NoteColorType::SEGMENT_AND_VELOCITY){
+            // Lighten or darken segment color by velocity
+            const int MIDDLE_VELOCITY = 63;   // MIDI (are we always MIDI??)
+            if (m_velocity >= MIDDLE_VELOCITY) {
+                colour = colour.lighter(100 + m_velocity - MIDDLE_VELOCITY);
+            } else {
+                colour = colour.darker(100 + MIDDLE_VELOCITY - m_velocity);
+            }
+        }
+    }
+
+    return colour;
 }
+
+}  // namespace

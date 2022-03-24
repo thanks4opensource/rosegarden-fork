@@ -92,6 +92,12 @@ public:
     MatrixWidget(MatrixView *matrixView);
     virtual ~MatrixWidget() override;
 
+    enum class NoteColorType {
+        VELOCITY,
+        SEGMENT,
+        SEGMENT_AND_VELOCITY
+    };
+
     Device *getCurrentDevice();
     MatrixScene *getScene()  { return m_scene; }
 
@@ -153,6 +159,11 @@ public:
     bool getShowPercussionDurations() const {return m_showPercussionDurations; }
     void setShowPercussionDurations(bool show) { m_showPercussionDurations =
                                                  show; }
+    NoteColorType getNoteColorType() const { return m_noteColorType; }
+    void setNoteColorType(NoteColorType colorType) { m_noteColorType =
+                                                        colorType; }
+    bool getNoteColorAllSegments() const { return m_noteColorAllSegments; }
+    void setNoteColorAllSegments(bool all) { m_noteColorAllSegments = all; }
 
     /// Velocity for new notes.  (And moved notes too.)
     int getCurrentVelocity() const { return m_currentVelocity; }
@@ -398,14 +409,17 @@ private:
     bool m_highlightVisible;
 
 
-    // This needs to be accessed by MatrixElement::reconfigure() each
+    // These need to be accessed by MatrixElement::reconfigure() each
     // time a percussion segment note moves/etc., and getting from
     // the QSettings persistent database is too slow.
     // Will be set from MatrixView constructor when read from database,
     // and updated each time changed via user GUI interaction as
-    // signaled to MatrixView::slotPercussionDurations().
-    bool    m_showPercussionDurations;
-
+    // signaled to MatrixView::slotPercussionDurations(),
+    // MatrixView::slotNoteColors() and
+    // MatrixView::slotNoteColorsAllSegments().
+    bool m_showPercussionDurations;
+    NoteColorType m_noteColorType;
+    bool m_noteColorAllSegments;
 
     // Tools
 

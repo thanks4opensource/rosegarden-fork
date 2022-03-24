@@ -146,9 +146,11 @@ MatrixView::MatrixView(RosegardenDocument *doc,
 
     // Ensure that initial display of any percussion segments is
     // correct with respect to View -> Notes -> Show percussion durations.
-    // Following two calls must be done in order, and both
-    // after createMenusAndToolbars()
+    // Also note color styles
+    // Following calls must be done with setShow...() methods first, and
+    // and all after createMenusAndToolbars()
     setShowPercussionDurations();
+    setShowNoteColorTypeAndAll();
     m_matrixWidget->setSegments(doc, segments);
 
     findToolbar("General Toolbar");
@@ -293,11 +295,48 @@ MatrixView::setShowPercussionDurations()
     QSettings settings;
     settings.beginGroup(MatrixViewConfigGroup);
     bool showPercussionDurations = qStrToBool(settings.value(
-                                              "show_percussion_durations"));
+                                              "show_percussion_durations",
+                                              false));
     findAction("show_percussion_durations")->setChecked(
                                              showPercussionDurations);
     settings.endGroup();
     m_matrixWidget->setShowPercussionDurations(showPercussionDurations);
+}
+
+void
+MatrixView::setShowNoteColorTypeAndAll()
+{
+    QSettings settings;
+    settings.beginGroup(MatrixViewConfigGroup);
+
+    MatrixWidget::NoteColorType colorType =
+        static_cast<MatrixWidget::NoteColorType>(
+            settings.value("note_color_type",
+                           static_cast<int>(
+                           MatrixWidget::NoteColorType::VELOCITY)).toInt());
+    bool only = qStrToBool(settings.value("color_only_active", true));
+    settings.endGroup();
+
+    switch (colorType) {
+    case MatrixWidget::NoteColorType::VELOCITY:
+        findAction("velocity_color")->setChecked(true);
+        break;
+    case MatrixWidget::NoteColorType::SEGMENT:
+        findAction("segment_color")->setChecked(true);
+        break;
+    case MatrixWidget::NoteColorType::SEGMENT_AND_VELOCITY:
+        findAction("segment_velocity_color")->setChecked(true);
+        break;
+    }
+    m_matrixWidget->setNoteColorType(colorType);
+
+    findAction("color_only_active")->setChecked(only);
+    m_matrixWidget->setNoteColorAllSegments(!only);
+
+    RG_WARNING << "setShowNoteColorTypeAndAll: color:"   // t4os_DEBUG
+               << static_cast<int>(colorType)
+               << "only:"
+               << only;
 }
 
 void
@@ -552,6 +591,16 @@ MatrixView::setupActions()
 
     createAction("show_note_names", SLOT(slotShowNames()));
     createAction("show_percussion_durations", SLOT(slotPercussionDurations()));
+
+    createAction("velocity_color", SLOT(slotNoteColors()));
+    createAction("segment_color", SLOT(slotNoteColors()));
+    createAction("segment_velocity_color", SLOT(slotNoteColors()));
+    QActionGroup *noteColorAg = new QActionGroup(this);
+    noteColorAg->addAction(findAction("velocity_color"));
+    noteColorAg->addAction(findAction("segment_color"));
+    noteColorAg->addAction(findAction("segment_velocity_color"));
+    createAction("color_only_active", SLOT(slotNoteColorsAllSegments()));
+
     createAction("highlight_black_notes", SLOT(slotHighlight()));
     createAction("highlight_triads", SLOT(slotHighlight()));
     // add the highlight actions to an ActionGroup
@@ -1691,6 +1740,69 @@ MatrixView::slotPercussionDurations()
     m_matrixWidget->setShowPercussionDurations(show);
     static constexpr bool onlyPercussion = true;
     m_matrixWidget->getScene()->updateAll(onlyPercussion);
+}
+
+void
+MatrixView::slotNoteColors()
+{
+    QSettings settings;
+    settings.beginGroup(MatrixViewConfigGroup);
+    MatrixWidget::NoteColorType previousColorType =
+        static_cast<MatrixWidget::NoteColorType>(
+            settings.value("note_color_type",
+                           static_cast<int>(
+                           MatrixWidget::NoteColorType::VELOCITY)).toInt());
+    MatrixWidget::NoteColorType newColorType = previousColorType;
+    int newColorTypeInt;
+
+    const QObject *s = sender();
+    QString name = s->objectName();
+    if (name == "velocity_color") {
+        newColorType = MatrixWidget::NoteColorType::VELOCITY;
+        newColorTypeInt = static_cast<int>(newColorType);
+        settings.setValue("note_color_type", newColorTypeInt);
+    }
+    else if (name == "segment_color") {
+        newColorType = MatrixWidget::NoteColorType::SEGMENT;
+        newColorTypeInt = static_cast<int>(newColorType);
+        settings.setValue("note_color_type", newColorTypeInt);
+    }
+    else if (name == "segment_velocity_color") {
+        newColorType = MatrixWidget::NoteColorType::SEGMENT_AND_VELOCITY;
+        newColorTypeInt = static_cast<int>(newColorType);
+        settings.setValue("note_color_type", newColorTypeInt);
+    }
+
+    settings.endGroup();
+
+    RG_WARNING << "slotNoteColors: was:"   // t4os_DEBUG
+               << static_cast<int>(previousColorType)
+               << "now:"
+               << static_cast<int>(newColorType);
+
+    m_matrixWidget->setNoteColorType(newColorType);
+
+    // Only do if changed.
+    if (newColorType != previousColorType) {
+        m_matrixWidget->getScene()->updateAll();
+    }
+}
+
+void
+MatrixView::slotNoteColorsAllSegments()
+{
+    bool only = findAction("color_only_active")->isChecked();
+    QSettings settings;
+    settings.beginGroup(MatrixViewConfigGroup);
+    settings.setValue("color_only_active", only);
+    settings.endGroup();
+    m_matrixWidget->setNoteColorAllSegments(!only);
+
+    RG_WARNING << "slotNoteColorsAllSegements: now:"
+               << only;
+
+    m_matrixWidget->setNoteColorAllSegments(!only);
+    m_matrixWidget->getScene()->updateAll();
 }
 
 void

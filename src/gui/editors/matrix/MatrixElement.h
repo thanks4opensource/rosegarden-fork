@@ -94,6 +94,10 @@ public:
 
 
 protected:
+    static const int GRAY_RED_COMPONENT = 200,
+                     GRAY_GREEN_COMPONENT = 200,
+                     GRAY_BLUE_COMPONENT = 200;
+
     MatrixScene *m_scene;
     bool m_drum;
     bool m_current;
@@ -119,6 +123,11 @@ protected:
     // a MatrixMouseEvent) so Segment member must be here instead.
     // Future work: Might also allow elimination of m_pitchOffset, above.
     const Segment *m_segment;
+
+    // Common code used by reconfigure(timeT, timeT, int, int)
+    // and setCurrent(bool).
+    QColor noteColor() const;
+
 
 private:
     /// Adjust the item to reflect the given values, not those of our event
