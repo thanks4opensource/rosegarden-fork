@@ -332,11 +332,6 @@ MatrixView::setShowNoteColorTypeAndAll()
 
     findAction("color_only_active")->setChecked(only);
     m_matrixWidget->setNoteColorAllSegments(!only);
-
-    RG_WARNING << "setShowNoteColorTypeAndAll: color:"   // t4os_DEBUG
-               << static_cast<int>(colorType)
-               << "only:"
-               << only;
 }
 
 void
@@ -1775,11 +1770,6 @@ MatrixView::slotNoteColors()
 
     settings.endGroup();
 
-    RG_WARNING << "slotNoteColors: was:"   // t4os_DEBUG
-               << static_cast<int>(previousColorType)
-               << "now:"
-               << static_cast<int>(newColorType);
-
     m_matrixWidget->setNoteColorType(newColorType);
 
     // Only do if changed.
@@ -1796,11 +1786,6 @@ MatrixView::slotNoteColorsAllSegments()
     settings.beginGroup(MatrixViewConfigGroup);
     settings.setValue("color_only_active", only);
     settings.endGroup();
-    m_matrixWidget->setNoteColorAllSegments(!only);
-
-    RG_WARNING << "slotNoteColorsAllSegements: now:"
-               << only;
-
     m_matrixWidget->setNoteColorAllSegments(!only);
     m_matrixWidget->getScene()->updateAll();
 }
