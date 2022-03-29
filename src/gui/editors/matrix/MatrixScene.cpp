@@ -36,6 +36,7 @@
 
 #include "gui/general/GUIPalette.h"
 #include "gui/widgets/Panned.h"
+#include "gui/widgets/Panner.h"
 
 #include "base/BaseProperties.h"
 #include "base/NotationRules.h"
@@ -85,6 +86,7 @@ MatrixScene::~MatrixScene()
     for (unsigned int i = 0; i < m_viewSegments.size(); ++i) {
         delete m_viewSegments[i];
     }
+
     delete m_snapGrid;
     delete m_referenceScale;
     delete m_scale;
@@ -238,7 +240,6 @@ MatrixScene::setSegments(RosegardenDocument *document,
     }
 
     recreateLines();
-    updateCurrentSegment();
 }
 
 Segment *
@@ -254,21 +255,16 @@ MatrixScene::getCurrentSegment()
 void
 MatrixScene::setCurrentSegment(Segment *s)
 {
+    // Unset old current segment
+    updateCurrentSegment(false);
+
     for (int i = 0; i < int(m_segments.size()); ++i) {
         if (s == m_segments[i]) {
             m_currentSegmentIndex = i;
-            recreatePitchHighlights();
-            updateCurrentSegment();
-
-            // ??? All callers call m_widget->updateSegmentChangerBackground()
-            //     next.  We should just call it here.
-            //if (m_widget)
-            //    m_widget->updateSegmentChangerBackground();
-
-            return;
+            updateCurrentSegment(true);
+            break;
         }
     }
-    RG_WARNING << "WARNING: MatrixScene::setCurrentSegment: unknown segment" << s;
 }
 
 Segment *
@@ -1038,19 +1034,19 @@ MatrixScene::previewSelection(EventSelection *s,
 }
 
 void
-MatrixScene::updateCurrentSegment()
+MatrixScene::updateCurrentSegment(bool isCurrent)
 {
     MATRIX_DEBUG << "MatrixScene::updateCurrentSegment: current is " << m_currentSegmentIndex;
-    for (unsigned i = 0; i < m_viewSegments.size(); ++i) {
-        bool current = (i == m_currentSegmentIndex);
-        ViewElementList *vel = m_viewSegments[i]->getViewElementList();
+    MatrixViewSegment *vs = getCurrentViewSegment();
+    if (vs) {
+        ViewElementList *vel = vs->getViewElementList();
         for (ViewElementList::const_iterator j = vel->begin();
-             j != vel->end(); ++j) {
+                 j != vel->end(); ++j) {
             MatrixElement *mel = dynamic_cast<MatrixElement *>(*j);
             if (!mel) continue;
-            mel->setCurrent(current);
+            mel->setCurrent(isCurrent);
         }
-        if (current) emit currentViewSegmentChanged(m_viewSegments[i]);
+        emit currentViewSegmentChanged(m_viewSegments[m_currentSegmentIndex]);
     }
 
     // changing the current segment may have overridden selection border colours
@@ -1140,7 +1136,7 @@ MatrixScene::setVerticalZoomFactor(double factor)
 }
 
 void
-MatrixScene::updateAll(bool onlyPercussion)
+MatrixScene::updateAllSegments(bool onlyPercussion)
 {
     for (std::vector<MatrixViewSegment *>::iterator i = m_viewSegments.begin();
          i != m_viewSegments.end(); ++i) {
@@ -1149,8 +1145,15 @@ MatrixScene::updateAll(bool onlyPercussion)
         }
         (*i)->updateAll();
     }
-    recreatePitchHighlights();
-    updateCurrentSegment();
+}
+
+void
+MatrixScene::updateAllSegmentsColors()
+{
+    for (std::vector<MatrixViewSegment *>::iterator i = m_viewSegments.begin();
+         i != m_viewSegments.end(); ++i) {
+        (*i)->updateAllColors();
+    }
 }
 
 int

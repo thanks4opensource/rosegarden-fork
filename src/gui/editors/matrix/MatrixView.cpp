@@ -147,8 +147,9 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     // Ensure that initial display of any percussion segments is
     // correct with respect to View -> Notes -> Show percussion durations.
     // Also note color styles
-    // Following calls must be done with setShow...() methods first, and
-    // and all after createMenusAndToolbars()
+    // Following calls must be done with setShow...() methods before
+    // MatrixWidget::setSegments, and all after createMenusAndToolbars()
+    setShowNoteNames();
     setShowPercussionDurations();
     setShowNoteColorTypeAndAll();
     m_matrixWidget->setSegments(doc, segments);
@@ -223,8 +224,8 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     findAction("show_tempo_ruler")->setChecked(view);
     m_matrixWidget->setTempoRulerVisible(view);
 
-    findAction("show_note_names")->
-        setChecked(qStrToBool(settings.value("show_note_names")));
+    findAction("show_note_names")->setChecked(qStrToBool(settings.value("show_note_names")));
+
     MatrixScene::HighlightType chosenHighlightType =
         static_cast<MatrixScene::HighlightType>(
             settings.value("highlight_type",
@@ -287,6 +288,17 @@ MatrixView::MatrixView(RosegardenDocument *doc,
 MatrixView::~MatrixView()
 {
     MATRIX_DEBUG << "MatrixView::~MatrixView()";
+}
+
+void
+MatrixView::setShowNoteNames()
+{
+    QSettings settings;
+    settings.beginGroup(MatrixViewConfigGroup);
+    bool show = qStrToBool(settings.value("show_note_names", false));
+    findAction("show_percussion_durations")->setChecked(show);
+    settings.endGroup();
+    m_matrixWidget->setShowNoteNames(show);
 }
 
 void
@@ -1720,7 +1732,8 @@ MatrixView::slotShowNames()
     settings.beginGroup(MatrixViewConfigGroup);
     settings.setValue("show_note_names", show);
     settings.endGroup();
-    m_matrixWidget->getScene()->updateAll();
+    m_matrixWidget->setShowNoteNames(show);
+    m_matrixWidget->getScene()->updateAllSegments();
 }
 
 void
@@ -1734,7 +1747,7 @@ MatrixView::slotPercussionDurations()
     settings.endGroup();
     m_matrixWidget->setShowPercussionDurations(show);
     static constexpr bool onlyPercussion = true;
-    m_matrixWidget->getScene()->updateAll(onlyPercussion);
+    m_matrixWidget->getScene()->updateAllSegments(onlyPercussion);
 }
 
 void
@@ -1774,7 +1787,7 @@ MatrixView::slotNoteColors()
 
     // Only do if changed.
     if (newColorType != previousColorType) {
-        m_matrixWidget->getScene()->updateAll();
+        m_matrixWidget->getScene()->updateAllSegmentsColors();
     }
 }
 
@@ -1787,7 +1800,7 @@ MatrixView::slotNoteColorsAllSegments()
     settings.setValue("color_only_active", only);
     settings.endGroup();
     m_matrixWidget->setNoteColorAllSegments(!only);
-    m_matrixWidget->getScene()->updateAll();
+    m_matrixWidget->getScene()->updateAllSegmentsColors();
 }
 
 void
@@ -1818,7 +1831,7 @@ MatrixView::slotHighlight()
 
     // Only do if changed.
     if (newHighlightType != previousHighlightType) {
-        m_matrixWidget->getScene()->updateAll();
+        m_matrixWidget->getScene()->recreatePitchHighlights();
     }
 }
 

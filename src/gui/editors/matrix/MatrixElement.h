@@ -20,8 +20,11 @@
 
 #include "base/ViewElement.h"
 
+class QAbstractGraphicsShapeItem;
 class QColor;
 class QGraphicsItem;
+class QGraphicsRectItem;
+class QGraphicsPolygonItem;
 class QGraphicsSimpleTextItem;
 
 namespace Rosegarden
@@ -75,7 +78,9 @@ public:
 
     static MatrixElement *getMatrixElement(QGraphicsItem *);
 
-    void setDrumMode(bool isDrum) { m_drum = isDrum;}
+    void setColor();
+
+    void setDrumMode(bool isDrum) { m_drumMode = isDrum;}
 
     // Z values for occlusion/layering of object in graph display.
     // Diffence between NORMAL_ and ACTIVE_  needed when notes from
@@ -99,9 +104,11 @@ protected:
                      GRAY_BLUE_COMPONENT = 200;
 
     MatrixScene *m_scene;
-    bool m_drum;
+    bool m_drumMode;
+    bool m_drumDisplay;
     bool m_current;
-    QGraphicsItem *m_item;
+    QGraphicsRectItem *m_noteItem;
+    QGraphicsPolygonItem *m_drumItem;
     QGraphicsSimpleTextItem *m_textItem;
     double m_width;
     double m_velocity;
@@ -124,9 +131,16 @@ protected:
     // Future work: Might also allow elimination of m_pitchOffset, above.
     const Segment *m_segment;
 
+    // Common code used by reconfigure(timeT, timeT, int, int),
+    // setCurrent(), and setColor().
+    QColor textColor(const QColor noteColor) const;
+
     // Common code used by reconfigure(timeT, timeT, int, int)
     // and setCurrent(bool).
     QColor noteColor() const;
+
+    // Common code used by setSelected() and setCurrent()
+    QAbstractGraphicsShapeItem *getActiveItem();
 
 
 private:

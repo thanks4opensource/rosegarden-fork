@@ -50,9 +50,11 @@ MatrixElement::MatrixElement(MatrixScene *scene, Event *event,
                              const Segment *segment) :
     ViewElement(event),
     m_scene(scene),
-    m_drum(drum),
+    m_drumMode(drum),
+    m_drumDisplay(drum),
     m_current(true),
-    m_item(nullptr),
+    m_noteItem(nullptr),
+    m_drumItem(nullptr),
     m_textItem(nullptr),
     m_pitchOffset(pitchOffset),
     m_segment(segment)
@@ -66,12 +68,9 @@ MatrixElement::MatrixElement(MatrixScene *scene, Event *event,
 
 MatrixElement::~MatrixElement()
 {
-    RG_DEBUG << "deleting item:" << m_item << this;
-    delete m_item;
-    if (m_textItem) {
-        RG_DEBUG << "deleting text item:" << m_textItem << this;
-        delete m_textItem;
-    }
+    delete m_noteItem;
+    delete m_drumItem;
+    delete m_textItem;
 }
 
 void
@@ -138,18 +137,26 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
     // changes velocity color of notes.
     // colour.setAlpha(160);
 
-    double fres(resolution);
+    // set the Y position taking m_pitchOffset into account, subtracting the
+    // opposite of whatever the originating segment transpose was
+    double pitchy = (127 - pitch - m_pitchOffset) * (resolution + 1);
 
-    if (m_drum && !m_scene->getMatrixWidget()->getShowPercussionDurations()) {
-        fres = resolution + 1;
-        QGraphicsPolygonItem *item = dynamic_cast<QGraphicsPolygonItem *>(m_item);
-        if (!item) {
-            RG_DEBUG << "reconfigure drum deleting item:" << m_item << this;
-            delete m_item;
-            item = new QGraphicsPolygonItem;
-            RG_DEBUG << "reconfigure drum created item:" << m_item << this;
-            m_item = item;
-            m_scene->addItem(m_item);
+    m_drumDisplay = m_drumMode &&
+        !m_scene->getMatrixWidget()->getShowPercussionDurations();
+
+    // Only one of m_noteItem() or m_drumItem() active, depending
+    // on various modes and settings. Is cheaper to keep both around
+    // with inactive one set to hide() vs dynamically creating/deleting
+    // and/or adding/removing from scene.
+    double fres(resolution + 1);
+    if (m_drumDisplay) {
+        if (m_noteItem) m_noteItem->hide();
+        if (m_drumItem) {
+            m_drumItem->show();
+        }
+        else {
+            m_drumItem = new QGraphicsPolygonItem;
+            m_scene->addItem(m_drumItem);
         }
         QPolygonF polygon;
         polygon << QPointF(0, 0)
@@ -157,64 +164,56 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
                 << QPointF(0, fres)
                 << QPointF(-fres/2, fres/2)
                 << QPointF(0, 0);
-        item->setPolygon(polygon);
-        item->setPen
+        m_drumItem->setPolygon(polygon);
+        m_drumItem->setPen
             (QPen(GUIPalette::getColour(GUIPalette::MatrixElementBorder), 0));
-        item->setBrush(QBrush(colour, brushPattern));
+        m_drumItem->setBrush(QBrush(colour, brushPattern));
+        m_drumItem->setPos(x0, pitchy);
+        m_drumItem->setZValue(m_current ? ACTIVE_SEGMENT_NOTE_Z
+                                        : NORMAL_SEGMENT_NOTE_Z);
+        m_drumItem->setData(MatrixElementData,
+                            QVariant::fromValue((void *)this));
     } else {
-        QGraphicsRectItem *item = dynamic_cast<QGraphicsRectItem *>(m_item);
-        if (!item) {
-            RG_DEBUG << "reconfigure deleting item:" << m_item << this;
-            delete m_item;
-            item = new QGraphicsRectItem;
-            m_item = item;
-            RG_DEBUG << "reconfigure created item:" << m_item << this;
-            m_scene->addItem(m_item);
+        if (m_drumItem) m_drumItem->hide();
+        if (m_noteItem) {
+            m_noteItem->show();
+        }
+        else {
+            m_noteItem = new QGraphicsRectItem;
+            m_scene->addItem(m_noteItem);
         }
         float width = m_width;
         if (width < 1) {
             x0 = std::max(0.0, x1 - 1);
             width = 1;
         }
-        QRectF rect(0, 0, width, fres + 1);
-        item->setRect(rect);
-        item->setPen
+        QRectF rect(0, 0, width, fres);
+        m_noteItem->setRect(rect);
+        m_noteItem->setPen
             (QPen(GUIPalette::getColour(GUIPalette::MatrixElementBorder), 0));
-        item->setBrush(QBrush(colour, brushPattern));
+        m_noteItem->setBrush(QBrush(colour, brushPattern));
+        m_noteItem->setPos(x0, pitchy);
+        m_noteItem->setZValue(m_current ? ACTIVE_SEGMENT_NOTE_Z
+                                        : NORMAL_SEGMENT_NOTE_Z);
+        m_noteItem->setData(MatrixElementData,
+                            QVariant::fromValue((void *)this));
     }
 
-    QSettings settings;
-    settings.beginGroup(MatrixViewConfigGroup);
-    bool showName = settings.value("show_note_names", false).toBool();
-    settings.endGroup();
-
-    if (m_textItem) {
-        if (!showName ||
-            // Don't show note names on normal diamond percussion notes
-            (m_drum &&
-             !m_scene->getMatrixWidget()->getShowPercussionDurations())) {
-            RG_DEBUG << "reconfigure deleting text item:"
-                     << m_textItem << this;
-            delete m_textItem;
-            m_textItem = nullptr;
-        }
-    } else {
-        if (showName &&
-            // Don't show note names on normal diamond percussion notes
-            !(m_drum &&
-             !m_scene->getMatrixWidget()->getShowPercussionDurations())) {
+    // Optional note name.
+    // But don't show on normal diamond percussion notes
+    bool showName = m_scene->getMatrixWidget()->getShowNoteNames() &&
+                    !m_drumDisplay;
+    if (showName) {
+        if (!m_textItem) {
             m_textItem = new QGraphicsSimpleTextItem;
-            RG_DEBUG << "reconfigure created text item:" << m_textItem << this;
             m_scene->addItem(m_textItem);
         }
-    }
 
-    if (m_textItem) {
         // Draw text on top of note, see constants in .h file
         m_textItem->setZValue(m_current ? ACTIVE_SEGMENT_TEXT_Z
                                         : NORMAL_SEGMENT_TEXT_Z);
-        m_textItem->setBrush(GUIPalette::getColour(
-                    GUIPalette::MatrixElementBorder));
+        m_textItem->setBrush(textColor(colour));
+
         QString noteName = MidiPitchLabel(pitch).getQString();
         m_textItem->setText(noteName);
         QFont font;
@@ -222,31 +221,22 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
         m_textItem->setFont(font);
         m_textItem->setData(MatrixElementData,
                             QVariant::fromValue((void *)this));
+        m_textItem->show();
+    }
+    else if (m_textItem) {
+        m_textItem->hide();
+    }
+
+    if (m_textItem && showName) {
+        m_textItem->setPos(x0 + 1, pitchy - 1);
     }
 
     setLayoutX(x0);
 
-    m_item->setData(MatrixElementData, QVariant::fromValue((void *)this));
-
-    // set the Y position taking m_pitchOffset into account, subtracting the
-    // opposite of whatever the originating segment transpose was
-
-//    std::cout << "TRANSPOSITION TEST: event pitch: "
-//              << (pitch ) << " m_pitchOffset: " << m_pitchOffset
-//              << std::endl;
-
-    double pitchy = (127 - pitch - m_pitchOffset) * (resolution + 1);
-    m_item->setPos(x0, pitchy);
-    // See constants in .h file
-    m_item->setZValue(m_current ? ACTIVE_SEGMENT_NOTE_Z
-                                : NORMAL_SEGMENT_NOTE_Z);
-
-    if (m_textItem) {
-            m_textItem->setPos(x0 + 1, pitchy - 1);
-        }
-
     // set a tooltip explaining why this event is drawn in a different pattern
-    if (tiedNote) m_item->setToolTip(QObject::tr("This event is tied to another event."));
+    if (tiedNote && m_noteItem) {
+        m_noteItem->setToolTip(QObject::tr("This event is tied to another event."));
+    }
 }
 
 bool
@@ -255,18 +245,41 @@ MatrixElement::isNote() const
     return event()->isa(Note::EventType);
 }
 
+QAbstractGraphicsShapeItem*
+MatrixElement::getActiveItem()
+{
+    if (m_drumDisplay) {
+        return dynamic_cast<QAbstractGraphicsShapeItem *>(m_drumItem);
+    }
+    else {
+        return dynamic_cast<QAbstractGraphicsShapeItem *>(m_noteItem);
+    }
+}
+
 void
 MatrixElement::setSelected(bool selected)
 {
     RG_DEBUG << "setSelected" << event()->getAbsoluteTime() << selected;
-    QAbstractGraphicsShapeItem *item =
-        dynamic_cast<QAbstractGraphicsShapeItem *>(m_item);
+
+    QAbstractGraphicsShapeItem *item = getActiveItem();
     if (!item) return;
 
     if (selected) {
-        QPen pen(GUIPalette::getColour(GUIPalette::SelectedElement), 2,
-                 Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin);
-        pen.setCosmetic(!m_drum);
+        // Outline in default blue for velocity color mode, otherwise
+        // choose contrasting color.
+        QColor selectionColor;
+        if (m_scene->getMatrixWidget()->getNoteColorType() ==
+            MatrixWidget::NoteColorType::VELOCITY) {
+            selectionColor = GUIPalette::getColour(GUIPalette::
+                                                   SelectedElement);
+        }
+        else {
+            selectionColor = QColor::fromHsv(
+                                    (item->brush().color().hue() + 180) % 360,
+                                    255, 224);
+        }
+        QPen pen(selectionColor, 2, Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin);
+        pen.setCosmetic(!m_drumDisplay);
         item->setPen(pen);
     } else {
         item->setPen
@@ -283,15 +296,17 @@ MatrixElement::setCurrent(bool current)
 
     m_current = current;  // must be done before call to noteColor()
 
-    QAbstractGraphicsShapeItem *item =
-        dynamic_cast<QAbstractGraphicsShapeItem *>(m_item);
+    QAbstractGraphicsShapeItem *item = getActiveItem();
     if (!item) return;
 
-    item->setBrush(noteColor());
+    QColor  color = noteColor();
 
-    // See constants in .h file
-    m_item->setZValue(current ? ACTIVE_SEGMENT_NOTE_Z : NORMAL_SEGMENT_NOTE_Z);
+    item->setBrush(color);
+
+    item->setZValue(current ? ACTIVE_SEGMENT_NOTE_Z : NORMAL_SEGMENT_NOTE_Z);
+
     if (m_textItem) {
+        m_textItem->setBrush(textColor(color));
         m_textItem->setZValue(current ? ACTIVE_SEGMENT_TEXT_Z
                                       : NORMAL_SEGMENT_TEXT_Z);
     }
@@ -311,6 +326,19 @@ MatrixElement::getMatrixElement(QGraphicsItem *item)
     QVariant v = item->data(MatrixElementData);
     if (v.isNull()) return nullptr;
     return (MatrixElement *)v.value<void *>();
+}
+
+void MatrixElement::setColor()
+{
+    QColor  color = noteColor();
+
+    QAbstractGraphicsShapeItem *item = getActiveItem();
+    if (!item) return;
+
+    item->setBrush(color);
+    item->update();
+
+    if (m_textItem) m_textItem->setBrush(textColor(color));
 }
 
 QColor
@@ -375,6 +403,16 @@ const
     }
 
     return colour;
+}
+
+QColor
+MatrixElement::textColor(
+const QColor noteColor)
+const
+{
+    int intensity = qGray(noteColor.rgb());
+    if (intensity > 112) return Qt::black;
+    else                 return Qt::white;
 }
 
 }  // namespace

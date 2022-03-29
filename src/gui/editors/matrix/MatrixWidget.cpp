@@ -125,6 +125,7 @@ MatrixWidget::MatrixWidget(MatrixView *matrixView) :
     m_firstNote(0),
     m_lastNote(0),
     m_highlightVisible(true),
+    m_showNoteNames(false),
     m_showPercussionDurations(false),
     m_toolBox(nullptr),
     m_currentTool(nullptr),
@@ -1700,6 +1701,7 @@ MatrixWidget::slotDocumentModified(bool)
     //     redesign and rewrite MatrixWidget before this becomes possible.
 
     generatePitchRuler();
+    updateSegmentChangerBackground();
 }
 
 void

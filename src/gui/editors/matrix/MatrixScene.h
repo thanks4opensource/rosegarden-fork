@@ -135,7 +135,13 @@ public:
     void setVerticalZoomFactor(double factor);
 
     /// update all ViewSegments
-    void updateAll(bool onlyPercussion=false);
+    void updateAllSegments(bool onlyPercussion=false);
+
+    /// just colors of notes
+    void updateAllSegmentsColors();
+
+    void recreatePitchHighlights();
+
 
 signals:
     void mousePressed(const MatrixMouseEvent *e);
@@ -215,8 +221,7 @@ private:
     void recreateLines();
     void recreateTriadHighlights();
     void recreateBlackkeyHighlights();
-    void recreatePitchHighlights();
-    void updateCurrentSegment();
+    void updateCurrentSegment(bool isCurrent);
     void setSelectionElementStatus(EventSelection *, bool set);
     void previewSelection(EventSelection *, EventSelection *oldSelection);
     void checkUpdate();

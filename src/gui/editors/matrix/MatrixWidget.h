@@ -100,6 +100,7 @@ public:
 
     Device *getCurrentDevice();
     MatrixScene *getScene()  { return m_scene; }
+    Panner *getPanner() { return m_panner; }
 
     /**
      * Show the pointer.  Used by MatrixView upon construction, this ensures
@@ -155,6 +156,8 @@ public:
     /// Used by the tools to set an appropriate mouse cursor.
     void setCanvasCursor(QCursor cursor);
 
+    bool getShowNoteNames() const { return m_showNoteNames; }
+    void setShowNoteNames(bool show) { m_showNoteNames = show; }
     bool isDrumMode() const { return m_drumMode; }
     bool getShowPercussionDurations() const {return m_showPercussionDurations; }
     void setShowPercussionDurations(bool show) { m_showPercussionDurations =
@@ -417,6 +420,7 @@ private:
     // signaled to MatrixView::slotPercussionDurations(),
     // MatrixView::slotNoteColors() and
     // MatrixView::slotNoteColorsAllSegments().
+    bool m_showNoteNames;
     bool m_showPercussionDurations;
     NoteColorType m_noteColorType;
     bool m_noteColorAllSegments;

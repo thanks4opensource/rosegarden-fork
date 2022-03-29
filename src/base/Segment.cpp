@@ -255,7 +255,7 @@ bool
 Segment::isTrulyLinked() const {
     // If there is no SegmentLinker the segment is not linked
     if (!m_segmentLinker) return false;
-    
+
     // If segment is a temporary one or is out of composition return false
     // That's arbitrary, but this method is designed to be used from
     // segments which are inside the composition.
@@ -313,7 +313,7 @@ Segment::setTrack(TrackId id)
         m_trackId = id;
         return;
     }
-    
+
     Composition *c = m_composition;
     if (c) c->weakDetachSegment(this); // sets m_composition to 0
     TrackId oldTrackId = m_trackId;
@@ -404,15 +404,15 @@ Segment::setStartTime(timeT t)
 
     /** This is effectively calling Segment::erase on each event after
         copyMoving it.  Segment::erase did the following:
-        
+
         1. base::erase
-	2. Delete the event
-	3. Kept m_startTime up to date
-	4. Kept m_endTime up to date
-	5. updateRefreshStatuses
+        2. Delete the event
+        3. Kept m_startTime up to date
+        4. Kept m_endTime up to date
+        5. updateRefreshStatuses
         6. Thru notifyRemove, notify observers eventRemoved
         7. Thru notifyRemove, remove clefs and keys from
-	   m_clefKeyList
+           m_clefKeyList
 
       1 is done explicitly here.  3, 4, 5, and 7 are done en masse
       below.  6 is accomplished via allEventsChanged.  2 is no longer
@@ -433,7 +433,7 @@ Segment::setStartTime(timeT t)
     base::clear();
 
     if (m_clefKeyList) { m_clefKeyList->clear(); }
-    
+
     m_endTime = previousEndTime + dt;
     if (m_endMarkerTime) *m_endMarkerTime += dt;
 
@@ -443,11 +443,11 @@ Segment::setStartTime(timeT t)
     /** This is effectively calling Segment::insert on each event.
         Segment::insert did the following:
 
-	1. base::insert
-	2. Kept m_startTime up to date
-	3. Kept m_endTime up to date
-	4. Set the TMP property if applicable
-	5. updateRefreshStatuses
+        1. base::insert
+        2. Kept m_startTime up to date
+        3. Kept m_endTime up to date
+        4. Set the TMP property if applicable
+        5. updateRefreshStatuses
         6. Thru notifyAdd, notified observers eventAdded
         7. Thru notifyAdd, added clefs and keys to m_clefKeyList
 
@@ -646,7 +646,7 @@ Segment::erase(iterator pos)
     Event *e = *pos;
 
     Q_CHECK_PTR(e);
-    
+
     timeT t0 = e->getAbsoluteTime();
     timeT t1 = t0 + e->getGreaterDuration();
 
@@ -657,7 +657,7 @@ Segment::erase(iterator pos)
 
     if (t0 == m_startTime && begin() != end()) {
         timeT startTime = (*begin())->getAbsoluteTime();
-        
+
         // Don't send any notification if startTime doesn't change.
         if (startTime != m_startTime) {
             if (m_composition) m_composition->setSegmentStartTime(this, startTime);
@@ -1445,12 +1445,12 @@ Segment::getRepeatEndTime() const
 
     if (m_repeating && m_composition) {
         timeT endTime = m_composition->getEndMarker();
-        
+
         for (Composition::iterator i(m_composition->begin());
              i != m_composition->end(); ++i) {
-          
+
             if ((*i)->getTrack() != getTrack()) continue;
-            
+
             timeT t1 = (*i)->getStartTime();
             timeT t2 = (*i)->getEndMarkerTime();
 
@@ -1599,10 +1599,10 @@ Segment::unlockResizeNotifications()
         if (*m_memoEndMarkerTime > *m_endMarkerTime) shorten = true;
         else if (*m_memoEndMarkerTime == *m_endMarkerTime) return;
     }
-    
+
     // What if m_memoEndMarkerTime=0 and m_endMarkerTime!=0 (or the
     // opposite) ?   Is such a case possible ?
-    
+
     if (m_memoEndMarkerTime) delete m_memoEndMarkerTime;
     m_memoEndMarkerTime = nullptr;
     notifyEndMarkerChange(shorten);
@@ -1638,7 +1638,7 @@ Segment::getPreviewColour() const
     int intensity = qGray(segmentColour.rgb());
 
     // Go with black for bright backgrounds
-    if (intensity > 127) {
+    if (intensity > 112) {   // was 127, behaved poorly on "green1"
         return Qt::black;
     }
 

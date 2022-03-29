@@ -44,6 +44,7 @@ public:
     void updateElements(timeT from, timeT to);
 
     void updateAll();
+    void updateAllColors();
 
     MatrixScene* getMatrixScene() const { return m_scene; }
 

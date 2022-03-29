@@ -283,6 +283,7 @@ private:
     std::vector<timeT> m_quantizations;
     std::vector<timeT> m_snapValues;
 
+    void setShowNoteNames();
     void setShowPercussionDurations();
     void setShowNoteColorTypeAndAll();
     void setupActions();

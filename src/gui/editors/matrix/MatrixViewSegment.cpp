@@ -134,6 +134,17 @@ MatrixViewSegment::updateAll()
 }
 
 void
+MatrixViewSegment::updateAllColors()
+{
+    for(ViewElementList::iterator i = m_viewElementList->begin();
+        i != m_viewElementList->end();
+        ++i) {
+        MatrixElement *e = static_cast<MatrixElement *>(*i);
+        e->setColor();
+    }
+}
+
+void
 MatrixViewSegment::setDrumMode(
 bool drumMode)
 {
