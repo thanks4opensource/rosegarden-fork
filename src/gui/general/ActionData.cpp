@@ -30,7 +30,7 @@
 #include <QStandardItemModel>
 #include <QSettings>
 
-namespace Rosegarden 
+namespace Rosegarden
 {
 
 ActionData* ActionData::m_instance = 0;
@@ -42,7 +42,7 @@ ActionData* ActionData::getInstance()
     }
     return m_instance;
 }
-  
+
 ActionData::~ActionData()
 {
 }
@@ -50,7 +50,7 @@ ActionData::~ActionData()
 QStandardItemModel* ActionData::getModel()
 {
     if (! m_model) {
-        m_model = new QStandardItemModel(0, 4);
+        m_model = new QStandardItemModel;
     }
     fillModel();
     return m_model;
@@ -89,11 +89,15 @@ void ActionData::saveUserShortcuts()
         int index = 0;
         foreach(auto keyseq, keySet) {
             QString skey = key + QString::number(index);
-            RG_DEBUG << "settings set" << skey << keyseq;
-            settings.setValue(skey, keyseq);
+            RG_DEBUG << "settings set" << skey << keyseq.toString();
+            settings.setValue(skey, keyseq.toString());
             index++;
         }
     }
+    settings.endGroup();
+
+    settings.beginGroup(ShortcutKeyboardConfigGroup);
+    settings.setValue("actualkeyboard", m_actKb);
     settings.endGroup();
 }
 
@@ -119,19 +123,11 @@ void ActionData::addUserShortcut(const QString& key,
                                  const QKeySequence& ks)
 {
     RG_DEBUG << "add shortcut" << ks << "to" << key;
-    auto iter = m_userShortcuts.find(key);
-    if (iter == m_userShortcuts.end()) {
-        // no user shortcut yet
-        std::set<QKeySequence> ksSet;
-        ksSet.insert(ks);
-        setUserShortcuts(key, ksSet);
-    } else {
-        std::set<QKeySequence> ksSet = (*iter).second;
-        ksSet.insert(ks);
-        setUserShortcuts(key, ksSet);
-    }
+    std::set<QKeySequence> ksSet = getShortcuts(key);
+    ksSet.insert(ks);
+    setUserShortcuts(key, ksSet);
 }
-    
+
 void ActionData::removeUserShortcut(const QString& key,
                                     const QKeySequence& ks)
 {
@@ -140,7 +136,7 @@ void ActionData::removeUserShortcut(const QString& key,
     ksSet.erase(ks);
     setUserShortcuts(key, ksSet);
 }
-    
+
 void ActionData::removeUserShortcuts(const QString& key)
 {
     RG_DEBUG << "removeUserShortcuts for" << key;
@@ -150,6 +146,13 @@ void ActionData::removeUserShortcuts(const QString& key)
         m_userShortcuts.erase(key);
         updateModel(key);
     }
+}
+
+void ActionData::removeAllUserShortcuts()
+{
+    RG_DEBUG << "remove all user shortcuts";
+    m_userShortcuts.clear();
+    updateModel(""); // key empty updates the whole model
 }
 
 std::set<QKeySequence> ActionData::getShortcuts(const QString& key) const {
@@ -172,84 +175,155 @@ std::set<QKeySequence> ActionData::getShortcuts(const QString& key) const {
     return ret;
 }
 
-void ActionData::getDuplicateShortcuts(const QString& key,
+void ActionData::getDuplicateShortcuts(const std::set<QString>& keys,
                                        std::set<QKeySequence> ksSet,
                                        bool resetToDefault,
-                                       const QString& context,
+                                       bool sameContext,
                                        DuplicateData& duplicates) const
 {
-    ActionInfo ainfo = m_actionMap.at(key);
-    QString etextAdj = ainfo.text;
-    QStringList eklist = key.split(":");
-    QString efile = eklist[0];
-    etextAdj.remove("&");
-    duplicates.editKey = key;
-    duplicates.editActionText = etextAdj;    
-    duplicates.editContext = m_contextMap.at(efile);
-    duplicates.duplicateMap.clear();
-    std::set<QKeySequence> newKS;
-    std::set<QKeySequence> oldKS = getShortcuts(key);
-    if (resetToDefault) {
-        // the new shortcuts are the defaults old ones are the present ones
-        newKS = ainfo.shortcuts;
-    } else {
-        // ksSet is the new shortcut set the old one is the present one
-        newKS = ksSet;
-    }
-    
-    std::set<QKeySequence> addedKS;
-    std::set_difference(newKS.begin(), newKS.end(),
-                        oldKS.begin(), oldKS.end(),
-                        std::inserter(addedKS, addedKS.begin()));
+    // the ksSet is only relevant setting for a single key (keys.size() == 1)
 
-    foreach(auto ks, addedKS) {
-        RG_DEBUG << "getDuplicateShortcuts added" << ks;
-        KeyDuplicates kdups;
-        for (auto i = m_actionMap.begin(); i != m_actionMap.end(); i++) {
-            const QString& mkey = (*i).first;
-            const ActionInfo& mainfo = m_actionMap.at(mkey);
-            // ignore passed key
-            if (mkey == key) continue;
-            QStringList mklist = mkey.split(":");
-            QString mcontext = mklist[0];
-            bool contextRelevant = (mcontext == context || mainfo.global);
-            if (context != "" && ! contextRelevant) continue;
-            std::set<QKeySequence> mKSL = getShortcuts(mkey);
-            if (mKSL.find(ks) != mKSL.end()) {
-                // this entry also uses the KeySequence ks
-                RG_DEBUG << "found duplicate for" << ks << mkey;
-                KeyDuplicate kdup;
-                kdup.key = mkey;
-                QString textAdj = mainfo.text;
-                textAdj.remove("&");
-                kdup.actionText = textAdj;
+    duplicates.clear();
+    foreach(auto key, keys) {
+        RG_DEBUG << "Check duplicates for" << key;
+        ActionInfo ainfo = m_actionMap.at(key);
+        QString etextAdj = ainfo.text;
+        QStringList eklist = key.split(":");
+        QString efile = eklist[0];
+        etextAdj.remove("&");
+        DuplicateDataForKey ddatak;
+        ddatak.editActionText = etextAdj;
+        ddatak.editContext = m_contextMap.at(efile);
+        std::set<QKeySequence> newKS;
+        std::set<QKeySequence> oldKS = getShortcuts(key);
+        if (resetToDefault) {
+            // the new shortcuts are the defaults old ones are the present ones
+            newKS = ainfo.shortcuts;
+        } else {
+            // ksSet is the new shortcut set the old one is the present one
+            newKS = ksSet;
+        }
+
+        std::set<QKeySequence> addedKS;
+        std::set_difference(newKS.begin(), newKS.end(),
+                            oldKS.begin(), oldKS.end(),
+                            std::inserter(addedKS, addedKS.begin()));
+
+        foreach(auto ks, addedKS) {
+            RG_DEBUG << "getDuplicateShortcuts added" << ks;
+            KeyDuplicates kdups;
+            for (auto i = m_actionMap.begin(); i != m_actionMap.end(); i++) {
+                const QString& mkey = (*i).first;
+                const ActionInfo& mainfo = m_actionMap.at(mkey);
+                // ignore passed key
+                if (mkey == key) continue;
                 QStringList mklist = mkey.split(":");
-                QString mfile = mklist[0];
-                kdup.context = m_contextMap.at(mfile);
-                kdups.push_back(kdup);
+                QString mcontext = m_contextMap.at(mklist[0]);
+                bool contextRelevant;
+                if (sameContext) {
+                    contextRelevant = (mcontext == ddatak.editContext);
+                } else {
+                    contextRelevant = true;
+                }
+                if (mainfo.global) contextRelevant = true;
+                if (! contextRelevant) continue;
+                std::set<QKeySequence> mKSL = getShortcuts(mkey);
+                if (mKSL.find(ks) != mKSL.end()) {
+                    // this entry also uses the KeySequence ks
+                    RG_DEBUG << "found duplicate for" << ks << mkey;
+                    KeyDuplicate kdup;
+                    kdup.key = mkey;
+                    QString textAdj = mainfo.text;
+                    textAdj.remove("&");
+                    kdup.actionText = textAdj;
+                    QStringList mklist = mkey.split(":");
+                    QString mfile = mklist[0];
+                    kdup.context = m_contextMap.at(mfile);
+                    kdups.push_back(kdup);
+                }
+            }
+            if (! kdups.empty()) {
+                ddatak.duplicateMap[ks] = kdups;
             }
         }
-        if (! kdups.empty()) {
-            duplicates.duplicateMap[ks] = kdups;
+        if (! ddatak.duplicateMap.empty()) {
+            duplicates[key] = ddatak;
         }
     }
 }
 
 void ActionData::resetChanges()
 {
+    m_actKbCopy = m_actKb;
     m_userShortcutsCopy = m_userShortcuts;
 }
-    
-bool ActionData::dataChanged() const
+
+bool ActionData::hasDataChanged() const
 {
+    if (m_actKb != m_actKbCopy) {
+        // keyboard has changed
+        return true;
+    }
     return (m_userShortcutsCopy != m_userShortcuts);
 }
 
 void ActionData::undoChanges()
 {
+    m_actKb = m_actKbCopy;
     m_userShortcuts = m_userShortcutsCopy;
 }
-    
+
+int ActionData::getKeyboards(std::list<QString>& keyboards)
+{
+    keyboards.clear();
+    int akIndex = 0;
+    foreach(auto ktpair, m_keyboardTranslations) {
+        int index = ktpair.first;
+        const QString& name = ktpair.second.kbName;
+        RG_DEBUG << "getKeyboards append" << name;
+        keyboards.push_back(m_translatedKeyboardNames[name]);
+        if (index == m_actKb) akIndex = index;
+    }
+    return akIndex;
+}
+
+void ActionData::applyKeyboard(int index)
+{
+    RG_DEBUG << "applyKeyboard" << index;
+    m_actKb = index;
+    // first reset to original
+    m_actionMap = m_actionMapOriginal;
+    KeyboardTranslation kbt = m_keyboardTranslations[index];
+    foreach(auto pair, kbt.translation) {
+        const QString& ksSrc = pair.first;
+        const QString& ksDest = pair.second;
+        RG_DEBUG << "applyTranslation" << ksSrc << ksDest;
+        for (auto i = m_actionMap.begin(); i != m_actionMap.end(); i++) {
+            const QString& mkey = (*i).first;
+            const ActionInfo& mainfo = m_actionMap.at(mkey);
+            const std::set<QKeySequence>& defaultShortcuts = mainfo.shortcuts;
+            if (defaultShortcuts.find(ksSrc) == defaultShortcuts.end()) {
+                // ksSrc not in default set
+                continue;
+            }
+
+            std::set<QKeySequence> scs = m_actionMapOriginal[mkey].shortcuts;
+            auto diter = scs.find(ksDest);
+            if (diter != scs.end()) {
+                // no ksDest is already in the set - done
+                continue;
+            }
+            // so ksSrc is in the default set and ksDest is not in the shortcuts
+            // apply change
+            RG_DEBUG << "applyTranslation applying for" << mkey;
+            scs.erase(ksSrc);
+            scs.insert(ksDest);
+            m_actionMap[mkey].shortcuts = scs;
+        }
+    }
+    updateModel("");
+}
+
 ActionData::ActionData() :
     m_model(0)
 {
@@ -325,41 +399,48 @@ ActionData::ActionData() :
     }
     settings.endGroup();
     m_userShortcutsCopy = m_userShortcuts;
+
+    readKeyboardShortcuts();
+    settings.beginGroup(UserShortcutsConfigGroup);
+    m_actKb = settings.value("acualkeyboard", 0).toInt();
+    settings.endGroup();
+    m_actKbCopy = m_actKb;
+    applyKeyboard(m_actKb);
 }
 
 bool ActionData::startDocument()
 {
     return true;
 }
-    
+
 bool ActionData::startElement(const QString&,
                               const QString&,
                               const QString& qName,
                               const QXmlStreamAttributes& atts)
 {
     QString name = qName.toLower();
-    
+
     if (name == "menubar") {
-        
+
         m_inMenuBar = true;
-        
+
     } else if (name == "menu") {
-        
+
         QString menuName = atts.value("name").toString();
         if (menuName == "") {
             RG_WARNING << "WARNING: startElement(" << m_currentFile << "): No menu name provided in menu element";
         }
-        
+
         m_currentMenus.push_back(menuName);
-        
+
     } else if (name == "toolbar") {
-        
+
         QString toolbarName = atts.value("name").toString();
         if (toolbarName == "") {
             RG_WARNING << "WARNING: startElement(" << m_currentFile << "): No toolbar name provided in toolbar element";
         }
         m_currentToolbar = toolbarName;
-        
+
     } else if (name == "text") {
 
         // used to provide label for menu or title for toolbar, but
@@ -369,14 +450,14 @@ bool ActionData::startElement(const QString&,
             m_inText = true;
             m_currentText = "";
         }
-        
+
     } else if (name == "action") {
-        
+
         QString actionName = atts.value("name").toString();
         if (actionName == "") {
             RG_WARNING << "WARNING: startElement(" << m_currentFile << "): No action name provided in action element";
         }
-        
+
         if (m_currentMenus.empty() && m_currentToolbar == "" &&
             (m_currentState == "" || (!m_inEnable && !m_inDisable
             && !m_inVisible && !m_inInvisible))) {
@@ -385,7 +466,7 @@ bool ActionData::startElement(const QString&,
                        << "\" appears outside (valid) menu, toolbar or state "
                        << "enable/disable/visible/invisible element";
         }
-        
+
         QString text = atts.value("text").toString();
         QString icon = atts.value("icon").toString();
         QString shortcut = atts.value("shortcut").toString();
@@ -406,7 +487,10 @@ bool ActionData::startElement(const QString&,
             ActionInfo& ainfo = m_actionMap[key];
             if (! m_currentMenus.empty()) ainfo.menus = m_currentMenus;
             if (m_currentToolbar != "") ainfo.toolbar = m_currentToolbar;
-            if (text != "") ainfo.text = translate(text);
+            if (text != "") {
+                ainfo.text = translate(text);
+                RG_DEBUG << "text:" << key << text << ainfo.text;
+            }
             if (icon != "") ainfo.icon = icon;
             if (shortcut != "") {
                 RG_DEBUG << "read xml xmlshortcut" << shortcut;
@@ -433,7 +517,7 @@ bool ActionData::startElement(const QString&,
             RG_WARNING << "WARNING: startElement(" << m_currentFile << "): No state name provided in state element";
         }
         m_currentState = stateName;
-        
+
     } else if (name == "enable") {
 
         if (m_currentState == "") {
@@ -450,30 +534,33 @@ bool ActionData::startElement(const QString&,
             m_inDisable = true;
         }
     } else if (name == "visible") {
-        
+
         if (m_currentState == "") {
             RG_WARNING << "WARNING: startElement(" << m_currentFile << "): Visible element appears outside state element";
         } else {
             m_inVisible = true;
         }
     } else if (name == "invisible") {
-        
+
         if (m_currentState == "") {
             RG_WARNING << "WARNING: startElement(" << m_currentFile << "): Invisible element appears outside state element";
         } else {
             m_inInvisible = true;
         }
     }
-    
+
+    // make a copy of the unmodified map - it will be modified by
+    // keyboard layout shortcuts
+    m_actionMapOriginal = m_actionMap;
     return true;
 }
-    
+
 bool ActionData::endElement(const QString&,
                             const QString&,
                             const QString& qName)
 {
     QString name = qName.toLower();
-    
+
     if (name == "menubar") {
         m_inMenuBar = false;
     } else if (name == "menu") {
@@ -495,21 +582,21 @@ bool ActionData::endElement(const QString&,
     } else if (name == "invisible") {
         m_inInvisible = false;
     }
-        
+
     return true;
 }
-    
+
 bool ActionData::characters(const QString& ch)
 {
     if (m_inText) m_currentText += ch;
     return true;
 }
-    
+
 bool ActionData::endDocument()
 {
     return true;
 }
-    
+
 bool ActionData::fatalError(int lineNumber, int columnNumber,
                             const QString& msg)
 {
@@ -519,12 +606,12 @@ bool ActionData::fatalError(int lineNumber, int columnNumber,
         .arg(lineNumber)
         .arg(columnNumber)
         .arg(m_currentFile);
-    
+
     RG_WARNING << errorString.toLocal8Bit().data();
-    
+
     return false;
 }
-    
+
 void ActionData::loadData(const QString& name)
 {
     QString file = ResourceFinder().getResourcePath("rc", name);
@@ -546,22 +633,25 @@ QString ActionData::translate(QString text, QString disambiguation) const
     // These translations are extracted from data/ui/*.rc files via
     // scripts/extract*.pl and pulled into the QObject translation context in
     // one great lump.
-    
+
     if (!disambiguation.isEmpty()) return QObject::tr(text.toStdString().c_str(), disambiguation.toStdString().c_str());
     else return QObject::tr(text.toStdString().c_str());
 }
-    
+
 void ActionData::fillModel()
 {
     m_keyStore.clear();
     m_model->clear();
-    m_model->insertColumns(0, 5);
-    
+    m_model->insertColumns(0, 8);
+
     m_model->setHeaderData(0, Qt::Horizontal, QObject::tr("Context"));
     m_model->setHeaderData(1, Qt::Horizontal, QObject::tr("Action"));
     m_model->setHeaderData(2, Qt::Horizontal, QObject::tr("Icon"));
     m_model->setHeaderData(3, Qt::Horizontal, QObject::tr("User defined"));
-    m_model->setHeaderData(4, Qt::Horizontal, QObject::tr("Shortcuts"));
+    m_model->setHeaderData(4, Qt::Horizontal, QObject::tr("Shortcut 1"));
+    m_model->setHeaderData(5, Qt::Horizontal, QObject::tr("Shortcut 2"));
+    m_model->setHeaderData(6, Qt::Horizontal, QObject::tr("Shortcut 3"));
+    m_model->setHeaderData(7, Qt::Horizontal, QObject::tr("Shortcut 4"));
 
     QPixmap udPixmap = QPixmap(IconLoader::loadPixmap("button-record"));
     for (auto i = m_actionMap.begin(); i != m_actionMap.end(); i++) {
@@ -570,11 +660,17 @@ void ActionData::fillModel()
         QString textAdj = ainfo.text;
         QStringList klist = key.split(":");
         QString file = klist[0];
+        QString aname = klist[1];
         textAdj.remove("&");
+        if (textAdj == "") {
+            textAdj = QObject::tr(aname.toStdString().c_str());
+        }
         m_model->insertRow(0);
         m_keyStore.push_front(key);
         m_model->setData(m_model->index(0, 0), m_contextMap[file]);
+        m_model->item(0, 0)->setEditable(false);
         m_model->setData(m_model->index(0, 1), textAdj);
+        m_model->item(0, 1)->setEditable(false);
         if (ainfo.icon != "") {
             QIcon icon = IconLoader::load(ainfo.icon);
             if (! icon.isNull()) {
@@ -583,10 +679,10 @@ void ActionData::fillModel()
                 QStandardItem* item = new QStandardItem;
                 item->setIcon(pixmap);
                 m_model->setItem(0, 2, item);
-            } else {
-                m_model->setData(m_model->index(0, 2), "");
             }
         }
+        m_model->setData(m_model->index(0, 2), "");
+        m_model->item(0, 2)->setEditable(false);
         auto usiter = m_userShortcuts.find(key);
         bool userDefined = false;
         KeySet kset = ainfo.shortcuts;
@@ -599,9 +695,14 @@ void ActionData::fillModel()
         foreach(auto ks, kset) {
             kssl << ks.toString(QKeySequence::NativeText);
         }
-        QString scString = kssl.join(", ");
 
-        m_model->setData(m_model->index(0, 4), scString);
+        for(int i=0; i<4; i++) {
+            if(i < kssl.length()) {
+                m_model->setData(m_model->index(0, 4 + i), kssl[i]);
+            } else {
+                m_model->setData(m_model->index(0, 4 + i), "");
+            }
+        }
         QStandardItem* item = new QStandardItem;
         if (userDefined) {
             item->setIcon(udPixmap);
@@ -609,21 +710,31 @@ void ActionData::fillModel()
         } else {
             item->setText("");
         }
+        if (ainfo.shortcuts != m_actionMapOriginal[key].shortcuts) {
+            // keyboard translation change
+            item->setText("k");
+        }
         m_model->setItem(0, 3, item);
+        m_model->item(0, 3)->setEditable(false);
         if (ainfo.global) {
             QVariant bg(QBrush(Qt::cyan));
-            m_model->setData(m_model->index(0, 0), bg, Qt::BackgroundRole);
-            m_model->setData(m_model->index(0, 1), bg, Qt::BackgroundRole);
-            m_model->setData(m_model->index(0, 2), bg, Qt::BackgroundRole);
-            m_model->setData(m_model->index(0, 3), bg, Qt::BackgroundRole);
-            m_model->setData(m_model->index(0, 4), bg, Qt::BackgroundRole);
+            for (int col=0; col<8; col++) {
+                m_model->setData(m_model->index(0, col),
+                                 bg, Qt::BackgroundRole);
+            }
         }
+
     }
 }
 
 void ActionData::updateModel(const QString& changedKey)
 {
     RG_DEBUG << "updateModel for key" << changedKey;
+    if (!m_model)
+        {
+            RG_DEBUG << "updateModel - no model yet";
+            return;
+        }
     QPixmap udPixmap = QPixmap(IconLoader::loadPixmap("button-record"));
     QPixmap noPixmap;
     int row = m_model->rowCount() - 1;
@@ -631,7 +742,7 @@ void ActionData::updateModel(const QString& changedKey)
         const QString& key = (*i).first;
         const ActionInfo& ainfo = (*i).second;
 
-        if (key == changedKey) {
+        if (key == changedKey || changedKey == "") {
             auto usiter = m_userShortcuts.find(key);
             KeySet kset = ainfo.shortcuts;
             bool userDefined = false;
@@ -644,9 +755,14 @@ void ActionData::updateModel(const QString& changedKey)
             foreach(auto ks, kset) {
                 kssl << ks.toString(QKeySequence::NativeText);
             }
-            QString scString = kssl.join(", ");
-            RG_DEBUG << "updateModel" << row << key << scString;
-            m_model->setData(m_model->index(row, 4), scString);
+            RG_DEBUG << "updateModel" << row << key << kssl;
+            for(int i=0; i<4; i++) {
+                if(i < kssl.length()) {
+                    m_model->setData(m_model->index(row, 4 + i), kssl[i]);
+                } else {
+                    m_model->setData(m_model->index(row, 4 + i), "");
+                }
+            }
             QStandardItem* item = m_model->item(row, 3);
             if (! item) {
                 item = new QStandardItem;
@@ -659,8 +775,77 @@ void ActionData::updateModel(const QString& changedKey)
                 item->setIcon(noPixmap);
                 item->setText("");
             }
+            if (ainfo.shortcuts != m_actionMapOriginal[key].shortcuts) {
+                // keyboard translation change
+                item->setText("k");
+            }
         }
         row -= 1;
+    }
+}
+
+void ActionData::readKeyboardShortcuts()
+{
+    ResourceFinder().unbundleResource("locale", "keyboard_shortcuts.xml");
+    QString keyboardsXml =
+        ResourceFinder().getResourcePath("locale", "keyboard_shortcuts.xml");
+    if (keyboardsXml == "") {
+        RG_DEBUG << "keyboard_shortcuts.xml not found";
+    }
+    RG_DEBUG << "keyboard_shortcuts.xml found" << keyboardsXml;
+    QFile infile(keyboardsXml);
+
+    if (infile.open(QIODevice::ReadOnly) ) {
+        QXmlStreamReader stream(&infile);
+
+        stream.readNextStartElement();
+        if (stream.name().toString() != "rosegarden_keyboards") {
+            RG_DEBUG << keyboardsXml << "invalid file";
+            return;
+        }
+        QString kbName;
+        KeyboardTranslation trans;
+        int index = 0;
+        while(!stream.atEnd()) {
+            // Read to the next element delimiter
+            do {
+                stream.readNext();
+            } while(!stream.isStartElement() &&
+                    !stream.isEndElement() &&
+                    !stream.atEnd());
+
+            if (stream.atEnd()) break;
+
+            if (stream.isStartElement()) {
+                if (stream.name().toString() == "name") {
+                    kbName = stream.readElementText();
+                } else if (stream.name().toString() == "shortcut") {
+                    QString src =
+                        stream.attributes().value("src").toString();
+                    QString dest =
+                        stream.attributes().value("dest").toString();
+                    trans.translation[src] = dest;
+                } else {
+                    RG_DEBUG << "start element" << stream.name();
+                }
+            }
+
+            if (stream.isEndElement()) {
+                if (stream.name().toString() == "keyboard") {
+                    // Save the keyboard data
+                    RG_DEBUG << "save keyboard data for" << kbName;
+                    trans.kbName = kbName;
+                    m_keyboardTranslations[index] = trans;
+                    index++;
+                    trans.translation.clear();
+                    m_translatedKeyboardNames[kbName] =
+                        QObject::tr(kbName.toStdString().c_str());
+                } else {
+                    RG_DEBUG << "end element" << stream.name();
+                }
+            }
+        }
+        infile.close();
     }
 }
 

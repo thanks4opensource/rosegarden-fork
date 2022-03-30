@@ -20,7 +20,8 @@
 
 #include <QDialog>
 
-#include <list>
+#include <map>
+#include <set>
 
 class QGroupBox;
 class QTreeView;
@@ -37,6 +38,7 @@ class QComboBox;
 namespace Rosegarden
 {
 
+class ShortcutDelegate;
 
 /// Keyboard Shortcuts dialog
 class ShortcutDialog : public QDialog
@@ -46,42 +48,44 @@ class ShortcutDialog : public QDialog
  public:
     ShortcutDialog(QWidget *parent);
     ~ShortcutDialog();
-    
+
+    void setModelData(const QKeySequence ks, const QModelIndex &index);
+
  private slots:
     void filterChanged();
     void selectionChanged(const QItemSelection &selected,
                           const QItemSelection &deselected);
-    void keySequenceEdited();
-    void setPBClicked();
     void defPBClicked();
     void clearPBClicked();
+    void clearAllPBClicked();
+    void keyboardChanged(int index);
     void warnSettingChanged(int index);
     void reject() override;
-    
+    void dataChanged(const QModelIndex&, const QModelIndex&);
+
  private:
     enum WarningType { None, SameContext, AllContexts };
 
     void editRow();
+    void keyPressEvent(QKeyEvent *event) override;
 
     QSortFilterProxyModel *m_proxyModel;
-     
+
     QTreeView *m_proxyView;
     QLabel *m_filterPatternLabel;
     QLineEdit *m_filterPatternLineEdit;
     QStandardItemModel *m_model;
-    QLabel *m_clabel;
-    QLabel *m_alabel;
-    QLabel *m_ilabel;
-    QPushButton *m_setPB;
     QPushButton *m_defPB;
     QPushButton *m_clearPB;
+    QPushButton *m_clearAllPB;
     QLabel *m_warnLabel;
     QComboBox *m_warnSetting;
-    std::list<QKeySequenceEdit*> m_ksEditList;
-    QString m_editKey;
-    int m_editRow;
+    QLabel *m_keyboardLabel;
+    QComboBox *m_keyboard;
+    std::set<int> m_editRows;
     WarningType m_warnType;
-    bool m_selectionChanged;
+    ShortcutDelegate *m_delegate;
+    std::map<int, QString> m_indexMap;
 };
 
 }
