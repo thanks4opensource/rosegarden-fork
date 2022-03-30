@@ -47,14 +47,15 @@ public:
 
     typedef std::list<KeyDuplicate> KeyDuplicates;
 
-    struct DuplicateData
+    struct DuplicateDataForKey
     {
-        QString editKey;
         QString editActionText;
         QString editContext;
         std::map<QKeySequence, KeyDuplicates> duplicateMap;
     };
-    
+
+    typedef std::map<QString, DuplicateDataForKey> DuplicateData;
+
     QStandardItemModel* getModel();
     QString getKey(int row) const;
     bool isDefault(const QString& key,
@@ -67,22 +68,26 @@ public:
     void removeUserShortcut(const QString& key,
                             const QKeySequence& ks);
     void removeUserShortcuts(const QString& key);
+    void removeAllUserShortcuts();
     std::set<QKeySequence> getShortcuts(const QString& key) const;
-    void getDuplicateShortcuts(const QString& key,
+    void getDuplicateShortcuts(const std::set<QString>& keys,
                                std::set<QKeySequence> ksSet,
                                bool resetToDefault,
-                               const QString& context,
+                               bool sameContext,
                                DuplicateData& duplicates) const;
 
     void resetChanges();
-    bool dataChanged() const;
+    bool hasDataChanged() const;
     void undoChanges();
-    
+    // return value is the index of the active keyboard
+    int getKeyboards(std::list<QString>& keyboards);
+    void applyKeyboard(int keyboard);
+
  private:
     ActionData();
     ActionData(const ActionData&);
     void operator=(const ActionData&);
-    
+
     // Xml methods
     bool startDocument() override;
     bool startElement(const QString& namespaceURI,
@@ -102,7 +107,8 @@ public:
     QString translate(QString text, QString disambiguation = "") const;
     void fillModel();
     void updateModel(const QString& changedKey);
-    
+    void readKeyboardShortcuts();
+
     struct ActionInfo
     {
         QStringList menus;
@@ -113,11 +119,19 @@ public:
         QString tooltip;
         bool global;
     };
-    
+
     typedef std::set<QKeySequence> KeySet;
-    
+
     std::map<QString, ActionInfo> m_actionMap;
-    
+    std::map<QString, ActionInfo> m_actionMapOriginal;
+
+    struct KeyboardTranslation
+    {
+        QString kbName;
+        std::map<QString, QString> translation;
+    };
+    typedef std::map<int, KeyboardTranslation> KeyboardTranslations;
+
     bool m_inMenuBar;
     bool m_inText;
     bool m_inEnable;
@@ -136,11 +150,14 @@ public:
     std::map<QString, KeySet> m_userShortcuts;
     std::map<QString, KeySet> m_userShortcutsCopy;
     QStandardItemModel* m_model;
-    
+    KeyboardTranslations m_keyboardTranslations;
+    std::map<QString, QString> m_translatedKeyboardNames;
+    int m_actKb;
+    int m_actKbCopy;
+
     static ActionData* m_instance;
 };
- 
+
 }
 
 #endif
-
