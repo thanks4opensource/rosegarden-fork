@@ -116,7 +116,6 @@
 #include <QToolButton>
 #include <QStatusBar>
 #include <QDesktopServices>
-#include <QShortcut>
 
 #include <algorithm>
 
@@ -464,6 +463,7 @@ MatrixView::setupActions()
     createAction("preview_selection", SLOT(slotPreviewSelection()));
     createAction("clear_loop", SLOT(slotClearLoop()));
     createAction("clear_selection", SLOT(slotClearSelection()));
+    createAction("reset_selection", SLOT(slotEscapePressed()));
     createAction("filter_selection", SLOT(slotFilterSelection()));
 
     createAction("pitch_bend_sequence", SLOT(slotPitchBendSequence()));
@@ -652,10 +652,6 @@ MatrixView::setupActions()
             createAction(actionName, SLOT(slotSetSnapFromAction()));
         }
     }
-
-    // This shortcut is always enabled, unlike the "clear_selection" action
-    QShortcut *shortcut = new QShortcut(Qt::Key_Escape, this);
-    connect(shortcut, &QShortcut::activated, this, &MatrixView::slotEscapePressed);
 }
 
 

@@ -198,7 +198,6 @@
 #include <QApplication>
 #include <QDesktopServices>
 #include <QSettings>
-#include <QShortcut>
 #include <QMessageBox>
 #include <QProcess>
 #include <QTemporaryFile>
@@ -687,6 +686,7 @@ RosegardenMainWindow::setupActions()
     createAction("file_open", SLOT(slotFileOpen()));
     createAction("file_open_example", SLOT(slotFileOpenExample()));
     createAction("file_open_template", SLOT(slotFileOpenTemplate()));
+    createAction("file_open_most_recent", SLOT(slotFileOpenRecent()));
     createAction("file_save", SLOT(slotFileSave()));
     createAction("file_save_as", SLOT(slotFileSaveAs()));
     createAction("file_save_as_template", SLOT(slotFileSaveAsTemplate()));
@@ -873,8 +873,12 @@ RosegardenMainWindow::setupActions()
     enableAutoRepeat("Transport Toolbar", "rewind");
     enableAutoRepeat("Transport Toolbar", "fast_forward");
 
-    // Do an initial setup of the recent files so that Ctrl+R will
-    // work at startup.
+    // Do an initial setup of the recent files so that Ctrl+R (or
+    // other shortcut) will work at startup.
+    // get the shortcuts for later use
+    QAction* mostRecent = findAction("file_open_most_recent");
+    m_mostRecentShortcuts = mostRecent->shortcuts();
+    RG_DEBUG << "mostRecentShortcuts:" << m_mostRecentShortcuts;
     setupRecentFilesMenu();
 }
 
@@ -911,7 +915,7 @@ RosegardenMainWindow::setupRecentFilesMenu()
 
         if (first) {
             first = false;
-            action->setShortcut(tr("Ctrl+R"));
+            action->setShortcuts(m_mostRecentShortcuts);
         }
     }
 }
@@ -8779,4 +8783,3 @@ RosegardenMainWindow *RosegardenMainWindow::m_myself = nullptr;
 
 
 }// end namespace Rosegarden
-

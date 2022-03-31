@@ -52,7 +52,6 @@ class QTextCodec;
 class QShowEvent;
 class QObject;
 class QLabel;
-class QShortcut;
 class QTemporaryFile;
 class QProcess;
 class QAction;
@@ -1664,6 +1663,9 @@ private:
 
     // end of last segment in composition
     timeT m_endOfLatestSegment;
+
+    // shortcuts for most recent file
+    QList<QKeySequence> m_mostRecentShortcuts;
 
     void doStop(bool autoStop);
 
