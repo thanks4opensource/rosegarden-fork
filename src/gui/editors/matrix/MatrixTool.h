@@ -24,6 +24,7 @@
 #include "gui/general/AutoScroller.h"  // For FollowMode
 
 class QAction;
+class QCursor;
 
 namespace Rosegarden
 {
@@ -81,12 +82,15 @@ protected:
 
     void setScene(MatrixScene *scene) { m_scene = scene; }
 
+    void makeCursor(QString pixmapName, int hotSpotX, int hotSpotY);
+
     virtual void invokeInParentView(QString actionName);
     virtual QAction *findActionInParentView(QString actionName);
 
     MatrixWidget *m_widget;
     MatrixScene *m_scene;
     QString m_rcFileName;
+    QCursor *m_cursor;
 };
 
 

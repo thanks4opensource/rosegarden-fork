@@ -52,6 +52,8 @@ public:
 
     void setDrumMode(bool drumMode);
 
+    std::vector<MatrixElement*> getSelectedElements();
+
 protected:
 //!!!    const MidiKeyMapping *getKeyMapping() const;
 

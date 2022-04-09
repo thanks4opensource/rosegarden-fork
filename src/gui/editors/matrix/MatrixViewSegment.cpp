@@ -78,6 +78,8 @@ void
 MatrixViewSegment::eventRemoved(const Segment *segment,
                                 Event *event)
 {
+    RG_WARNING << "eventRemoved():" << event;   // t4osDEBUG
+
     // !!! This deletes the associated MatrixElement.
     ViewSegment::eventRemoved(segment, event);
 
@@ -96,6 +98,8 @@ MatrixViewSegment::makeViewElement(Event* e)
     long pitchOffset = getSegment().getTranspose();
 
     //RG_DEBUG << "  I am segment \"" << getSegment().getLabel() << "\"";
+
+    RG_WARNING << "makeViewElement(): new MatrixElement";  // t4osDEBUG
 
     return new MatrixElement(m_scene, e, m_drum, pitchOffset, &getSegment());
 }
@@ -158,5 +162,18 @@ bool drumMode)
     }
 }
 
+std::vector<MatrixElement*> MatrixViewSegment::getSelectedElements()
+{
+    std::vector<MatrixElement*> selElems;
+
+    for(ViewElementList::iterator i = m_viewElementList->begin();
+        i != m_viewElementList->end();
+        ++i) {
+        MatrixElement *e = static_cast<MatrixElement *>(*i);
+        if (e && e->isSelected()) selElems.push_back(e);
+    }
+
+    return selElems;
 }
 
+}

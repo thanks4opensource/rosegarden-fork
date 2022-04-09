@@ -170,11 +170,16 @@ MatrixSelector::handleLeftButtonPress(const MatrixMouseEvent *e)
         //
         // (Not sure how to do this now that we do.  It's obnoxious, but oh
         // well.)
+        //
+        // thanks4opensrc, 4/2022: Have had indepentent zoom for a long
+        // time. QPen::setCosmetic(), below, solves problem.
         if (!m_selectionRect) {
             m_selectionRect = new QGraphicsRectItem;
             m_scene->addItem(m_selectionRect);
             QColor c = GUIPalette::getColour(GUIPalette::SelectionRectangle);
-            m_selectionRect->setPen(QPen(c, 2));
+            QPen p = QPen(c, 2);
+            p.setCosmetic(true);
+            m_selectionRect->setPen(p);
             c.setAlpha(50);
             m_selectionRect->setBrush(c);
         }

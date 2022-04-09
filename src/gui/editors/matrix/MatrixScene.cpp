@@ -789,6 +789,7 @@ MatrixScene::checkUpdate()
     }
 
     if (updateSelectionElementStatus) {
+     // RG_WARNING << "checkUpdate()";    // t4osDEBUG
         setSelectionElementStatus(m_selection, true);
     }
 }
@@ -902,6 +903,13 @@ MatrixScene::handleEventRemoved(Event *e)
 void
 MatrixScene::setSelection(EventSelection *s, bool preview)
 {
+#if 0    // t4osDEBUG
+    RG_WARNING << "setSelection()"   // t4osDEBUG
+               << s
+               << preview
+               << m_selection;
+#endif
+
     if (!m_selection && !s) return;
     if (m_selection == s) return;
     if (m_selection && s && *m_selection == *s) {
@@ -914,14 +922,18 @@ MatrixScene::setSelection(EventSelection *s, bool preview)
         return;
     }
 
+ // RG_WARNING << "setSelection() didn't return";   // t4osDEBUG
+
     EventSelection *oldSelection = m_selection;
     m_selection = s;
 
     if (oldSelection) {
+     // RG_WARNING << "setSelection() old" << s << preview;    // t4osDEBUG
         setSelectionElementStatus(oldSelection, false);
     }
 
     if (m_selection) {
+     // RG_WARNING << "setSelection() new" << s << preview;    // t4osDEBUG
         setSelectionElementStatus(m_selection, true);
         // ??? But we are going to do this at the end of this routine.
         //     Is this needed?  Notation only does this at the end.
@@ -977,6 +989,8 @@ MatrixScene::selectAll()
 void
 MatrixScene::setSelectionElementStatus(EventSelection *s, bool set)
 {
+ // RG_WARNING << "setSelectionElementStatus()" << s << set;   // t4osDEBUG
+
     if (!s) return;
 
     MatrixViewSegment *vs = nullptr;
@@ -1050,6 +1064,7 @@ MatrixScene::updateCurrentSegment(bool isCurrent)
     }
 
     // changing the current segment may have overridden selection border colours
+ // RG_WARNING << "updateCurrentSegment()" << isCurrent;       // t4osDEBUG
     setSelectionElementStatus(m_selection, true);
 }
 

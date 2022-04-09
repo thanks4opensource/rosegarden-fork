@@ -966,6 +966,32 @@ MatrixWidget::setCanvasCursor(QCursor c)
         m_panned->viewport()->setCursor(c);
 }
 
+QString MatrixWidget::segmentTrackInstrumentLabel(
+const QString formatString,
+const Segment* const segment)
+{
+    const Composition &composition = m_document->getComposition();
+    const TrackId trackId = segment->getTrack();
+    const Track *track = composition.getTrackById(trackId);
+    if (!track) return "";
+
+    QString trackLabel = QString::fromStdString(track->getLabel());
+    if (trackLabel == "") trackLabel = tr("<untitled>");
+
+    Instrument  *instrument = m_document->getStudio().
+                                    getInstrumentById(track->getInstrument());
+    QString programName = QString::fromStdString(instrument->getProgramName());
+    if (programName == "") programName = tr("<unnamed>");
+
+    QString fmt(formatString);
+
+    return fmt.arg(track->getPosition() + 1).
+               arg(trackLabel).
+               arg(instrument->getLocalizedPresentationName()).
+               arg(programName).
+               arg(QString::fromStdString(segment->getLabel()));
+}
+
 void
 MatrixWidget::setTool(QString name)
 {
@@ -1463,23 +1489,12 @@ MatrixWidget::updateSegmentChangerBackground()
     // correct instrument (regardless whether Step Recording is on or off)
     composition.setSelectedTrack(trackId);
 
-    QString trackLabel = QString::fromStdString(track->getLabel());
-    if (trackLabel == "")
-        trackLabel = tr("<untitled>");
-
-    Instrument  *instrument = m_document->getStudio().
-                                    getInstrumentById(track->getInstrument());
-    QString programName = QString::fromStdString(instrument->getProgramName());
-    if (programName == "") programName = tr("<unnamed>");
-
-    const QString segmentText = tr("Track %1: (%2) -- %3 -- %4    Segment: %5").
-            arg(track->getPosition() + 1).
-            arg(trackLabel).
-            arg(instrument->getLocalizedPresentationName()).
-            arg(programName).
-            arg(QString::fromStdString(segment->getLabel()));
-
-    m_segmentLabel->setText(segmentText);
+    // Informative text for user
+    QString labelText = segmentTrackInstrumentLabel(
+                        QString(tr("Track %1: (%2) -- %3"
+                                   "-- %4    Segment: %5")),
+                                   segment);
+    m_segmentLabel->setText(labelText);
 
     // Segment label colors
     palette = m_segmentLabel->palette();
