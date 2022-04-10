@@ -142,6 +142,60 @@ public:
 
     void recreatePitchHighlights();
 
+    // QAbstractGraphicsItems are expensive to construct and destruct,
+    // or more specifically to addItem()/removeItem() them to/from the
+    // QGraphicsScene. Since MatrixElements are constructed/destructed
+    // frequently (possibly excessively so),and with their
+    // QAbstractGraphicsItems members are constructed/destructed
+    // (with explicit addItem() on construction  and implicit removeItem
+    // on destruction) along with them, keeping them in a persistent pool
+    // for reuse and calling show() and hide() as appropriate is a win.
+    template <typename GraphicsItemType>
+    class GraphicsItemPool
+    {
+      public:
+        GraphicsItemPool(MatrixScene *scene) : m_scene(scene) {}
+
+        ~GraphicsItemPool()
+        {
+            for (auto item : m_items) delete item;
+        }
+
+        GraphicsItemType* getFrom()
+        {
+            if (!m_items.empty()) {
+                GraphicsItemType *item = m_items.back();
+                m_items.pop_back();
+                item->show();
+                return item;
+            }
+            else {
+                GraphicsItemType *item = new GraphicsItemType;
+                m_scene->addItem(item);
+                // don't need to call show(), is by default on construction
+                return item;
+            }
+        }
+
+        void putBack(GraphicsItemType *item)
+        {
+            // Check to allow client to use like delete (with nullptr)
+            if (item) {
+                item->hide();
+                m_items.push_back(item);
+            }
+        }
+
+
+      protected:
+        MatrixScene *m_scene;
+        std::vector<GraphicsItemType*> m_items;
+    };
+
+    GraphicsItemPool<QGraphicsRectItem>       graphicsRectPool;
+    GraphicsItemPool<QGraphicsPolygonItem>    graphicsPolyPool;
+    GraphicsItemPool<QGraphicsSimpleTextItem> graphicsTextPool;
+
 
 signals:
     void mousePressed(const MatrixMouseEvent *e);

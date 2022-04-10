@@ -59,6 +59,9 @@ namespace Rosegarden
 using namespace BaseProperties;
 
 MatrixScene::MatrixScene() :
+    graphicsRectPool(this),
+    graphicsPolyPool(this),
+    graphicsTextPool(this),
     m_widget(nullptr),
     m_document(nullptr),
     m_observerAdded(false),

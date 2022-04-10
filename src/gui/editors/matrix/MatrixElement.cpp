@@ -68,9 +68,9 @@ MatrixElement::MatrixElement(MatrixScene *scene, Event *event,
 
 MatrixElement::~MatrixElement()
 {
-    delete m_noteItem;
-    delete m_drumItem;
-    delete m_textItem;
+    m_scene->graphicsRectPool.putBack(m_noteItem);
+    m_scene->graphicsPolyPool.putBack(m_drumItem);
+    m_scene->graphicsTextPool.putBack(m_textItem);
 }
 
 void
@@ -151,13 +151,8 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
     double fres(resolution + 1);
     if (m_drumDisplay) {
         if (m_noteItem) m_noteItem->hide();
-        if (m_drumItem) {
-            m_drumItem->show();
-        }
-        else {
-            m_drumItem = new QGraphicsPolygonItem;
-            m_scene->addItem(m_drumItem);
-        }
+        if (m_drumItem) m_drumItem->show();
+        else            m_drumItem = m_scene->graphicsPolyPool.getFrom();
         QPolygonF polygon;
         polygon << QPointF(0, 0)
                 << QPointF(fres/2, fres/2)
@@ -175,13 +170,8 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
                             QVariant::fromValue((void *)this));
     } else {
         if (m_drumItem) m_drumItem->hide();
-        if (m_noteItem) {
-            m_noteItem->show();
-        }
-        else {
-            m_noteItem = new QGraphicsRectItem;
-            m_scene->addItem(m_noteItem);
-        }
+        if (m_noteItem) m_noteItem->show();
+        else            m_noteItem = m_scene->graphicsRectPool.getFrom();
         float width = m_width;
         if (width < 1) {
             x0 = std::max(0.0, x1 - 1);
@@ -204,10 +194,7 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
     bool showName = m_scene->getMatrixWidget()->getShowNoteNames() &&
                     !m_drumDisplay;
     if (showName) {
-        if (!m_textItem) {
-            m_textItem = new QGraphicsSimpleTextItem;
-            m_scene->addItem(m_textItem);
-        }
+        if (!m_textItem) m_textItem = m_scene->graphicsTextPool.getFrom();
 
         // Draw text on top of note, see constants in .h file
         m_textItem->setZValue(m_current ? ACTIVE_SEGMENT_TEXT_Z
