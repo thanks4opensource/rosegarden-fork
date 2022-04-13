@@ -1445,6 +1445,13 @@ MatrixWidget::updateSegmentChangerBackground()
     Composition &composition = m_document->getComposition();
     const Segment *segment = m_scene->getCurrentSegment();
 
+    // This can happen when called from slotDocumentModified()
+    // and the last remaining last track in the editor is deleted.
+    // The actual removing of the segment and then closing of the
+    // ME seems to happen similarly to deleting the last segment,
+    // when MatrixScene::segmentRemoved() does "emit sceneDeleted()".
+    if (!segment) return;
+
     // set the changer widget background to the now current segment's
     // background, and reset the tooltip style to compensate
     QColor segmentColor = composition.getSegmentColourMap().
@@ -1462,6 +1469,7 @@ MatrixWidget::updateSegmentChangerBackground()
     // Set active track so that external MIDI notes play with
     // correct instrument (regardless whether Step Recording is on or off)
     composition.setSelectedTrack(trackId);
+    composition.notifyTrackSelectionChanged(trackId);
 
     QString trackLabel = QString::fromStdString(track->getLabel());
     if (trackLabel == "")
@@ -1700,8 +1708,34 @@ MatrixWidget::slotDocumentModified(bool)
     //     does not include an updateWidgets().  We'll probably have to
     //     redesign and rewrite MatrixWidget before this becomes possible.
 
+    // To make sure MIDI input plays the matrix editor's current
+    // segement's track's instrument, updateSegmentChangerBackground()
+    // calls Composition::setSelectedTrack, and
+    // Composition::notifyTrackSelectionChanged(), the latter to update
+    // the CompositionView. But slotDocumentModified() is called on
+    // any/all document changes, including the user changing the current
+    // track in the main RG window. In that case, if we continue here
+    // we'll immediately change it back. But the normal case of the
+    // matrix editor changing it does require calling the Composition
+    // methods -- if not, the main window UI is incorrect which in
+    // particular causes a problem if the user does Tracks -> Delete Track
+    // and a different track is deleted than the on shown as current.
+    // The following code detects and short-circuits the problem .
+    // Note that the case of the current selected track changing because
+    // it was deleted is handled by MatrixView::slotSegmentDeleted().
+#if 0
+    Composition &composition = m_document->getComposition();
+    const Segment *segment = m_scene->getCurrentSegment();
+    if (segment && segment->getTrack() != composition.getSelectedTrack())
+        return;
     generatePitchRuler();
     updateSegmentChangerBackground();
+#else
+    if (!m_scene->getCurrentSegment()) {
+        generatePitchRuler();
+        updateSegmentChangerBackground();
+    }
+#endif
 }
 
 void
