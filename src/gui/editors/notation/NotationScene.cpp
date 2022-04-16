@@ -121,7 +121,7 @@ NotationScene::~NotationScene()
     delete m_clefKeyContext;
 
     for (unsigned int i = 0; i < m_staffs.size(); ++i) delete m_staffs[i];
-    
+
     for (std::vector<Segment *>::iterator it = m_clones.begin();
          it != m_clones.end(); ++it) {
         delete (*it);
@@ -260,6 +260,7 @@ NotationScene::setCurrentStaff(NotationStaff *staff)
                 m_currentStaff = i;
                 emit currentStaffChanged();
                 emit currentViewSegmentChanged(staff);
+                m_widget->setTrackInstrumentOverride();
             }
             return;
         }
@@ -307,7 +308,7 @@ NotationScene::setStaffs(RosegardenDocument *document,
         // External segments and clones are now mixed inside m_segments
     } else {
         m_segments = m_externalSegments;
-        // No clone in that case 
+        // No clone in that case
     }
 
 
@@ -356,7 +357,7 @@ NotationScene::setStaffs(RosegardenDocument *document,
     m_visibleStaffs = trackIds.size();
 
     m_clefKeyContext->setSegments(this);
-    
+
     // Remember the names of the tracks
     for (std::set<TrackId>::iterator i = trackIds.begin();
          i != trackIds.end(); ++i) {
@@ -391,9 +392,9 @@ NotationScene::setStaffs(RosegardenDocument *document,
 void
 NotationScene::createClonesFromRepeatedSegments()
 {
-    const Segment::Participation participation = 
+    const Segment::Participation participation =
         m_editRepeated ? Segment::editableClone : Segment::justForShow;
-    
+
     // Create clones (if needed)
     for (std::vector<Segment *>::iterator it = m_externalSegments.begin();
         it != m_externalSegments.end(); ++it) {
@@ -497,9 +498,9 @@ NotationScene::getStaffForSceneCoords(double x, int y) const
             StaffLayout::StaffLayoutCoords coords =
                 s->getLayoutCoordsForSceneCoords(x, y);
 
-	    timeT t = m_hlayout->getTimeForX(coords.first);
+            timeT t = m_hlayout->getTimeForX(coords.first);
 
-	    if (m_staffs[i]->includesTime(t)) {
+            if (m_staffs[i]->includesTime(t)) {
                 return m_staffs[i];
             }
         }
@@ -654,13 +655,13 @@ NotationScene::initCurrentStaffIndex()
     // otherwise we'll annoy the user.
     if (m_haveInittedCurrentStaff) { return; }
     m_haveInittedCurrentStaff = true;
-    
+
     // Can't do much if we have no staffs.
     if (m_staffs.empty()) { return; }
 
     Composition &composition = m_document->getComposition();
     timeT targetTime = composition.getPosition();
-    
+
     // Try the globally selected track (which we may not even include
     // any segments from)
     {
@@ -676,7 +677,7 @@ NotationScene::initCurrentStaffIndex()
     {
         // Careful, m_minTrack is an int indicating position, not a
         // TrackId, and must be converted.
-        const Track *track = 
+        const Track *track =
             composition.getTrackByPosition(m_minTrack);
         NotationStaff *staff = getStaffbyTrackAndTime(track, targetTime);
         if (staff) {
@@ -684,7 +685,7 @@ NotationScene::initCurrentStaffIndex()
             return;
         }
     }
-    
+
     // We shouldn't reach here.
     RG_WARNING << "Argh! Failed to find a staff!";
 }
@@ -925,7 +926,7 @@ NotationScene::wheelEvent(QGraphicsSceneWheelEvent *e)
     }
 }
 
-void 
+void
 NotationScene::keyPressEvent(QKeyEvent * keyEvent)
 {
     processKeyboardEvent(keyEvent);
@@ -1406,7 +1407,7 @@ NotationScene::trackChanged(const Composition *c, Track *t)
         // Is the segment part of the changed track ?
         if ((*i)->getTrack() == trackId) {
 
-            // The scene needs a rebuild only if what has changed is the 
+            // The scene needs a rebuild only if what has changed is the
             // name of the track
             if (t->getLabel() == m_trackLabels[trackId]) break;
 
@@ -1920,7 +1921,16 @@ NotationScene::setSelection(EventSelection *s,
         }
     }
 
-    if (preview) previewSelection(m_selection, oldSelection);
+    if (preview) {
+        // Added following two lines to change instrument playback
+        // to staff's/segment's instrement when selecting note(s).
+        // Seems like the right thing to do regardless.
+        // Causes display of active segment to change, but unknown
+        // if any other (bad) side effects.
+        previewSelection(m_selection, oldSelection);
+        setCurrentStaff(newStaff);
+        m_widget->setTrackInstrumentOverride();
+    }
 
     delete oldSelection;
 

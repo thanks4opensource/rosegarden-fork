@@ -1,4 +1,4 @@
-﻿/* -*- c-basic-offset: 4 indent-tabs-mode: nil -*- vi:set ts=8 sts=4 sw=4: */
+/* -*- c-basic-offset: 4 indent-tabs-mode: nil -*- vi:set ts=8 sts=4 sw=4: */
 
 /*
     Rosegarden
@@ -17,6 +17,7 @@
 
 #include "gui/application/TransportStatus.h"
 
+#include "sound/ControlBlock.h"
 #include "sound/MappedEventList.h"
 #include "sound/MappedStudio.h"
 #include "sound/MappedBufMetaIterator.h"
@@ -33,8 +34,9 @@
 #include <deque>
 
 
-namespace Rosegarden { 
+namespace Rosegarden {
 
+class Instrument;
 class MappedInstrument;
 class SoundDriver;
 
@@ -64,7 +66,7 @@ public:
 
     /// Close the sequencer.
     void quit();
-    
+
     /// Play from a given time with given parameters.
     /**
      *  Based on RealTime timestamps.
@@ -86,7 +88,7 @@ public:
 
     /// Set the sequencer to a given time.
     void jumpTo(const RealTime &rt);
- 
+
     /// Return the Sound system status (audio/MIDI)
     unsigned getSoundDriverStatus();
 
@@ -293,7 +295,7 @@ public:
 
     /// Connect two objects
     void connectMappedObjects(int id1, int id2);
-    
+
     /// Disconnect two objects
     void disconnectMappedObjects(int id1, int id2);
 
@@ -359,7 +361,7 @@ public:
     void setStatus(TransportStatus status)
             { m_transportStatus = status; }
     TransportStatus getStatus() { return m_transportStatus; }
-   
+
     /// Process the first chunk of Sequencer events
     /**
      * How does this differ from play() and record()?
@@ -428,6 +430,21 @@ public:
 
     /// Initialise the virtual studio at this end of the link.
     void initialiseStudio();
+
+    // For use by editors and Composition::setSelectedTrack()
+    void setTrackInstrumentOverride(InstrumentId instrumentId, int channel) {
+        m_trackInstrumentOverride.id = instrumentId;
+        m_trackInstrumentOverride.channel = channel;
+    }
+
+    // For use by editors and Composition::setSelectedTrack(()
+    void unSetTrackInstrumentOverride()
+    {
+        m_trackInstrumentOverride.id = 0;
+        m_trackInstrumentOverride.channel = -1;  // invalid value
+    }
+
+
 
 
     // --------- Transport Interface --------
@@ -510,7 +527,7 @@ private:
     MappedStudio *m_studio;
 
     // mmap segments
-    // 
+    //
     MappedBufMetaIterator m_metaIterator;
     RealTime m_lastStartTime;
 
@@ -536,7 +553,7 @@ private:
      * not have worked as it was commented out everywhere it was used.
      */
     bool m_isEndOfCompReached;
-    
+
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     QRecursiveMutex m_mutex;
 #else
@@ -544,8 +561,12 @@ private:
 #endif
     QMutex m_transportRequestMutex;
     QMutex m_asyncQueueMutex;
+
+    // For editors to control instrument/channel independent of main
+    // window selected track. Override happens in routeEvents().
+    InstrumentAndChannel    m_trackInstrumentOverride;
 };
 
 }
- 
+
 #endif // RG_ROSEGARDENSEQUENCER_H

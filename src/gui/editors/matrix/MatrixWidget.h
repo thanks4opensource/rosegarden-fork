@@ -116,8 +116,10 @@ public:
                      std::vector<Segment *> segments);
     /// MatrixScene::getCurrentSegment()
     Segment *getCurrentSegment();
-    /// Updates the wheel background and segment label text.
-    void updateSegmentChangerBackground();
+
+    /// Updates the wheel background, segment label text, and
+    /// MIDI out instrument (whether step recording or not).
+    void updateToCurrentSegment();
 
     /// MatrixScene::segmentsContainNotes()
     bool segmentsContainNotes() const;
@@ -240,6 +242,10 @@ protected:
     // QWidget Override
     /// Make sure the rulers are in sync when we are shown.
     void showEvent(QShowEvent *event) override;
+
+    // QWidget override
+    // For doing RosegardenSequencer::setTrackInstrumentOverride()
+    void enterEvent(QEvent *event) override;
 
 private slots:
     /// Called when the document is modified in some way.

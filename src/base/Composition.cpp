@@ -26,6 +26,7 @@
 #include "BasicQuantizer.h"
 #include "NotationQuantizer.h"
 #include "base/AudioLevel.h"
+#include "sequencer/RosegardenSequencer.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1791,6 +1792,11 @@ InstrumentId Composition::getSelectedInstrumentId() const
 
 void Composition::setSelectedTrack(TrackId trackId)
 {
+    // Unset any existing override of track's instrument.
+    // Shouldn't be necessary (RosegardenMainViewWidget::enterEvent()
+    // does anyway) but in case somehow here without hitting that.
+    RosegardenSequencer::getInstance()->unSetTrackInstrumentOverride();
+
     // Can't just compare trackIds because deleting a track might
     // result in same one but pointing to a different track.
     bool changed = getTrackById(trackId) != getTrackById(m_selectedTrackId);

@@ -70,6 +70,7 @@
 #include "gui/studio/StudioControl.h"
 #include "RosegardenMainWindow.h"
 #include "SetWaitCursor.h"
+#include "sequencer/RosegardenSequencer.h"
 #include "sound/AudioFile.h"
 #include "sound/AudioFileManager.h"
 #include "sound/MappedEvent.h"
@@ -1871,5 +1872,16 @@ bool RosegardenMainViewWidget::hasNonAudioSegment(const SegmentSelection &segmen
     return false;
 }
 
+void RosegardenMainViewWidget::enterEvent(QEvent* /*event*/)
+{
+    // Matrix, Notation, or other editor might have set override.
+    // Restore to normal so track's instrument plays on MIDI input.
+    // Editors don't do this on leaveEvent() because doing so would
+    // unset instrument playback when moving out of SomeEditorWidget
+    // into SomeEditorScene (top menubars, etc).
+    // Also doing it here implemnts "sticky mouse focus" behavior,
+    // i.e. focus stays with window until enters another (RG) window.
+    RosegardenSequencer::getInstance()->unSetTrackInstrumentOverride();
+}
 
 }
