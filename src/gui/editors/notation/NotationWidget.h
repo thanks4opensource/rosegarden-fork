@@ -74,7 +74,7 @@ public:
     // 2-stage deletion.
     void clearAll();
 
-    void setSegments(RosegardenDocument *document, 
+    void setSegments(RosegardenDocument *document,
                      std::vector<Segment *> segments);
 
     void scrollToTopLeft();
@@ -141,15 +141,22 @@ public:
 
     void updateSegmentChangerBackground();
     void updatePointerPosition(bool moveView = false);
-    
+
     void dispatchMousePress(const NotationMouseEvent *);
     void dispatchMouseRelease(const NotationMouseEvent *);
     void dispatchMouseMove(const NotationMouseEvent *);
     void dispatchMouseDoubleClick(const NotationMouseEvent *);
     void dispatchWheelTurned(int, const NotationMouseEvent *);
-    
+
     //  Valid or inhibit scrolling to kept the cursor in the view
     void setScroll(bool scroll) { m_noScroll = !scroll; }
+
+    // QWidget override
+    void enterEvent(QEvent *event) override;
+
+    // For doing RosegardenSequencer::setTrackInstrumentOverride()
+    void setTrackInstrumentOverride();
+
 
 signals:
     void sceneNeedsRebuilding();
@@ -349,7 +356,7 @@ private:
     QTimer *m_resizeTimer;
 
     bool m_updatesSuspended;
-    
+
     bool m_noScroll;    // If true, don't scroll to keep the cursor in the view
 
     void locatePanner(bool vertical);
@@ -394,4 +401,4 @@ private slots:
 
 #endif
 
-    
+

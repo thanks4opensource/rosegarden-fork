@@ -836,7 +836,7 @@ MatrixScene::segmentRemoved(const Composition *, Segment *removedSegment)
 
         setCurrentSegment(m_segments[newSegmentIndex]);
         if (m_widget)
-            m_widget->updateSegmentChangerBackground();
+            m_widget->updateToCurrentSegment();
 
     }
 

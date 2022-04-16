@@ -74,6 +74,8 @@
 #include "misc/Strings.h"
 #include "misc/ConfigGroups.h"
 
+#include "sequencer/RosegardenSequencer.h"
+
 #include <QApplication>
 #include <QColor>
 #include <QGraphicsView>
@@ -136,7 +138,7 @@ NotationWidget::NotationWidget() :
     m_resizeTimer->setSingleShot(true);
     connect(m_resizeTimer, &QTimer::timeout,
             this, &NotationWidget::slotResizeTimerDone);
-    
+
     m_layout = new QGridLayout;
     setLayout(m_layout);
 
@@ -380,7 +382,11 @@ NotationWidget::NotationWidget() :
 }
 
 NotationWidget::~NotationWidget()
-{ clearAll(); }
+{
+    RosegardenSequencer::getInstance()->unSetTrackInstrumentOverride();
+
+    clearAll();
+}
 
 // Safe to call this more than once.
 void
@@ -450,7 +456,7 @@ NotationWidget::setSegments(RosegardenDocument *document,
 
     m_hpanner->setScene(m_scene);
     m_hpanner->fitInView(m_scene->sceneRect(), Qt::KeepAspectRatio);
-    
+
     connect(m_view, &Panned::mouseLeaves,
             m_scene, &NotationScene::slotMouseLeavesView);
 
@@ -587,7 +593,7 @@ NotationWidget::setSegments(RosegardenDocument *document,
             this, &NotationWidget::slotUpdateSegmentChangerBackground);
 
     hideOrShowRulers();
-    
+
     // If setSegments() is called on an already existing NotationWidget,
     // NotationScene and Rulers need the same zoom factor and horizontal
     // position.
@@ -609,6 +615,8 @@ NotationWidget::setSegments(RosegardenDocument *document,
             this, &NotationWidget::slotStaffChanged);
 
     m_playTracking = m_document->getComposition().getEditorFollowPlayback();
+
+    setTrackInstrumentOverride();
 }
 
 void
@@ -635,7 +643,7 @@ void
 NotationWidget::slotGenerateHeaders()
 {
     if (!linearMode()) return;  // Staff headers don't exist out of linear mode
-    
+
     m_headersNeedRegeneration = false;
 
     if (m_headersGroup) disconnect(m_headersGroup, &HeadersGroup::headersResized,
@@ -964,7 +972,7 @@ NotationWidget::slotPointerPositionChanged(timeT t)
     updatePointer(t);
 
     if (m_playTracking && !m_noScroll)
-        m_view->ensurePositionPointerInView(true);  // page  
+        m_view->ensurePositionPointerInView(true);  // page
 }
 
 void
@@ -1791,7 +1799,7 @@ NotationWidget::slotUpdateSegmentChangerBackground()
     QString trackLabel = QString::fromStdString(track->getLabel());
     if (trackLabel == "")
         trackLabel = tr("<untitled>");
-    
+
     // set up some tooltips...  I don't like this much, and it wants some kind
     // of dedicated float thing eventually, but let's not go nuts on a
     // last-minute feature
@@ -1807,7 +1815,7 @@ NotationWidget::slotUpdateSegmentChangerBackground()
         arg(track->getPosition() + 1).
         arg(trackLabel).
         arg(QString::fromStdString(segment->getLabel()));
-    
+
     m_segmentLabel->setText(segmentText);
 
     // Segment label colors
@@ -1876,6 +1884,37 @@ NotationWidget::slotZoomOut()
     m_Hzoom->setValue(v);
     slotHorizontalThumbwheelMoved(v);
 }
+
+
+void NotationWidget::setTrackInstrumentOverride()
+{
+    Composition &composition = m_document->getComposition();
+    const Segment *segment = m_scene->getCurrentSegment();
+    if (!segment) return;
+
+    const TrackId trackId = segment->getTrack();
+    const Track *track = composition.getTrackById(trackId);
+    if (!track) return;
+
+    InstrumentId instrumentId = track->getInstrument();
+    Instrument  *instrument = m_document->getStudio().
+                                    getInstrumentById(instrumentId);
+    if (instrument) {
+        RosegardenSequencer::getInstance()
+            ->setTrackInstrumentOverride(instrumentId,
+                                          instrument->getNaturalChannel());
+    }
+}
+
+
+
+void NotationWidget::enterEvent(QEvent* /*event*/)
+{
+    setTrackInstrumentOverride();
+}
+
+
+
 
 
 }

@@ -57,6 +57,8 @@
 
 #include "misc/Debug.h"
 
+#include "sequencer/RosegardenSequencer.h"
+
 #include "base/Composition.h"
 #include "base/Instrument.h"
 //#include "base/MidiProgram.h"
@@ -362,6 +364,8 @@ MatrixWidget::MatrixWidget(MatrixView *matrixView) :
 
 MatrixWidget::~MatrixWidget()
 {
+    RosegardenSequencer::getInstance()->unSetTrackInstrumentOverride();
+
     // ??? QSharedPointer would be nice, but it opens up a can of worms
     //     since this is passed to reuse code that is used across the system.
     //     Panned and Panner in this case.  Probably worth doing.  Just a
@@ -512,7 +516,7 @@ MatrixWidget::setSegments(RosegardenDocument *document,
 
     m_chordNameRuler->setReady();
 
-    updateSegmentChangerBackground();
+    updateToCurrentSegment();
 
     // If there is only one Segment, hide the widgets that are only needed
     // for multiple Segments.
@@ -856,7 +860,7 @@ MatrixWidget::previousSegment()
     if (s)
         m_scene->setCurrentSegment(s);
     updatePointer(m_document->getComposition().getPosition());
-    updateSegmentChangerBackground();
+    updateToCurrentSegment();
 }
 
 void
@@ -869,7 +873,7 @@ MatrixWidget::nextSegment()
     if (s)
         m_scene->setCurrentSegment(s);
     updatePointer(m_document->getComposition().getPosition());
-    updateSegmentChangerBackground();
+    updateToCurrentSegment();
 }
 
 Device *
@@ -1425,7 +1429,7 @@ MatrixWidget::slotSegmentChangerMoved(int v)
     }
 
     m_lastSegmentChangerValue = v;
-    updateSegmentChangerBackground();
+    updateToCurrentSegment();
 
     // If we are switching between a pitched instrument segment and a pecussion
     // segment or betwween two percussion segments with different percussion
@@ -1440,10 +1444,17 @@ MatrixWidget::slotSegmentChangerMoved(int v)
 }
 
 void
-MatrixWidget::updateSegmentChangerBackground()
+MatrixWidget::updateToCurrentSegment()
 {
     Composition &composition = m_document->getComposition();
     const Segment *segment = m_scene->getCurrentSegment();
+
+    // This can happen when called from slotDocumentModified()
+    // and the last remaining last track in the editor is deleted.
+    // The actual removing of the segment and then closing of the
+    // ME seems to happen similarly to deleting the last segment,
+    // when MatrixScene::segmentRemoved() does "emit sceneDeleted()".
+    if (!segment) return;
 
     // set the changer widget background to the now current segment's
     // background, and reset the tooltip style to compensate
@@ -1459,16 +1470,20 @@ MatrixWidget::updateSegmentChangerBackground()
     if (!track)
         return;
 
-    // Set active track so that external MIDI notes play with
-    // correct instrument (regardless whether Step Recording is on or off)
-    composition.setSelectedTrack(trackId);
-
     QString trackLabel = QString::fromStdString(track->getLabel());
     if (trackLabel == "")
         trackLabel = tr("<untitled>");
 
+
+    InstrumentId instrumentId = track->getInstrument();
     Instrument  *instrument = m_document->getStudio().
-                                    getInstrumentById(track->getInstrument());
+                                    getInstrumentById(instrumentId);
+    if (!instrument) return;
+
+    // Set to play MIDI with current segment's instrument
+    RosegardenSequencer::getInstance()->setTrackInstrumentOverride(
+        instrumentId, instrument->getNaturalChannel());
+
     QString programName = QString::fromStdString(instrument->getProgramName());
     if (programName == "") programName = tr("<unnamed>");
 
@@ -1700,8 +1715,34 @@ MatrixWidget::slotDocumentModified(bool)
     //     does not include an updateWidgets().  We'll probably have to
     //     redesign and rewrite MatrixWidget before this becomes possible.
 
+    // To make sure MIDI input plays the matrix editor's current
+    // segement's track's instrument, updateToCurrentSegment()
+    // calls Composition::setSelectedTrack, and
+    // Composition::notifyTrackSelectionChanged(), the latter to update
+    // the CompositionView. But slotDocumentModified() is called on
+    // any/all document changes, including the user changing the current
+    // track in the main RG window. In that case, if we continue here
+    // we'll immediately change it back. But the normal case of the
+    // matrix editor changing it does require calling the Composition
+    // methods -- if not, the main window UI is incorrect which in
+    // particular causes a problem if the user does Tracks -> Delete Track
+    // and a different track is deleted than the on shown as current.
+    // The following code detects and short-circuits the problem .
+    // Note that the case of the current selected track changing because
+    // it was deleted is handled by MatrixView::slotSegmentDeleted().
+#if 0
+    Composition &composition = m_document->getComposition();
+    const Segment *segment = m_scene->getCurrentSegment();
+    if (segment && segment->getTrack() != composition.getSelectedTrack())
+        return;
     generatePitchRuler();
-    updateSegmentChangerBackground();
+    updateToCurrentSegment();
+#else
+    if (!m_scene->getCurrentSegment()) {
+        generatePitchRuler();
+        updateToCurrentSegment();
+    }
+#endif
 }
 
 void
@@ -1723,5 +1764,39 @@ MatrixWidget::slotZoomOut()
 }
 
 
+void MatrixWidget::enterEvent(QEvent* /*event*/)
+{
+    // Set to play MIDI with current segment's instrument
+
+    Composition &composition = m_document->getComposition();
+    const Segment *segment = m_scene->getCurrentSegment();
+    if (!segment) return;
+
+    const TrackId trackId = segment->getTrack();
+    const Track *track = composition.getTrackById(trackId);
+    if (!track) return;
+
+    InstrumentId instrumentId = track->getInstrument();
+    Instrument  *instrument = m_document->getStudio().
+                                    getInstrumentById(instrumentId);
+    if (instrument) {
+        RosegardenSequencer::getInstance()
+            ->setTrackInstrumentOverride(instrumentId,
+                                          instrument->getNaturalChannel());
+    }
 }
 
+
+#if 0
+// Don't do this here. Restores MIDI playback with main window's current
+// when in MatrixView  window but outside MatrixWidget, i.e. in upper menu
+// bars or lower context help area. Leave enabled, and disable when entering
+// RosegardenMainViewWidget or enable in NotationWidget (or any other
+// editor).
+void MatrixWidget::leaveEvent(QEvent* /*event*/)
+{
+    RosegardenSequencer::getInstance()->unSetTrackInstrumentOverride();
+}
+#endif
+
+}

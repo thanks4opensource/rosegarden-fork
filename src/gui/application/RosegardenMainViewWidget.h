@@ -283,6 +283,11 @@ private:
 
     static bool hasNonAudioSegment(const SegmentSelection &segments);
 
+    // QWidget override
+    // For doing RosegardenSequencer::unSetTrackInstrumentOverride()
+    void enterEvent(QEvent *event) override;
+
+
     //--------------- Data members ---------------------------------
 
     SimpleRulerScale  *m_rulerScale;
