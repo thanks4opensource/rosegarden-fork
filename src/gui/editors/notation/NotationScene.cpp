@@ -1921,18 +1921,19 @@ NotationScene::setSelection(EventSelection *s,
         }
     }
 
-    if (preview) {
-        // Added following two lines to change instrument playback
-        // to staff's/segment's instrement when selecting note(s).
-        // Seems like the right thing to do regardless.
-        // Causes display of active segment to change, but unknown
-        // if any other (bad) side effects.
-        previewSelection(m_selection, oldSelection);
+    if (preview) previewSelection(m_selection, oldSelection);
+
+    delete oldSelection;
+
+    // Added the following to change instrument playback
+    // to staff's/segment's instrement when selecting note(s).
+    // Seems like the right thing to do regardless.
+    // Causes display of active segment to change, but unknown
+    // if any other (bad?) side effects.
+    if (newStaff && newStaff != oldStaff) {
         setCurrentStaff(newStaff);
         m_widget->setTrackInstrumentOverride();
     }
-
-    delete oldSelection;
 
     emit selectionChangedES(m_selection);
     emit QGraphicsScene::selectionChanged();
