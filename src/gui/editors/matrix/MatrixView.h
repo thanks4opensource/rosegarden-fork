@@ -287,6 +287,7 @@ private:
     void setShowPercussionDurations();
     void setShowNoteColorTypeAndAll();
     void setupActions();
+    void setupAddRulerActions();
     void initActionsToolbar();
     void initRulersToolbar();
 

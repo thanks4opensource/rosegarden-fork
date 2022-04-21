@@ -153,6 +153,16 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     setShowNoteColorTypeAndAll();
     m_matrixWidget->setSegments(doc, segments);
 
+    // Broken out of setupActions().
+    // Must be after MatrixWidget::setSegments() because populating
+    // "Add control ruler" menu requires getCurrentDevice() which
+    // in turn calls MatrixWidget::getCurrentDevice() which calls
+    // MatrixWidget::getCurrentSegment(), and they require MatrixWidget
+    // segment initialization.
+    // Can't just move call to setupActions() here due to other
+    // interlocking initialization order requirements.
+    setupAddRulerActions();
+
     findToolbar("General Toolbar");
 
     m_Thorn = ThornStyle::isEnabled();
@@ -499,44 +509,8 @@ MatrixView::setupActions()
     createAction("jog_left", SLOT(slotJogLeft()));
     createAction("jog_right", SLOT(slotJogRight()));
 
-    QMenu *addControlRulerMenu = new QMenu;
-    Controllable *c =
-        dynamic_cast<MidiDevice *>(getCurrentDevice());
-    if (!c) {
-        c = dynamic_cast<SoftSynthDevice *>(getCurrentDevice());
-    }
-
-    if (c) {
-
-        const ControlList &list = c->getControlParameters();
-
-        QString itemStr;
-
-        for (ControlList::const_iterator it = list.begin();
-             it != list.end(); ++it) {
-
-            // Pitch Bend is treated separately now, and there's no
-            // point in adding "unsupported" controllers to the menu,
-            // so skip everything else
-            if (it->getType() != Controller::EventType) continue;
-
-            const QString hexValue =
-                QString::asprintf("(0x%x)", it->getControllerNumber());
-
-            // strings extracted from data files must be QObject::tr()
-            itemStr = QObject::tr("%1 Controller %2 %3")
-                .arg(QObject::tr(it->getName().c_str()))
-                .arg(it->getControllerNumber())
-                .arg(hexValue);
-
-            addControlRulerMenu->addAction(itemStr);
-        }
-    }
-
-    connect(addControlRulerMenu, &QMenu::triggered,
-            this, &MatrixView::slotAddControlRuler);
-
-    findAction("add_control_ruler")->setMenu(addControlRulerMenu);
+    // Code in setupAddRulerActions() below was here.
+    // See call in constructor for reason why moved.
 
     // (ported from NotationView)
     //JAS insert note section is a rewrite
@@ -654,6 +628,51 @@ MatrixView::setupActions()
     }
 }
 
+void
+MatrixView::setupAddRulerActions()
+{
+    // See explanation at call in constructor for why broken out of
+    // setupActions() at location commented in that code, above (search
+    // for "setupAddRulerActions()")
+
+    QMenu *addControlRulerMenu = new QMenu;
+    Controllable *c =
+        dynamic_cast<MidiDevice *>(getCurrentDevice());
+    if (!c) {
+        c = dynamic_cast<SoftSynthDevice *>(getCurrentDevice());
+    }
+
+    if (c) {
+        const ControlList &list = c->getControlParameters();
+
+        QString itemStr;
+
+        for (ControlList::const_iterator it = list.begin();
+             it != list.end(); ++it) {
+
+            // Pitch Bend is treated separately now, and there's no
+            // point in adding "unsupported" controllers to the menu,
+            // so skip everything else
+            if (it->getType() != Controller::EventType) continue;
+
+            const QString hexValue =
+                QString::asprintf("(0x%x)", it->getControllerNumber());
+
+            // strings extracted from data files must be QObject::tr()
+            itemStr = QObject::tr("%1 Controller %2 %3")
+                .arg(QObject::tr(it->getName().c_str()))
+                .arg(it->getControllerNumber())
+                .arg(hexValue);
+
+            addControlRulerMenu->addAction(itemStr);
+        }
+    }
+
+    connect(addControlRulerMenu, &QMenu::triggered,
+            this, &MatrixView::slotAddControlRuler);
+
+    findAction("add_control_ruler")->setMenu(addControlRulerMenu);
+}
 
 void
 MatrixView::initActionsToolbar()
