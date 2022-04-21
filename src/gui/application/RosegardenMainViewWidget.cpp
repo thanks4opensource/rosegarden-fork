@@ -93,6 +93,8 @@
 #include <QTextStream>
 #include <QScrollBar>
 
+#include <random>
+
 #include "gui/editors/parameters/MIDIInstrumentParameterPanel.h"
 
 namespace Rosegarden
@@ -1870,6 +1872,101 @@ bool RosegardenMainViewWidget::hasNonAudioSegment(const SegmentSelection &segmen
             return true;
     }
     return false;
+}
+
+void RosegardenMainViewWidget::getRecolorSegments(
+    std::vector<Segment *> &segments, bool defaultOnly)
+{
+    RG_WARNING << "getRecolorSegments()"   // t4osDEBUG
+               << defaultOnly;
+
+    if (!haveSelection()) return;
+
+    for (Segment *segment : getSelection()) {
+        RG_WARNING << (segment->getType() == Segment::Audio ? "audio" : "midi")
+                   << segment->getColourIndex();   // t4osDEBUG
+
+        if (segment->getType() == Segment::Audio) continue;
+
+        if (!defaultOnly || segment->getColourIndex() == 0) {
+            segments.push_back(segment);
+        }
+    }
+}
+
+void RosegardenMainViewWidget::recolorSegmentsInstrument(
+    bool defaultOnly)
+{
+    std::vector<Segment*> segmentsToRecolor;
+
+    getRecolorSegments(segmentsToRecolor, defaultOnly);
+
+    RG_WARNING << "recolorSegmentsInstrument()"   // t4osDEBUG
+               << segmentsToRecolor.size()
+               << "segments";
+
+    for (Segment *segment : segmentsToRecolor) {
+        RG_WARNING << segment->getLabel();   // t4osDEBUG
+    }
+}
+
+void RosegardenMainViewWidget::recolorSegmentsRandom(bool defaultOnly,
+    bool perTrack)
+{
+    std::vector<Segment*> segmentsToRecolor;
+
+    getRecolorSegments(segmentsToRecolor, defaultOnly);
+
+    RG_WARNING << "recolorSegmentsRandom()"   // t4osDEBUG
+               << segmentsToRecolor.size()
+               << "segments";
+
+    ColourMap &colors = RosegardenDocument::currentDocument
+                        ->getComposition().getSegmentColourMap();
+
+    std::map<TrackId, unsigned> trackColors;
+    std::random_device randomDevice;
+    std::default_random_engine randomEngine(randomDevice());
+    std::uniform_int_distribution<unsigned> randomInt(1,
+                                                colors.colours.size() - 1);
+
+    for (Segment *segment : segmentsToRecolor) {
+        RG_WARNING << segment->getLabel();   // t4osDEBUG
+
+        // World's worst random number generator but perfectly adequate here
+        // Returns [0,N] inclusive, plus don''t want to ever use 0 default.
+        unsigned color = randomInt(randomEngine);
+
+        if (perTrack) {
+            TrackId segmentTrack = segment->getTrack();
+            if (trackColors.count(segmentTrack)) {
+                // Already set one segment in this track, use same color
+                segment->setColourIndex(trackColors[segmentTrack]);
+            }
+            else {
+                // Is first (or only) segment in this track
+                segment->setColourIndex(color);
+                trackColors[segmentTrack] = color;
+            }
+        }
+        else segment->setColourIndex(color);
+    }
+}
+
+void RosegardenMainViewWidget::recolorSegmentsOptimal(bool defaultOnly,
+    bool perTrack)
+{
+    std::vector<Segment*> segmentsToRecolor;
+
+    getRecolorSegments(segmentsToRecolor, defaultOnly);
+
+    RG_WARNING << "recolorSegmentsOptimal()"      // t4osDEBUG
+               << segmentsToRecolor.size()
+               << "segments";
+
+    for (Segment *segment : segmentsToRecolor) {
+        RG_WARNING << segment->getLabel();   // t4osDEBUG
+    }
 }
 
 void RosegardenMainViewWidget::enterEvent(QEvent* /*event*/)

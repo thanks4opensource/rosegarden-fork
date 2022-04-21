@@ -31,7 +31,7 @@
 #include <QToolBar>
 #include <QToolButton>
 
-namespace Rosegarden 
+namespace Rosegarden
 {
 
 ActionFileClient::ActionFileClient() :
@@ -158,7 +158,7 @@ ActionFileClient::findMenu(QString menuName)
             RG_WARNING << "WARNING: ActionFileClient(\"" << obj->objectName()
                       << "\")::findMenu: No such menu (wrapper) as \"" << menuName << "\"";
         }
-    }            
+    }
     return m;
 }
 

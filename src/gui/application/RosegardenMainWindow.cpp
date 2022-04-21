@@ -764,6 +764,11 @@ RosegardenMainWindow::setupActions()
     createAction("erase_range_tempos", SLOT(slotEraseRangeTempos()));
     createAction("delete", SLOT(slotDeleteSelectedSegments()));
     createAction("select_all", SLOT(slotSelectAll()));
+    createAction("color_default_only", SLOT(slotRecolorSegments()));
+    createAction("color_per_track", SLOT(slotRecolorSegments()));
+    createAction("color_instrument", SLOT(slotRecolorSegments()));
+    createAction("color_random", SLOT(slotRecolorSegments()));
+    createAction("color_optimal", SLOT(slotRecolorSegments()))->setEnabled(false);
     createAction("add_tempo", SLOT(slotEditTempo()));
     createAction("change_composition_length", SLOT(slotChangeCompositionLength()));
     createAction("edit_markers", SLOT(slotEditMarkers()));
@@ -858,6 +863,12 @@ RosegardenMainWindow::setupActions()
     QMenu *fileOpenRecentMenu = findMenu("file_open_recent");
     connect(fileOpenRecentMenu, &QMenu::aboutToShow,
             this, &RosegardenMainWindow::setupRecentFilesMenu);
+
+    // This doesn't work (regardless of whether tooltips are set
+    // in .rc file or here in code).
+    if (findMenu("segment_colors")) {
+        findMenu("segment_colors")->setToolTipsVisible(true);
+    }
 
     QMenu *setTrackInstrumentMenu =
             findChild<QMenu *>("set_track_instrument");
@@ -2453,6 +2464,25 @@ void
 RosegardenMainWindow::slotSelectAll()
 {
     m_view->slotSelectAllSegments();
+}
+
+void
+RosegardenMainWindow::slotRecolorSegments()
+{
+    QString menuName = sender()->objectName();
+
+    RG_WARNING << "slotRecolorSegments()"    // t4osDEBUG
+               << menuName;
+
+    bool defaultOnly = findAction("color_default_only")->isChecked();
+    bool perTrack    = findAction("color_per_track"   )->isChecked();
+
+    if (menuName == "color_instrument")
+        m_view->recolorSegmentsInstrument(defaultOnly);
+    else if (menuName == "color_random")
+        m_view->recolorSegmentsRandom(defaultOnly, perTrack);
+    else if (menuName == "color_optimal")
+        m_view->recolorSegmentsOptimal(defaultOnly, perTrack);
 }
 
 void

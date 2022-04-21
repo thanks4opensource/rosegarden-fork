@@ -716,6 +716,11 @@ public slots:
     void slotSelectAll();
 
     /**
+     * placeholder for recoloring segments   // t4osDEBUG
+     */
+    void slotRecolorSegments();
+
+    /**
      * delete selected segments, duh
      */
     void slotDeleteSelectedSegments();
