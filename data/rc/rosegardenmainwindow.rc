@@ -87,6 +87,19 @@
     <Action name="erase_range_tempos" text="Clear Range of Tempos" />
   <Separator/>
     <Action name="select_all" text="Select &amp;All Segments" shortcut="Ctrl+A" />
+    <Menu name="segment_colors" toolTipsVisible="true">
+      <text>Segment colors</text>
+      <Action name="color_default_only" text="Default only" checked="true"
+       tooltip="Only affect segments with default color."/>
+      <Action name="color_per_track" text="Per track" checked="true"
+       tooltip="Same color for all segments in track." />
+      <Action name="color_instrument" text="Instrument"
+       tooltip="Color segment by instrument name"/>
+      <Action name="color_random" text="Random"
+       tooltip="Random color"/>
+      <Action name="color_optimal" text="Optimal"
+       tooltip="Maximum difference between colors (not implemented yet)" />
+    </Menu>
   <Separator/>
     <Action name="options_configure" text="&amp;Preferences..." icon="configure" />
     <Action name="shortcuts_configure" text="Keyboard S&amp;hortcuts..." />

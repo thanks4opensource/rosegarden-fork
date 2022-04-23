@@ -124,6 +124,11 @@ public:
 
     void addTrack(InstrumentId instrument, int position);
 
+    // Various auto-recoloring of segments
+    void recolorSegmentsRandom    (bool defaultOnly, bool perTrack);
+    void recolorSegmentsInstrument(bool defaultOnly);
+    void recolorSegmentsOptimal   (bool defaultOnly, bool perTrack);
+
 public slots:
     void slotEditSegment(Segment*);
     void slotEditSegmentNotation(Segment*);
@@ -282,6 +287,9 @@ private:
     PitchTrackerView *createPitchTrackerView(std::vector<Segment *>);
 
     static bool hasNonAudioSegment(const SegmentSelection &segments);
+
+    void getRecolorSegments(std::vector<Segment *> &segments, bool defaultOnly);
+
 
     // QWidget override
     // For doing RosegardenSequencer::unSetTrackInstrumentOverride()
