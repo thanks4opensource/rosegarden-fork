@@ -118,8 +118,9 @@ public:
     Segment *getCurrentSegment();
 
     /// Updates the wheel background, segment label text, and
-    /// MIDI out instrument (whether step recording or not).
-    void updateToCurrentSegment();
+    /// MIDI out instrument (whether step recording or not) if
+    /// setInstrumentOverride == true
+    void updateToCurrentSegment(bool setInstrumentOverride);
 
     /// MatrixScene::segmentsContainNotes()
     bool segmentsContainNotes() const;
@@ -250,6 +251,9 @@ protected:
 private slots:
     /// Called when the document is modified in some way.
     void slotDocumentModified(bool);
+
+    /// Called when segment(??) colors change
+    void slotDocColoursChanged();
 
     /// Connected to Panned::zoomIn() for ctrl+wheel.
     void slotZoomIn();

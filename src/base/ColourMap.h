@@ -20,10 +20,11 @@
 
 #include <QColor>
 
+#include <cstdint>
 #include <map>
 #include <string>
 
-namespace Rosegarden 
+namespace Rosegarden
 {
 
 
@@ -55,14 +56,14 @@ public:
      */
     std::string getName(unsigned colourID) const;
 
-    /// For RosegardenDocument.
-    std::string toXmlString(std::string name) const;
 
+    unsigned size() const { return m_colours.size(); }
 
     // *** Data
 
-    struct Entry
+    class Entry
     {
+      public:
         Entry() :
             colour(defaultSegmentColour),
             name()
@@ -75,25 +76,58 @@ public:
         {
         }
 
+        Entry(const char *i_name) :
+            colour(QColor(i_name)),
+            name(i_name)
+        {
+        }
+
+        Entry(const unsigned char i_red,
+              const unsigned char i_green,
+              const unsigned char i_blue,
+              const char* const i_name) :
+            colour(QColor(i_red, i_green, i_blue)),
+            name(i_name)
+        {
+        }
+
         QColor colour;
         std::string name;
     };
 
     typedef std::map<unsigned /* colourID */, Entry> MapType;
-    // Note: Use the helper functions above (and below) if possible.
-    MapType colours;
 
+    MapType::const_iterator begin() const { return m_colours.begin(); }
+    MapType::const_iterator end()   const { return m_colours.end(); }
+
+    int id(const QColor colour) const;
+
+    /// For RosegardenDocument.
+    std::string toXmlString(std::string name) const;
 
     // *** Interface for ColourConfigurationPage.
 
     // These functions are essentially unused as there is no way to
     // launch the ColourConfigurationPage.
+    //
+    // "Were unused". Made maps private, require these be used
+    // to keep inverseMap up-to-date.
 
     /// Add a colour entry using the lowest available ID.
-    void addEntry(QColor colour, std::string name);
+    unsigned addEntry(QColor colour, std::string name);
+
+    // Add new colour entry at ID, or overwrite existing at that ID
+    void addEntry(unsigned colourID, QColor colour, std::string name);
+
     void modifyName(unsigned colourID, std::string name);
     void modifyColour(unsigned colourID, QColor colour);
     void deleteEntry(unsigned colourID);
+
+protected:
+
+    typedef std::map<uint32_t /*rgb*/, unsigned /*colourID*/> InverseMapType;
+           MapType m_colours      ;
+    InverseMapType m_colourToID ;
 
 };
 

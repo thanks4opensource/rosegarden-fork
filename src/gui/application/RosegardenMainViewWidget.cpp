@@ -41,6 +41,7 @@
 #include "base/Track.h"
 #include "commands/segment/AudioSegmentAutoSplitCommand.h"
 #include "commands/segment/AudioSegmentInsertCommand.h"
+#include "commands/segment/MultiSegmentColourCommand.h"
 #include "commands/segment/SegmentSingleRepeatToCopyCommand.h"
 #include "document/CommandHistory.h"
 #include "document/RosegardenDocument.h"
@@ -1116,6 +1117,11 @@ void RosegardenMainViewWidget::slotSelectAllSegments()
     emit segmentsSelected(segments);
 }
 
+void RosegardenMainViewWidget::slotClearSelection()
+{
+    m_trackEditor->getCompositionView()->getModel()->clearSelected();
+}
+
 void
 RosegardenMainViewWidget::updateMeters()
 {
@@ -1874,67 +1880,400 @@ bool RosegardenMainViewWidget::hasNonAudioSegment(const SegmentSelection &segmen
     return false;
 }
 
+// Helper for recolorSegmentsXxx() methods, below.
+// Handles logic of which segments to recolor, depending on user
+// choices set via interface buttons.
 void RosegardenMainViewWidget::getRecolorSegments(
-    std::vector<Segment *> &segments, bool defaultOnly)
+    std::vector<Segment*> &segmentsToRecolor,
+    std::vector<const Segment*> *segmentsToCheckExisting,
+    bool defaultOnly, bool selectedOnly)
 {
-    RG_WARNING << "getRecolorSegments()"   // t4osDEBUG
-               << defaultOnly;
+    // Can't have one loop to do either case because getSelection()
+    // returns a SegmentSelection while Composition::getSecments()
+    // returns a SegmentMultiSet
+    //
+    if (selectedOnly) {
+        if (!haveSelection()) return;
 
-    if (!haveSelection()) return;
+        for (Segment *segment : getSelection()) {
+            // Not touching audio because don't have associated instrument
+            // for recolorSegmentsInstrument() and don't show up
+            // in Matrix or Notation editors where color is most useful.
+            if (segment->getType() == Segment::Audio) continue;
 
-    for (Segment *segment : getSelection()) {
-        RG_WARNING << (segment->getType() == Segment::Audio ? "audio" : "midi")
-                   << segment->getColourIndex();   // t4osDEBUG
+            if (!defaultOnly || segment->getColourIndex() == 0) {
+                segmentsToRecolor.push_back(segment);
+            }
+        }
 
-        if (segment->getType() == Segment::Audio) continue;
+        if (segmentsToCheckExisting) {
+            RosegardenDocument *doc = RosegardenDocument::currentDocument;
+            Composition *comp = &doc->getComposition();
+            SegmentMultiSet &allSegments = comp->getSegments();
 
-        if (!defaultOnly || segment->getColourIndex() == 0) {
-            segments.push_back(segment);
+            for (Segment *existingSegment : allSegments) {
+                // Linear search, but small size and not time-critical here
+                if (std::find(segmentsToRecolor.begin(),
+                              segmentsToRecolor.end(), existingSegment) ==
+                    segmentsToRecolor.end()) {
+                    segmentsToCheckExisting->push_back(existingSegment);
+                }
+            }
+        }
+    } else {
+        RosegardenDocument *doc = RosegardenDocument::currentDocument;
+        Composition *comp = &doc->getComposition();
+
+        for (Segment *segment : comp->getSegments()) {
+            // See comment above in other case's loop.
+            if (segment->getType() == Segment::Audio) continue;
+
+            if (!defaultOnly || segment->getColourIndex() == 0) {
+                segmentsToRecolor.push_back(segment);
+            }
         }
     }
 }
 
-void RosegardenMainViewWidget::recolorSegmentsInstrument(
-    bool defaultOnly)
+// Set colors according to known in instrument names.
+void RosegardenMainViewWidget::recolorSegmentsInstrument(bool defaultOnly,
+    bool selectedOnly)
 {
     std::vector<Segment*> segmentsToRecolor;
 
-    getRecolorSegments(segmentsToRecolor, defaultOnly);
+    getRecolorSegments(segmentsToRecolor, nullptr, defaultOnly, selectedOnly);
 
-    RG_WARNING << "recolorSegmentsInstrument()"   // t4osDEBUG
-               << segmentsToRecolor.size()
-               << "segments";
+    // Destined-to-fail attempt at handling full set of common MIDI
+    // instrument/program names.
+    // Minor additional logic below for other names note explicitly
+    // captured here.
+    static const std::map<const std::string, const char*>
+        instrumentColors = {
+        {"piano",                   "DarkGreen"},
+        {"acousticgrandpiano",      "DarkGreen"},
+        {"grandpiano",              "DarkGreen"},
+        {"yamahagrand",             "DarkGreen"},
+        {"yamahagrandpiano",        "DarkGreen"},
+        {"brightyamaha",            "DarkGreen"},
+        {"brightyamahagrand",       "DarkGreen"},
+        {"honkytonk",               "DarkGreen"},
+        {"honkytonkpiano",          "DarkGreen"},
+
+        {"electricpiano",           "ForestGreen"},
+        {"rhodesep",                "ForestGreen"},
+        {"legendep",                "ForestGreen"},
+
+        {"harpsichord",             "LimeGreen"},
+        {"cembalo",                 "LimeGreen"},
+        {"clavinet",                "LimeGreen"},
+        {"celesta",                 "LimeGreen"},
+
+        {"glockenspiel",            "lime"},
+        {"musicbox",                "lime"},
+        {"vibraphone",              "lime"},
+        {"marimba",                 "lime"},
+        {"xylophone",               "lime"},
+        {"tubularbells",            "lime"},
+        {"windchime",               "lime"},
+
+        {"dulcimer",                "IndianRed"},
+        {"koto",                    "salmon"},
+        {"kalimba",                 "LightSalmon"},
+
+        {"drawbarorgan",            "olive"},
+        {"percussiveorgan",         "olive"},
+        {"rockorgan",               "olive"},
+        {"churchorgan",             "olive"},
+        {"draworgan",               "olive"},
+        {"reedorgan",               "olive"},
+
+        {"accordion",               "MediumSeaGreen"},
+        {"italianaccordion",        "MediumSeaGreen"},
+        {"bandoneon",               "MediumSeaGreen"},
+        {"harmonica",               "PaleGreen"},
+
+        {"guitar",                  "NavajoWhite"},
+        {"acousticguitarnylon",     "NavajoWhite"},
+        {"acousticguitarsteel",     "NavajoWhite"},
+        {"nylonstringguitar",       "NavajoWhite"},
+        {"steelstringguitar",       "NavajoWhite"},
+        {"twelvestring",            "NavajoWhite"},
+        {"twelvestringguitar",      "NavajoWhite"},
+
+        {"sitar",                   "RosyBrown"},
+        {"banjo",                   "BlanchedAlmond"},
+        {"shamisen",                "wheat"},
+
+        {"electricguitar",          "crimson"},
+        {"electricguitarclean",     "crimson"},
+        {"guitarelectric",          "crimson"},
+        {"cleanguitar",             "crimson"},
+        {"electricguitar",          "crimson"},
+        {"palmmutedguitar",         "crimson"},
+        {"electricguitarmuted",     "crimson"},
+        {"electricguitarjazz",      "crimson"},
+        {"jazzguitar",              "crimson"},
+
+        {"funkguitar",              "red"},
+        {"overdrivenguitar",        "red"},
+        {"distortionguitar",        "red"},
+        {"guitarharmonics",         "red"},
+        {"feedbackguitar",          "red"},
+        {"guitarfeedback",          "red"},
+
+        {"bass",                    "DarkRed"},
+        {"electricbass",            "DarkRed"},
+        {"fingeredbass",            "DarkRed"},
+        {"pickedbass",              "DarkRed"},
+        {"fretlessbass",            "DarkRed"},
+        {"slapbass",                "DarkRed"},
+        {"popbass",                 "DarkRed"},
+
+        {"synthbass",               "maroon"},
+
+        {"violin",                  "SandyBrown"},
+        {"fiddle",                  "SandyBrown"},
+        {"viola",                   "peru"},
+        {"cello",                   "sienna"},
+        {"acousticbass",            "firebrick"},
+        {"doublebass",              "firebrick"},
+        {"contrabass",              "firebrick"},
+
+        {"mandolin",                "SandyBrown"},
+        {"mandola",                 "peru"},
+        {"mandocello",              "sienna"},
+        {"mandobass"    ,           "firebrick"},
+
+        {"strings",                 "goldenrod"},
+        {"slowstrings",             "goldenrod"},
+        {"tremolo",                 "goldenrod"},
+        {"tremolostrings",          "goldenrod"},
+        {"pizzicato",               "goldenrod"},
+        {"pizzicatostrings",        "goldenrod"},
+        {"pizzicatosection",        "goldenrod"},
+        {"synthstrings",            "goldenrod"},
+        {"synthstrings",            "goldenrod"},
+
+        {"harp",                    "magenta"},
+        {"orchestralharp",          "magenta"},
+
+        {"trumpet",                 "yellow"},
+        {"mutedtrumpet",            "yellow"},
+        {"trumpetmute",             "yellow"},
+        {"trumpetmuted",            "yellow"},
+        {"trombone",                "PaleGoldenrod"},
+        {"tuba",                    "DarkKhaki"},
+        {"frenchhorn",              "moccasin"},
+
+        {"brasssection",            "GreenYellow"},
+        {"synthbrass",              "GreenYellow"},
+
+        {"sopranosax",              "gold"},
+        {"altosax",                 "gold"},
+        {"tenorsax",                "gold"},
+        {"baritonesax",             "gold"},
+        {"barisax",                 "gold"},
+        {"barrysax",                "gold"},
+
+        {"oboe",                    "DarkTurquoise"},
+        {"bassoon",                 "teal"},
+        {"englishhorn",             "LightSeaGreen"},
+        {"clarinet",                "cyan"},
+        {"shenai",                  "LightCyan"},
+        {"shehnai",                 "LightCyan"},
+        {"shanai",                  "LightCyan"},
+        {"shahnai",                 "LightCyan"},
+
+        {"piccolo",                 "DeepSkyBlue"},
+        {"flute",                   "blue"},
+        {"recorder",                "CornflowerBlue"},
+        {"panflute",                "RoyalBlue"},
+        {"bottlechiff",             "LightSkyBlue"},
+        {"blownbottle",             "LightSkyBlue"},
+        {"shakuhachi",              "DarkBlue"},
+        {"whistle",                 "LightSteelBlue"},
+        {"ocarina",                 "SteelBlue"},
+        {"bagpipe",                 "DodgerBlue"},
+
+        {"ahhchoir",                "pink"},
+        {"ohhvoices",               "pink"},
+        {"choirahhs",               "pink"},
+        {"choirohhs",               "pink"},
+        {"ohhchoir",                "pink"},
+        {"ahhvoices",               "pink"},
+        {"synthvoice",              "pink"},
+        {"synthvox",                "pink"},
+        {"solovox",                 "pink"},
+
+        {"squarelead",              "plum"},
+        {"squarewave",              "plum"},
+        {"sawwave",                 "plum"},
+        {"calliopelead",            "plum"},
+        {"chifferlead",             "plum"},
+        {"chiflead",                "plum"},
+        {"charang",                 "plum"},
+        {"fifthsawtoothwave",       "plum"},
+        {"bass&lead",               "plum"},
+
+        {"orchestralpad",           "DeepPink"},
+        {"fantasia",                "DeepPink"},
+        {"warmpad",                 "DeepPink"},
+        {"orchestrahit",            "DeepPink"},
+        {"polysynth",               "DeepPink"},
+        {"metalpad",                "DeepPink"},
+        {"halopad",                 "DeepPink"},
+        {"sweeppad",                "DeepPink"},
+
+        {"spacevoice",              "purple"},
+        {"bowedglass",              "purple"},
+        {"icerain",                 "purple"},
+        {"soundtrack",              "purple"},
+        {"crystal",                 "purple"},
+        {"atmosphere",              "purple"},
+        {"aurora",                  "purple"},
+        {"brightness",              "purple"},
+        {"goblin",                  "purple"},
+        {"echodrops",               "purple"},
+        {"startheme",               "purple"},
+        {"tinkerbell",              "purple"},
+
+        {"timpani",                 "orchid"},
+        {"agogo",                   "orchid"},
+        {"steeldrums",              "orchid"},
+        {"woodblock",               "orchid"},
+        {"taikodrum",               "orchid"},
+        {"melodictom",              "orchid"},
+        {"mellowtom",               "orchid"},
+        {"synthdrum",               "orchid"},
+        {"reversecymbal",           "orchid"},
+
+        {"fretnoise",               "BlueViolet"},
+        {"guitarfretnoise",         "BlueViolet"},
+        {"breathnoise",             "BlueViolet"},
+        {"seashore",                "BlueViolet"},
+        {"birdtweet",               "BlueViolet"},
+
+        {"telephone",               "indigo"},
+        {"telephonering",           "indigo"},
+        {"helicopter",              "indigo"},
+        {"applause",                "indigo"},
+        {"gunshot",                 "indigo"},
+
+        {"drum",                    "OrangeRed"},
+        {"drums",                   "OrangeRed"},
+        {"percussion",              "OrangeRed"},
+    };
+
+    RosegardenDocument *document = RosegardenDocument::currentDocument;
+    Composition &composition = document->getComposition();
+    ColourMap &colourMap = composition.getSegmentColourMap();
+    bool setSomeColors = false;   // false until found color of an instrument
+
+    MultiSegmentColourCommand *mltSegColCmd =
+            new MultiSegmentColourCommand(segmentsToRecolor);
 
     for (Segment *segment : segmentsToRecolor) {
-        RG_WARNING << segment->getLabel();   // t4osDEBUG
+        // Usual convoluted API to get segment's instrument.
+        const TrackId trackId = segment->getTrack();
+        const Track *track = composition.getTrackById(trackId);
+        if (!track) continue;
+        InstrumentId instrumentId = track->getInstrument();
+        Instrument  *instrument = document->getStudio().
+                                        getInstrumentById(instrumentId);
+        if (!instrument) continue;
+        std::string programName(instrument->getProgramName());
+
+        if (instrument->getNaturalChannel() == 9) programName = "drums";
+
+        // Remove all punctuation and convert to lowercase for lookup.
+        std::string canonicalName;
+        for (auto c : programName)
+            if (std::isalpha(c))
+                canonicalName.append(std::string(1, std::tolower(c)));
+
+        // Lookup in table
+        QString instrumentColorName;
+        auto iter = instrumentColors.find(canonicalName);
+
+        // Ad-hoc handling of names not explicitly in table.
+        if (iter == instrumentColors.end()) {
+            if (canonicalName.find("piano") != std::string::npos)
+                instrumentColorName = "DarkGreen";
+            else if (canonicalName.find("guitar") != std::string::npos) {
+                if (canonicalName.find("electric") != std::string::npos)
+                    instrumentColorName = "red";
+                else
+                    instrumentColorName = "NavajoWhite";
+            }
+            else if (canonicalName.find("harp") != std::string::npos)
+                instrumentColorName = "DeepPink";
+            else if (canonicalName.find("brass") != std::string::npos)
+                instrumentColorName = "GreenYellow";
+            else if (canonicalName.find("sax") != std::string::npos)
+                instrumentColorName = "gold";
+            else if (canonicalName.find("horn") != std::string::npos)
+                instrumentColorName = "khaki";
+            else if (canonicalName.find("dulcimer") != std::string::npos)
+                instrumentColorName = "IndianRed";
+            else if (canonicalName.find("strings") != std::string::npos ||
+                     canonicalName.find("stringensemble") != std::string::npos)
+                instrumentColorName = "goldenrod";
+            else if (canonicalName.find("ahh") != std::string::npos ||
+                     canonicalName.find("aah") != std::string::npos ||
+                     canonicalName.find("ohh") != std::string::npos ||
+                     canonicalName.find("ooh") != std::string::npos)
+                instrumentColorName = "pink";
+            else if (canonicalName.find("lead") != std::string::npos)
+                instrumentColorName = "plum";
+            else if (canonicalName.find("pad") != std::string::npos)
+                instrumentColorName = "DeepPink";
+            else if (canonicalName.find("fx") != std::string::npos)
+                instrumentColorName = "purple";
+            else
+                continue;  // No knowledge of this name, give up
+        }
+        else instrumentColorName = iter->second;
+
+
+        // Get instrument's color, and add to color map if not already there.
+
+        QColor instrumentColor(instrumentColorName);
+        int colourMapIndex = colourMap.id(instrumentColor);
+
+        if (colourMapIndex == -1)
+            colourMapIndex = colourMap.addEntry(instrumentColor,
+                                                instrumentColorName.
+                                                    toStdString());
+        segment->setColourIndex(colourMapIndex);
+        setSomeColors = true;
     }
+
+    // Only do if necessary
+    if (setSomeColors) CommandHistory::getInstance()->addCommand(mltSegColCmd);
 }
 
+// Use random colors from current color map.
+// Included for completeness. Poor results because can choose duplicate
+// or closely matching colors (use recolorSegmentsContrasting() instead).
 void RosegardenMainViewWidget::recolorSegmentsRandom(bool defaultOnly,
-    bool perTrack)
+    bool selectedOnly, bool perTrack)
 {
     std::vector<Segment*> segmentsToRecolor;
 
-    getRecolorSegments(segmentsToRecolor, defaultOnly);
+    getRecolorSegments(segmentsToRecolor, nullptr, defaultOnly, selectedOnly);
 
-    RG_WARNING << "recolorSegmentsRandom()"   // t4osDEBUG
-               << segmentsToRecolor.size()
-               << "segments";
-
+    MultiSegmentColourCommand *mltSegColCmd =
+            new MultiSegmentColourCommand(segmentsToRecolor);
     ColourMap &colors = RosegardenDocument::currentDocument
                         ->getComposition().getSegmentColourMap();
 
     std::map<TrackId, unsigned> trackColors;
     std::random_device randomDevice;
     std::default_random_engine randomEngine(randomDevice());
-    std::uniform_int_distribution<unsigned> randomInt(1,
-                                                colors.colours.size() - 1);
+    // Don't ever want to use #0 default or #1 audio default
+    std::uniform_int_distribution<unsigned> randomInt(2, colors.size() - 1);
 
     for (Segment *segment : segmentsToRecolor) {
-        RG_WARNING << segment->getLabel();   // t4osDEBUG
-
-        // World's worst random number generator but perfectly adequate here
-        // Returns [0,N] inclusive, plus don''t want to ever use 0 default.
         unsigned color = randomInt(randomEngine);
 
         if (perTrack) {
@@ -1951,22 +2290,222 @@ void RosegardenMainViewWidget::recolorSegmentsRandom(bool defaultOnly,
         }
         else segment->setColourIndex(color);
     }
+
+    CommandHistory::getInstance()->addCommand(mltSegColCmd);
 }
 
-void RosegardenMainViewWidget::recolorSegmentsOptimal(bool defaultOnly,
-    bool perTrack)
+// Attempt to choose easily distinguishable colors for segments.
+// Inherently impossible if more than approximately a dozen segments due
+// to limitations of the human visual system for colored objects that
+// are scattered randomly.
+// Uses random subsequence from fixed set of hand-chosen contrasting colors.
+// Better algorithm would be to add required number of new colors to
+// a perceptually-uniform 3D color space such as L*a*b*, generate 3D
+// Voronio regions around them and matching dual Delauney edges between,
+// and then do simulated annealing or other minimization to move colors
+// as mutually far apart as possible (but not move any pre-existing segment
+// colors). Far too much work to write and/or introduce dependencies
+// on third-party opensouce libraries, with unknown benefit over current
+// ad-hoc technique.
+void RosegardenMainViewWidget::recolorSegmentsContrasting(bool defaultOnly,
+    bool selectedOnly, bool perTrack)
 {
-    std::vector<Segment*> segmentsToRecolor;
+    std::vector<Segment*>       segmentsToRecolor;
+    std::vector<const Segment*> segmentsToCheckExisting;
 
-    getRecolorSegments(segmentsToRecolor, defaultOnly);
+    getRecolorSegments(segmentsToRecolor, &segmentsToCheckExisting,
+                       defaultOnly, selectedOnly);
 
-    RG_WARNING << "recolorSegmentsOptimal()"      // t4osDEBUG
-               << segmentsToRecolor.size()
-               << "segments";
+    MultiSegmentColourCommand *mltSegColCmd =
+            new MultiSegmentColourCommand(segmentsToRecolor);
+
+    // Needed for C++11 initialization of std::array
+    // Make sure NUMBER_OF_COLORS matches number of array entries below.
+    static const unsigned NUMBER_OF_HUES = 9,
+                          NUMBER_PER_HUE = 7,
+                          NUMBER_OF_COLORS = NUMBER_OF_HUES * NUMBER_PER_HUE;
+
+    // Hand-chosen from set of standard web and SVG colors, known to be
+    // reasonably invariant on sRGB displays. Arranged in sets of 9 fixed
+    // hues, with adjacent entries differing in saturation and luminance
+    // from each other.
+    static const std::array<ColourMap::Entry, NUMBER_OF_COLORS>
+        distinguishableColors = {
+        ColourMap::Entry(139,   0,   0, "DarkRed"          ),   // 349
+        ColourMap::Entry(176, 196, 222, "LightSteelBlue"   ),   //  17
+        ColourMap::Entry(  0, 255,   0, "green"            ),   //  38
+        ColourMap::Entry(255, 127,  80, "coral"            ),   //  74
+        ColourMap::Entry(186,  85, 211, "MediumOrchid"     ),   //  91
+        ColourMap::Entry(255, 215,   0, "gold"             ),   // 270
+        ColourMap::Entry( 32, 178, 170, "LightSeaGreen"    ),   //  34
+        ColourMap::Entry(255,   0, 132, "DarkPinkCustom"   ),   //  57
+        ColourMap::Entry(245, 222, 179, "wheat"            ),   //  63
+
+        ColourMap::Entry(178,  34,  34, "firebrick"        ),   //  67
+        ColourMap::Entry(  0,   0, 128, "NavyBlue"         ),   //   3
+        ColourMap::Entry(  0, 250, 154, "MediumSpringGreen"),   //  40
+        ColourMap::Entry(255, 140,   0, "DarkOrange"       ),   //  73
+        ColourMap::Entry(160,  32, 240, "purple"           ),   //  95
+        ColourMap::Entry(240, 230, 140, "khaki"            ),   //  47
+        ColourMap::Entry(  0, 206, 209, "DarkTurquoise"    ),   //  21
+        ColourMap::Entry(208,  32, 144, "VioletRed"        ),   //  86
+        ColourMap::Entry(139,  69,  19, "SaddleBrown"      ),   // 309
+
+        ColourMap::Entry(220,  20,  60, "CrimsonCustom"    ),   // 419
+        ColourMap::Entry(  0,   0, 255, "blue"             ),   // 158
+        ColourMap::Entry(  0, 100,   0, "DarkGreen"        ),   //  29
+        ColourMap::Entry(255, 165,   0, "orange"           ),   // 326
+        ColourMap::Entry(255,   0, 255, "magenta"          ),   // 378
+        ColourMap::Entry(238, 232, 170, "PaleGoldenrod"    ),   //  48
+        ColourMap::Entry( 64, 224, 208, "turquoise"        ),   //  23
+        ColourMap::Entry(219, 112, 147, "PaleVioletRed"    ),   //  83
+        ColourMap::Entry(160,  82,  45, "sienna"           ),   //  59
+
+        ColourMap::Entry(205,  92,  92, "IndianRed"        ),   //  57
+        ColourMap::Entry( 65, 105, 225, "RoyalBlue"        ),   //  10
+        ColourMap::Entry( 34, 139,  34, "ForestGreen"      ),   //  44
+        ColourMap::Entry(210, 105,  30, "chocolate"        ),   //  66
+        ColourMap::Entry(238, 130, 238, "violet"           ),   //  88
+        ColourMap::Entry(173, 255,  47, "GreenYellow"      ),   //  41
+        ColourMap::Entry(127, 255, 212, "aquamarine"       ),   // 218
+        ColourMap::Entry(255, 105, 180, "HotPink"          ),   //  79
+        ColourMap::Entry(184, 134,  11, "DarkGoldenrod"    ),   //  55
+
+        ColourMap::Entry(255,   0,   0, "red"              ),   //  78
+        ColourMap::Entry(100, 149, 237, "CornflowerBlue"   ),   //   4
+        ColourMap::Entry(107, 142,  35, "OliveDrab"        ),   //  45
+        ColourMap::Entry(255,  99,  71, "tomato"           ),   // 338
+        ColourMap::Entry(139,   0, 139, "DarkMagenta"      ),   // 381
+        ColourMap::Entry(255, 255,   0, "yellow"           ),   // 266
+        ColourMap::Entry(175, 238, 238, "PaleTurquoise"    ),   //  20
+        ColourMap::Entry(255,  20, 147, "DeepPink"         ),   // 350
+        ColourMap::Entry(205, 133,  63, "Peru"             ),   // 304
+
+        ColourMap::Entry(233, 150, 122, "DarkSalmon"       ),   //  69
+        ColourMap::Entry( 30, 144, 255, "DodgerBlue"       ),   // 162
+        ColourMap::Entry( 60, 179, 113, "MediumSeaGreen"   ),   //  33
+        ColourMap::Entry(250, 128, 114, "salmon"           ),   //  70
+        ColourMap::Entry(148,   0, 211, "DarkViolet"       ),   //  93
+        ColourMap::Entry(154, 205,  50, "YellowGreen"      ),   // 248
+        ColourMap::Entry(  0, 255, 255, "cyan"             ),   // 210
+        ColourMap::Entry(255, 148, 176, "MediumPinkCustom" ),   //  82
+        ColourMap::Entry(222, 183, 135, "Burlywood"        ),   // 418
+
+        ColourMap::Entry(240, 128, 128, "LightCoral"       ),   //  75
+        ColourMap::Entry(  0, 191, 255, "DeepSkyBlue"      ),   // 170
+        ColourMap::Entry( 50, 205,  50, "LimeGreen"        ),   //  42
+        ColourMap::Entry(255,  69,   0, "OrangeRed"        ),   // 342
+        ColourMap::Entry(147, 112, 219, "MediumPurple"     ),   //  96
+        ColourMap::Entry(255, 193,  37, "goldenrod"        ),   // 274
+        ColourMap::Entry(  0, 128, 128, "TealCustom"       ),   // 420
+        ColourMap::Entry(255, 192, 203, "pink"             ),   //  81
+        ColourMap::Entry(244, 164,  96, "SandyBrown"       ),   //  64
+    };
+
+    ColourMap &colourMap = RosegardenDocument::currentDocument
+                           ->getComposition().getSegmentColourMap();
+
+    // Avoid using colors that are close to existing ones not
+    // being replaced.
+    std::set<unsigned> colorsToAvoid;
+    if (!segmentsToCheckExisting.empty()) {
+        for (const Segment *existing : segmentsToCheckExisting) {
+            unsigned existingColorIndex = existing->getColourIndex();
+            const QColor &existingColor = colourMap.getColour(
+                                            existingColorIndex);
+
+            for (unsigned distinguishableIndex = 0 ;
+                 distinguishableIndex < distinguishableColors.size() ;
+                 ++distinguishableIndex) {
+                const QColor &distinguishableColor(distinguishableColors[
+                                                   distinguishableIndex].
+                                                   colour);
+
+                // World's second-worst way to compare colors (only
+                // thing worse would be RGB). Should be L*a*b* or some
+                // similar perceptually uniform color space.
+                static const unsigned HUE_TOLERANCE = 20,
+                                      SATURATION_TOLERANCE = 10,
+                                      VALUE_TOLERANCE = 10;
+                unsigned
+                hue_diff = abs(distinguishableColor.hue() -
+                                 existingColor.hue()),
+                saturation_diff = abs(distinguishableColor.saturation()
+                                      - existingColor.saturation()),
+                value_diff = abs(distinguishableColor.value() -
+                                 existingColor.value());
+
+                // Handle 0 to 360 degrees hue wraparound.
+                if (hue_diff > 180) hue_diff = 360 - hue_diff;
+
+                if (hue_diff < HUE_TOLERANCE &&
+                    saturation_diff < SATURATION_TOLERANCE &&
+                    value_diff < VALUE_TOLERANCE) {
+                    colorsToAvoid.insert(distinguishableIndex);
+                    // Don't end up with less available colors than needed.
+                    // Would cause repeats, or infinite loop if zero.
+                    if (colorsToAvoid.size() == distinguishableColors.size())
+                        return;
+                }
+            }
+        }
+    }
+
+    std::random_device randomDevice;
+    std::default_random_engine randomEngine(randomDevice());
+    // Don't ever want to use #0 default or #1 audio default
+    std::uniform_int_distribution<unsigned>
+        randomInt(0, distinguishableColors.size() - 1);
+    unsigned distinguishableIndex = randomInt(randomEngine);
+    std::map<TrackId, unsigned> trackColors;
 
     for (Segment *segment : segmentsToRecolor) {
-        RG_WARNING << segment->getLabel();   // t4osDEBUG
+        // Choose next color in table, skipping over pre-existing "avoid" ones.
+        // Won't be infinite loop because above check insured at  least one
+        // not-to-avoid color remained.
+        do {
+            distinguishableIndex = (distinguishableIndex + 1) %
+                                   distinguishableColors.size();
+        } while (colorsToAvoid.find(distinguishableIndex) !=
+                 colorsToAvoid.end());
+
+        // Get color
+        const ColourMap::Entry &distinguishableColor(distinguishableColors[
+                                                     distinguishableIndex]);
+        int colourMapIndex = colourMap.id(distinguishableColor.colour);
+
+        // Add to color map if not already there.
+        if (colourMapIndex == -1)
+            colourMapIndex = colourMap.addEntry(distinguishableColor.colour,
+                                                distinguishableColor.name);
+
+        if (perTrack) {
+            TrackId segmentTrack = segment->getTrack();
+            if (trackColors.count(segmentTrack)) {
+                // Already set one segment in this track, use same color
+                segment->setColourIndex(trackColors[segmentTrack]);
+            }
+            else {
+                // Is first (or only) segment in this track
+                segment->setColourIndex(colourMapIndex);
+                trackColors[segmentTrack] = colourMapIndex ;
+            }
+        }
+        else segment->setColourIndex(colourMapIndex);
+
+        // Don't reuse same color in edge case where too many colors
+        // are needed -- just give up and leave un-(re-)colored instead.
+        colorsToAvoid.insert(distinguishableIndex);
+        if (colorsToAvoid.size() == distinguishableColors.size()) break;
     }
+
+    CommandHistory::getInstance()->addCommand(mltSegColCmd);
+}
+
+void RosegardenMainViewWidget::setSegmentSelectedColorMode(bool v)
+{
+    m_trackEditor->getCompositionView()->setSegmentSelectedColorMode(v);
+    m_trackEditor->getCompositionView()->slotUpdateAll();
 }
 
 void RosegardenMainViewWidget::enterEvent(QEvent* /*event*/)

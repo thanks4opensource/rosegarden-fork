@@ -22,7 +22,7 @@
   <Separator/>
     <Action name="delete" text="&amp;Delete" shortcut="Delete, Ctrl+D" />
     <Action name="select_all" text="Select &amp;All Events" shortcut="Ctrl+A" />
-    <Action name="clear_selection" text="C&amp;lear Selection" />
+    <Action name="clear_selection" text="C&amp;lear Selection" shortcut="Ctrl+Shift+A"/>
     <Action name="reset_selection" text="&amp;Reset Selection" shortcut="Escape"/>
     <Action name="filter_selection" text="&amp;Filter Selection" icon="filter" shortcut="Ctrl+F" />
   <Separator/>

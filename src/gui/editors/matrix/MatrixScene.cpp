@@ -835,9 +835,10 @@ MatrixScene::segmentRemoved(const Composition *, Segment *removedSegment)
             newSegmentIndex = m_currentSegmentIndex - 1;
 
         setCurrentSegment(m_segments[newSegmentIndex]);
-        if (m_widget)
-            m_widget->updateToCurrentSegment();
-
+        if (m_widget) {
+            // true == set instrument playback override
+            m_widget->updateToCurrentSegment(true);
+        }
     }
 
     emit segmentDeleted(removedSegment);

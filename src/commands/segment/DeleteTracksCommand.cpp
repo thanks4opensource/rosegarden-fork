@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -29,12 +29,26 @@ namespace Rosegarden
 {
 
 DeleteTracksCommand::DeleteTracksCommand(Composition *composition,
-        std::vector<TrackId> tracks):
+        std::vector<TrackId> trackIds):
         NamedCommand(getGlobalName()),
         m_composition(composition),
-        m_tracks(tracks),
+        m_trackIds(trackIds),
         m_detached(false)
-{}
+{
+    for (TrackId trackId : m_trackIds)
+        m_tracks.push_back(m_composition->getTrackById(trackId));
+
+    // Must be sorted in reverse position order for execute()
+    std::sort(m_tracks.begin(),
+              m_tracks.end(),
+              [](Track *left, Track *right) {
+                    return left->getPosition() > right->getPosition();
+              });
+
+    // Copy reversed sort order back into m_trackIds
+    for (unsigned ndx = 0 ; ndx < m_trackIds.size() ; ++ndx)
+        m_trackIds[ndx] = m_tracks[ndx]->getId();
+}
 
 DeleteTracksCommand::~DeleteTracksCommand()
 {
@@ -45,8 +59,10 @@ DeleteTracksCommand::~DeleteTracksCommand()
         for (size_t i = 0; i < m_oldSegments.size(); ++i)
             delete m_oldSegments[i];
 
+#if 0  // Unnecessary: just pointers, so no destructors
         m_oldTracks.clear();
         m_oldSegments.clear();
+#endif
     }
 }
 
@@ -62,9 +78,8 @@ void DeleteTracksCommand::execute()
     // Remove the tracks and their segments.
 
     // For each track we are deleting.
-    for (size_t i = 0; i < m_tracks.size(); ++i) {
-        TrackId trackId = m_tracks[i];
-        Track *track = m_composition->getTrackById(trackId);
+    for (Track *track : m_tracks) {
+        TrackId trackId = track->getId();
 
         if (track) {
             // ??? The following segment removal code will never find any
@@ -77,7 +92,7 @@ void DeleteTracksCommand::execute()
             //     SegmentEraseCommand.
 
             // For each segment in the composition.
-            for (SegmentMultiSet::const_iterator j = segments.begin();
+            for (SegmentMultiSet::const_iterator j = segments.cbegin();
                  j != segments.end();
                  /* incremented inside */) {
                 // Increment before use.  Otherwise detachSegment() will
@@ -107,12 +122,13 @@ void DeleteTracksCommand::execute()
     Composition::trackcontainer &tracks = m_composition->getTracks();
 
     // For each deleted track
-    for (std::vector<Track*>::iterator oldTrackIter = m_oldTracks.begin();
-         oldTrackIter != m_oldTracks.end();
+    for (std::vector<Track*>::const_iterator
+         oldTrackIter = m_oldTracks.cbegin();
+         oldTrackIter != m_oldTracks.cend();
          ++oldTrackIter) {
         // For each track left in the composition
-        for (Composition::trackiterator compTrackIter = tracks.begin();
-             compTrackIter != tracks.end();
+        for (Composition::trackconstiterator compTrackIter = tracks.cbegin();
+             compTrackIter != tracks.cend();
              ++compTrackIter) {
             // If the composition track was after the deleted track
             if (compTrackIter->second->getPosition() >
@@ -125,7 +141,7 @@ void DeleteTracksCommand::execute()
         }
     }
 
-    m_composition->notifyTracksDeleted(m_tracks);
+    m_composition->notifyTracksDeleted(m_trackIds);
 
     m_detached = true;
 }
@@ -136,35 +152,85 @@ void DeleteTracksCommand::unexecute()
 
     std::vector<TrackId> trackIds;
 
-    // Alias for readability.
-    Composition::trackcontainer &tracks = m_composition->getTracks();
+    // Both current composition and old-to-be-restored tracks must be
+    // sorted in reverse position order. They are currently in forward
+    // TrackId order -- note that TrackId and position are numerically
+    // the same by default but not necessarily so if tracks are moved,
+    // added, or deleted.
 
-    // For each track we need to add back in 
-    for (std::vector<Track*>::iterator oldTrackIter = m_oldTracks.begin(); 
-         oldTrackIter != m_oldTracks.end(); 
-         ++oldTrackIter) {
+    // Current tracks in composition
+    std::vector<Track*> currentTracks(m_composition->getTracks().size());
+    std::transform(m_composition->getTracks().cbegin(),
+                   m_composition->getTracks().cend(),
+                   currentTracks.begin(),
+                   [](const std::pair<TrackId, Track*> &idAndTrack) {
+                       return idAndTrack.second;
+                   });
+    std::sort(currentTracks.begin(),
+              currentTracks.end(),
+              [](Track *left, Track *right) {
+                    return left->getPosition() < right->getPosition();
+              });
 
-        // From the back we shift the track positions in the composition
-        // to allow the new (old) track some space to come back in.
+    // Old, to-be-restored, tracks
+    std::sort(m_oldTracks.begin(),
+              m_oldTracks.end(),
+              [](Track *left, Track *right) {
+                    return left->getPosition() < right->getPosition();
+              });
 
-        Composition::trackiterator compTrackIter = tracks.end();
-        while (true) {
-            --compTrackIter;
+    std::vector<Track*>::iterator currentTracksIter = currentTracks.begin();
+    std::vector<Track*>::const_iterator oldTracksIter = m_oldTracks.begin();
 
-            // If the composition track's position is after or the same as
-            // the position of the track we are adding
-            if ((*compTrackIter).second->getPosition() >= 
-                    (*oldTrackIter)->getPosition()) {
-                // Increment the composition track's position to make room
-                int newPosition = (*compTrackIter).second->getPosition() + 1;
-                (*compTrackIter).second->setPosition(newPosition);
+    // new position in combined/shuffled tracks
+    unsigned position = 0;
+    // for "pushing" current track downward in display
+    unsigned incrementer = 0;
+
+    // "Shuffle" old tracks being restored and current tracks together
+    // in correct order.
+    while (true) {
+        bool insertOld = false, insertCurrent = false;
+
+        if (oldTracksIter != m_oldTracks.cend() &&
+            currentTracksIter != currentTracks.end()) {
+            // Still have both current and old tracks to insert.
+            // Choose which one.
+            if ((*currentTracksIter)->getPosition() + incrementer <
+               static_cast<unsigned>((*oldTracksIter)->getPosition())) {
+                insertCurrent = true;
             }
+            else {
+                insertOld = true;
+            }
+        }
+        // At most one of the following can be true because the above
+        // clause would have executed instead. Neither is true if both
+        // sets of tracks have been inserted.
+        else if (currentTracksIter != currentTracks.end())
+            insertCurrent = true;
+        else if (oldTracksIter != m_oldTracks.cend())
+            insertOld = true;
 
-            if (compTrackIter == tracks.begin())
-                break;
+        // Insert the correct track, or are finished.
+        if (insertCurrent)
+            (*currentTracksIter++)->setPosition(position);
+        else if (insertOld) {
+            ++oldTracksIter;
+            ++incrementer;
+        }
+        else {  // !insertOld && !insertCurrent
+            // Both sets of tracks finished, exit.
+            break;
         }
 
-        // Add the new (old) track back in.
+        ++position;
+    }
+
+    for (std::vector<Track*>::const_iterator
+         oldTrackIter = m_oldTracks.cbegin();
+         oldTrackIter != m_oldTracks.cend();
+         ++oldTrackIter) {
         m_composition->addTrack(*oldTrackIter);
         trackIds.push_back((*oldTrackIter)->getId());
     }
@@ -181,4 +247,3 @@ void DeleteTracksCommand::unexecute()
 }
 
 }
-

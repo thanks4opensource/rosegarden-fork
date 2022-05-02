@@ -716,9 +716,19 @@ public slots:
     void slotSelectAll();
 
     /**
-     * placeholder for recoloring segments   // t4osDEBUG
+     * select no segments on any track
+     */
+    void slotClearSelection();
+
+    /**
+     * One-click recoloring of segments
      */
     void slotRecolorSegments();
+
+    /**
+     * Alternate display mode for selected vs non-selected segments.
+     */
+    void slotSegmentColorMode();
 
     /**
      * delete selected segments, duh
@@ -1098,9 +1108,14 @@ public slots:
     void slotAddTracks();
 
     /*
-     * Delete Tracks
+     * Delete selected track
      */
     void slotDeleteTrack();
+
+    /*
+     * Delete tracks that have no segments
+     */
+    void slotDeleteEmptyTracks();
 
     /*
      * Modify track position

@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -182,9 +182,7 @@ ControlParameterEditDialog::ControlParameterEditDialog(
     ColourMap::MapType::const_iterator it;
     QPixmap colourPixmap(16, 16);
 
-    for (it = colourMap.colours.begin();
-         it != colourMap.colours.end();
-         ++it) {
+    for (it = colourMap.begin(); it != colourMap.end(); ++it) {
         QColor c = it->second.colour;
         colourPixmap.fill(QColor(c.red(), c.green(), c.blue()));
         m_colourCombo->addItem(colourPixmap, strtoqstr(it->second.name));
@@ -244,9 +242,7 @@ ControlParameterEditDialog::populate()
     // structured, it was impossible for setItem to increment in order to arrive
     // at any useful value, so the color always came out "Default" 100% of the
     // time.
-    for (it = colourMap.colours.begin();
-         it != colourMap.colours.end();
-         ++it) {
+    for (it = colourMap.begin(); it != colourMap.end(); ++it) {
         pos++;
         if (m_control->getColourIndex() == it->first) setItem = (pos - 1);
     }

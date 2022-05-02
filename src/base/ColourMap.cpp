@@ -21,7 +21,7 @@
 
 #include <sstream>
 
-namespace Rosegarden 
+namespace Rosegarden
 {
 
 
@@ -34,22 +34,22 @@ ColourMap::ColourMap()
     //     RoseXmlHandler, so it's not needed.  Might be worth doing
     //     some comprehensive testing to see if removing this would
     //     make any difference.
-    colours[0] = Entry();
+    m_colours[0] = Entry();
 }
 
 QColor
 ColourMap::getColour(unsigned colourID) const
 {
     // If the map is empty, return the default.
-    if (colours.empty())
+    if (m_colours.empty())
         return defaultSegmentColour;
 
     // Find the colourID in the map.
-    MapType::const_iterator colourIter = colours.find(colourID);
+    MapType::const_iterator colourIter = m_colours.find(colourID);
 
     // Not found?  Return the first entry.
-    if (colourIter == colours.end())
-        return colours.begin()->second.colour;
+    if (colourIter == m_colours.end())
+        return m_colours.begin()->second.colour;
 
     return colourIter->second.colour;
 }
@@ -58,20 +58,20 @@ std::string
 ColourMap::getName(unsigned colourID) const
 {
     // If the map is empty, return the default.
-    if (colours.empty())
+    if (m_colours.empty())
         return "";
 
     // Find the colourID in the map.
-    MapType::const_iterator colourIter = colours.find(colourID);
+    MapType::const_iterator colourIter = m_colours.find(colourID);
 
     // Not found?  Return the first entry.
-    if (colourIter == colours.end())
-        return colours.begin()->second.name;
+    if (colourIter == m_colours.end())
+        return m_colours.begin()->second.name;
 
     return colourIter->second.name;
 }
 
-void
+unsigned
 ColourMap::addEntry(QColor colour, std::string name)
 {
     // Find the first unused ID.
@@ -85,8 +85,8 @@ ColourMap::addEntry(QColor colour, std::string name)
     unsigned highest = 0;
 
     // For each colour in the map
-    for (MapType::const_iterator colourIter = colours.begin();
-         colourIter != colours.end();
+    for (MapType::const_iterator colourIter = m_colours.begin();
+         colourIter != m_colours.end();
          ++colourIter)
     {
         if (colourIter->first != highest)
@@ -95,7 +95,32 @@ ColourMap::addEntry(QColor colour, std::string name)
         ++highest;
     }
 
-    colours[highest] = Entry(colour, name);
+    m_colours[highest] = Entry(colour, name);
+
+    uint32_t rgb = colour.red() << 16 | colour.green() << 8 | colour.blue();
+    m_colourToID[rgb] = highest;
+
+    return highest;
+}
+
+void
+ColourMap::addEntry(unsigned colourID, QColor colour, std::string name)
+{
+    // We don't allow a name to be given to the default colour
+    if (colourID == 0)
+        return;
+
+    m_colours[colourID] = Entry(colour, name);
+    uint32_t rgb = colour.red() << 16 | colour.green() << 8 | colour.blue();
+    m_colourToID[rgb] = colourID;
+}
+
+int ColourMap::id(const QColor colour) const
+{
+    uint32_t rgb = colour.red() << 16 | colour.green() << 8 | colour.blue();
+    auto it = m_colourToID.find(rgb);
+    if (it == m_colourToID.end()) return -1;
+    else return it->second;
 }
 
 void
@@ -106,10 +131,10 @@ ColourMap::modifyName(unsigned colourID, std::string name)
         return;
 
     // Find the colourID in the map.
-    MapType::iterator colourIter = colours.find(colourID);
+    MapType::iterator colourIter = m_colours.find(colourID);
 
     // Not found?  Bail.
-    if (colourIter == colours.end())
+    if (colourIter == m_colours.end())
         return;
 
     colourIter->second.name = name;
@@ -119,10 +144,10 @@ void
 ColourMap::modifyColour(unsigned colourID, QColor colour)
 {
     // Find the colourID in the map.
-    MapType::iterator colourIter = colours.find(colourID);
+    MapType::iterator colourIter = m_colours.find(colourID);
 
     // Not found?  Bail.
-    if (colourIter == colours.end())
+    if (colourIter == m_colours.end())
         return;
 
     colourIter->second.colour = colour;
@@ -135,7 +160,7 @@ ColourMap::deleteEntry(unsigned colourID)
     if (colourID == 0)
         return;
 
-    colours.erase(colourID);
+    m_colours.erase(colourID);
 }
 
 std::string
@@ -147,8 +172,8 @@ ColourMap::toXmlString(std::string name) const
            << "\">" << std::endl;
 
     // For each colour in the map
-    for (MapType::const_iterator colourIter = colours.begin();
-         colourIter != colours.end();
+    for (MapType::const_iterator colourIter = m_colours.begin();
+         colourIter != m_colours.end();
          ++colourIter) {
 
         const QColor &color = colourIter->second.colour;

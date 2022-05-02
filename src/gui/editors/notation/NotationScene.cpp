@@ -815,7 +815,16 @@ NotationScene::setupMouseEvent(QPointF scenePos, Qt::MouseButtons buttons,
 
         if (element->event()->get<Bool>
             (m_properties->NOTE_HEAD_SHIFTED, shifted) && shifted) {
-            cx += nbw;
+            bool stemUp = false;
+            element->event()->get<Bool>(m_properties->VIEW_LOCAL_STEM_UP,
+                                        stemUp);
+            RG_DEBUG << "setupMouseEvent shift" << cx << nbw << stemUp;
+
+            if (stemUp) {
+                cx += nbw;
+            } else {
+                cx -= nbw;
+            }
         }
 
         if (element->isNote() && haveClickHeight) {
@@ -1250,9 +1259,12 @@ NotationScene::segmentRemoved(const Composition *c, Segment *s)
     NOTATION_DEBUG << "NotationScene::segmentRemoved(" << c << "," << s << ")";
     if (!m_document || !c || (c != &m_document->getComposition())) return;
 
+    std::vector<NotationStaff *>::iterator staffToDelete = m_staffs.end();
+
     for (std::vector<NotationStaff *>::iterator i = m_staffs.begin();
          i != m_staffs.end(); ++i) {
         if (s == &(*i)->getSegment()) {
+            staffToDelete = i;
 
             m_segmentsDeleted.push_back(s); // Remember segment to be deleted
 
@@ -1276,6 +1288,15 @@ NotationScene::segmentRemoved(const Composition *c, Segment *s)
 
             break;
         }
+    }
+    // the sceneNeedsRebuilding signal will cause the scene to be
+    // rebuilt. However this uses a queued connection so the pointer
+    // update after undo is done before this so we must remove the
+    // deleted staff here.
+    if (staffToDelete != m_staffs.end()) {
+        NotationStaff* staff = *staffToDelete;
+        delete staff;
+        m_staffs.erase(staffToDelete);
     }
 }
 

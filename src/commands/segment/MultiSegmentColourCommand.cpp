@@ -15,8 +15,9 @@
     COPYING included with this distribution for more information.
 */
 
+#define RG_MODULE_STRING "[MultiSegmentColourCommand]"
 
-#include "SegmentColourCommand.h"
+#include "MultiSegmentColourCommand.h"
 
 #include "base/Segment.h"
 #include "base/Selection.h"
@@ -28,42 +29,49 @@
 namespace Rosegarden
 {
 
-SegmentColourCommand::SegmentColourCommand(
-    SegmentSelection &segments,
-    const unsigned int index):
-        NamedCommand(tr("Change Segment Color")),
-        m_newColourIndex(index)
+MultiSegmentColourCommand::MultiSegmentColourCommand(
+    std::vector<Segment*> &segments):
+        NamedCommand(tr("Change Segment Colors")),
+        m_firstExecute(true)
 {
     // ??? std::copy()
-    for (SegmentSelection::iterator i = segments.begin();
+    for (std::vector<Segment*>::iterator i = segments.begin();
          i != segments.end();
          ++i) {
         m_segments.push_back(*i);
+        m_prevColours.push_back((*i)->getColourIndex());
     }
 }
 
-SegmentColourCommand::~SegmentColourCommand()
-{}
+MultiSegmentColourCommand::~MultiSegmentColourCommand()
+{
+}
 
 void
-SegmentColourCommand::execute()
+MultiSegmentColourCommand::execute()
+{
+    if (m_firstExecute) m_firstExecute = false;
+    else                exchange();
+
+    RosegardenDocument::currentDocument->slotDocColoursChanged();
+}
+
+void
+MultiSegmentColourCommand::unexecute()
+{
+    exchange();
+
+    RosegardenDocument::currentDocument->slotDocColoursChanged();
+}
+
+void
+MultiSegmentColourCommand::exchange()
 {
     for (size_t i = 0; i < m_segments.size(); ++i) {
-        m_oldColourIndexes.push_back(m_segments[i]->getColourIndex());
-        m_segments[i]->setColourIndex(m_newColourIndex);
+        unsigned colour = m_segments[i]->getColourIndex();
+        m_segments[i]->setColourIndex(m_prevColours[i]);
+        m_prevColours[i] = colour;
     }
-    RosegardenDocument::currentDocument->slotDocColoursChanged();
-}
-
-void
-SegmentColourCommand::unexecute()
-{
-    for (size_t i = 0; i < m_segments.size(); ++i)
-        m_segments[i]->setColourIndex(m_oldColourIndexes[i]);
-
-    m_oldColourIndexes.clear();
-
-    RosegardenDocument::currentDocument->slotDocColoursChanged();
 }
 
 }

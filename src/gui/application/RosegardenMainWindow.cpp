@@ -75,6 +75,7 @@
 #include "commands/segment/RemoveTimeSignatureCommand.h"
 #include "commands/segment/SegmentAutoSplitCommand.h"
 #include "commands/segment/SegmentChangeTransposeCommand.h"
+#include "commands/segment/SegmentColourCommand.h"
 #include "commands/segment/SegmentJoinCommand.h"
 #include "commands/segment/SegmentLabelCommand.h"
 #include "commands/segment/SegmentReconfigureCommand.h"
@@ -201,7 +202,6 @@
 #include <QMessageBox>
 #include <QProcess>
 #include <QTemporaryFile>
-#include <QToolTip>
 #include <QByteArray>
 #include <QCursor>
 #include <QDataStream>
@@ -669,6 +669,11 @@ RosegardenMainWindow::closeEvent(QCloseEvent *event)
         settings.setValue("show_previews", findAction("show_previews")->isChecked());
         settings.setValue("show_segment_labels", findAction("show_segment_labels")->isChecked());
         settings.setValue("show_inst_segment_parameters", findAction("show_inst_segment_parameters")->isChecked());
+
+        settings.setValue("segment_color_dark", findAction("segment_color_dark")->isChecked());
+        settings.setValue("color_per_track", findAction("color_per_track")->isChecked());
+        settings.setValue("color_only_selected", findAction("color_only_selected")->isChecked());
+
         settings.endGroup();
 
         // Continue closing.
@@ -764,11 +769,20 @@ RosegardenMainWindow::setupActions()
     createAction("erase_range_tempos", SLOT(slotEraseRangeTempos()));
     createAction("delete", SLOT(slotDeleteSelectedSegments()));
     createAction("select_all", SLOT(slotSelectAll()));
-    createAction("color_default_only", SLOT(slotRecolorSegments()));
-    createAction("color_per_track", SLOT(slotRecolorSegments()));
+    createAction("clear_selection", SLOT(slotClearSelection()));
+    createAction("color_default_only", "");
+    createAction("color_per_track", "");
+    createAction("color_only_selected", "");
     createAction("color_instrument", SLOT(slotRecolorSegments()));
+    createAction("color_contrasting", SLOT(slotRecolorSegments()));
     createAction("color_random", SLOT(slotRecolorSegments()));
-    createAction("color_optimal", SLOT(slotRecolorSegments()))->setEnabled(false);
+
+    createAction("segment_color_dark", SLOT(slotSegmentColorMode()));
+    createAction("segment_color_bright", SLOT(slotSegmentColorMode()));
+    QActionGroup *segmentColorAg = new QActionGroup(this);
+    segmentColorAg->addAction(findAction("segment_color_dark"));
+    segmentColorAg->addAction(findAction("segment_color_bright"));
+
     createAction("add_tempo", SLOT(slotEditTempo()));
     createAction("change_composition_length", SLOT(slotChangeCompositionLength()));
     createAction("edit_markers", SLOT(slotEditMarkers()));
@@ -815,6 +829,7 @@ RosegardenMainWindow::setupActions()
     createAction("add_track", SLOT(slotAddTrack()));
     createAction("add_tracks", SLOT(slotAddTracks()));
     createAction("delete_track", SLOT(slotDeleteTrack()));
+    createAction("delete_empty_tracks", SLOT(slotDeleteEmptyTracks()));
     createAction("move_track_down", SLOT(slotMoveTrackDown()));
     createAction("move_track_up", SLOT(slotMoveTrackUp()));
     createAction("select_next_track", SLOT(slotSelectNextTrack()));
@@ -863,12 +878,6 @@ RosegardenMainWindow::setupActions()
     QMenu *fileOpenRecentMenu = findMenu("file_open_recent");
     connect(fileOpenRecentMenu, &QMenu::aboutToShow,
             this, &RosegardenMainWindow::setupRecentFilesMenu);
-
-    // This doesn't work (regardless of whether tooltips are set
-    // in .rc file or here in code).
-    if (findMenu("segment_colors")) {
-        findMenu("segment_colors")->setToolTipsVisible(true);
-    }
 
     QMenu *setTrackInstrumentMenu =
             findChild<QMenu *>("set_track_instrument");
@@ -1188,6 +1197,14 @@ RosegardenMainWindow::initView()
     } else {
         m_view->initChordNameRuler();
     }
+
+    // Must be done late because RosegardenMainViewWidget and/or
+    // its TrackEditor are constructed/swapped/etc and
+    // RosegardenMainViewWidget::setSegmentSelectedColorMode
+    // calls TrackEditor::getCompositionView()->setSegmentSelectedColorMode().
+    // If done early, CompositionView::m_selectedSegmentColorDark
+    // gets reset in CompositionView constructor.
+    slotSegmentColorMode();
 }
 
 void
@@ -1705,6 +1722,16 @@ RosegardenMainWindow::readOptions()
     opt = qStrToBool(settings.value("show_inst_segment_parameters", true));
     findAction("show_inst_segment_parameters")->setChecked(opt);
     slotHideShowParameterArea();
+
+    opt = qStrToBool(settings.value("segment_color_dark", true));
+    findAction("segment_color_dark")->setChecked(opt);
+    findAction("segment_color_bright")->setChecked(!opt);
+
+    opt = qStrToBool(settings.value("color_per_track", false));
+    findAction("color_per_track")->setChecked(opt);
+
+    opt = qStrToBool(settings.value("color_only_selected", false));
+    findAction("color_only_selected")->setChecked(opt);
 
     settings.endGroup();
 
@@ -2467,22 +2494,36 @@ RosegardenMainWindow::slotSelectAll()
 }
 
 void
+RosegardenMainWindow::slotClearSelection()
+{
+    m_view->slotClearSelection();
+}
+
+void
 RosegardenMainWindow::slotRecolorSegments()
 {
     QString menuName = sender()->objectName();
 
-    RG_WARNING << "slotRecolorSegments()"    // t4osDEBUG
-               << menuName;
-
-    bool defaultOnly = findAction("color_default_only")->isChecked();
-    bool perTrack    = findAction("color_per_track"   )->isChecked();
+    bool defaultOnly  = findAction("color_default_only" )->isChecked();
+    bool perTrack     = findAction("color_per_track"    )->isChecked();
+    bool selectedOnly = findAction("color_only_selected")->isChecked();
 
     if (menuName == "color_instrument")
-        m_view->recolorSegmentsInstrument(defaultOnly);
+        m_view->recolorSegmentsInstrument(defaultOnly, selectedOnly);
     else if (menuName == "color_random")
-        m_view->recolorSegmentsRandom(defaultOnly, perTrack);
-    else if (menuName == "color_optimal")
-        m_view->recolorSegmentsOptimal(defaultOnly, perTrack);
+        m_view->recolorSegmentsRandom(defaultOnly, selectedOnly, perTrack);
+    else if (menuName == "color_contrasting")
+        m_view->recolorSegmentsContrasting(defaultOnly, selectedOnly, perTrack);
+}
+
+void
+RosegardenMainWindow::slotSegmentColorMode()
+{
+    QAction *act = this->findAction("segment_color_dark");
+
+    if (act) {
+        m_view->setSegmentSelectedColorMode(act->isChecked());
+    }
 }
 
 void
@@ -3859,6 +3900,57 @@ RosegardenMainWindow::slotDeleteTrack()
     //VLADA
     //    m_view->slotSelectTrackSegments(trackId);
     //VLADA
+}
+
+// Delete non-audio tracks that don't contain segments, or only
+// contain segments without any Note On or Note off events.
+// The latter are common in imported MIDI files and aren't
+// displayed by RG.
+void
+RosegardenMainWindow::slotDeleteEmptyTracks()
+{
+    if (!m_view)
+        return ;
+
+    RosegardenDocument *document = RosegardenDocument::currentDocument;
+    Composition &composition = document->getComposition();
+
+    // Can't iterate through tracks finding empty ones because tracks
+    // don't hold list of segments in them. Instead have to do this
+    // ass-backward search for non-empty ones and subtract.
+    std::set<TrackId> nonEmptyTracks;
+    for (auto segment : composition.getSegments()) {
+        bool hasNotes = false;
+        for (auto event : *segment) {
+            if (event->isa("note")) {
+                hasNotes = true;
+                break;
+            }
+        }
+
+        if (hasNotes) nonEmptyTracks.insert(segment->getTrack());
+    }
+
+    std::vector<TrackId> emptyTracks;
+    for (auto idAndTrack : composition.getTracks()) {
+        InstrumentId instrumentId = idAndTrack.second->getInstrument();
+        Instrument  *instrument = document->getStudio().
+                                    getInstrumentById(instrumentId);
+        // Heeding dire warning in DeleteTracksCommand::execute() so
+        // not deleting audio tracks.
+        if (instrument->getType() == Instrument::Audio) continue;
+
+        auto nonEmptyTrack = nonEmptyTracks.find(idAndTrack.first);
+        if (nonEmptyTrack == nonEmptyTracks.end()) {
+            emptyTracks.push_back(idAndTrack.first);
+        }
+
+        // Don't delete all tracks, leave at least one. Unknown why
+        // (or if) RG can't handle, but maintaining current limitation.
+        if (composition.getTracks().size() - emptyTracks.size() <= 1) break;
+    }
+
+    m_view->slotDeleteTracks(emptyTracks);
 }
 
 void

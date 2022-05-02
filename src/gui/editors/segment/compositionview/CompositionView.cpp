@@ -4,10 +4,10 @@
   Rosegarden
   A MIDI and audio sequencer and musical notation editor.
   Copyright 2000-2022 the Rosegarden development team.
- 
+
   Other copyrights also apply to some parts of this work.  Please
   see the AUTHORS file and individual file headers for details.
- 
+
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License as
   published by the Free Software Foundation; either version 2 of the
@@ -80,6 +80,7 @@ CompositionView::CompositionView(RosegardenDocument *doc,
     m_trackDividerColor(GUIPalette::getColour(GUIPalette::TrackDivider)),
     m_showPreviews(false),
     m_showSegmentLabels(true),
+    m_selectedSegmentColorDark(true),
     m_segmentsLayer(viewport()->width(), viewport()->height()),
     //m_audioPreview(),
     //m_notationPreview(),
@@ -1067,12 +1068,22 @@ void CompositionView::drawRect(QPainter *p, const QRect &clipRect,
     // obliterate the previews.
     p->setClipRect(clipRect);
 
-    // For a selected segment, go with a darker fill.
+    // Color selected vs non-selected differentlyaccording to user-chosen mode
+    QColor fillColor = p->brush().color();
     if (isSelected) {
-        QColor fillColor = p->brush().color().darker(200);
-        p->setBrush(QBrush(fillColor));
+        // "Classic" RG mode, selected segments are dark, non-selected bright
+        if (m_selectedSegmentColorDark) {
+            p->setBrush(QBrush(fillColor.darker(200)));
+        }
+    }
+    else if (!m_selectedSegmentColorDark) {
+        // New alternate mode, selected segments are full color,
+        // non-selected are crosshatch pattern.
+        p->setBrush(QBrush(fillColor, Qt::DiagCrossPattern));
     }
 
+    // This never happens(??). See "#if 0" comment at end of
+    // CompositionView::drawIntersections().
     // For intersecting segments, go with a darker fill.
     if (intersectLvl > 0) {
         QColor fillColor = p->brush().color().darker(intersectLvl * 105);
@@ -1524,6 +1535,5 @@ void CompositionView::makeTrackPosVisible(int trackPos)
     // Make it visible.
     scrollVert(y);
 }
-
 
 }

@@ -697,6 +697,7 @@ set(rg_CPPS
   commands/segment/SegmentRepeatToCopyCommand.cpp
   commands/segment/SegmentQuickLinkCommand.cpp
   commands/segment/SegmentColourCommand.cpp
+  commands/segment/MultiSegmentColourCommand.cpp
   commands/segment/InsertRangeCommand.cpp
   commands/segment/AudioSegmentAutoSplitCommand.cpp
   commands/segment/AddTimeSignatureCommand.cpp

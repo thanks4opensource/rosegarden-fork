@@ -125,9 +125,14 @@ public:
     void addTrack(InstrumentId instrument, int position);
 
     // Various auto-recoloring of segments
-    void recolorSegmentsRandom    (bool defaultOnly, bool perTrack);
-    void recolorSegmentsInstrument(bool defaultOnly);
-    void recolorSegmentsOptimal   (bool defaultOnly, bool perTrack);
+    void recolorSegmentsInstrument(bool defaultOnly, bool selectedOnly);
+    void recolorSegmentsContrasting(bool defaultOnly, bool selectedOnly,
+                                    bool perTrack);
+    void recolorSegmentsRandom(bool defaultOnly, bool selectedOnly,
+                               bool perTrack);
+    // More for displaying selected vs non-selected segments
+    void setSegmentSelectedColorMode(bool selectedDark);
+
 
 public slots:
     void slotEditSegment(Segment*);
@@ -155,6 +160,7 @@ public slots:
     void slotSelectTrackSegments(int);
 
     void slotSelectAllSegments();
+    void slotClearSelection();
 
     /*
      * This is called from the canvas (actually the selector tool) moving out
@@ -288,7 +294,10 @@ private:
 
     static bool hasNonAudioSegment(const SegmentSelection &segments);
 
-    void getRecolorSegments(std::vector<Segment *> &segments, bool defaultOnly);
+    void getRecolorSegments(std::vector<Segment*> &segmentsToRecolor,
+                            std::vector<const Segment*>
+                                *segmentsToCheckExisting,
+                            bool defaultOnly, bool selectedOnly);
 
 
     // QWidget override

@@ -16,46 +16,41 @@
     COPYING included with this distribution for more information.
 */
 
-#ifndef RG_DELETETRACKSCOMMAND_H
-#define RG_DELETETRACKSCOMMAND_H
+#ifndef RG_MULTISEGMENTCOLOURCOMMAND_H
+#define RG_MULTISEGMENTCOLOURCOMMAND_H
 
+#include "base/Segment.h"
+#include "base/Selection.h"
 #include "document/Command.h"
 #include <QString>
 #include <vector>
 #include <QCoreApplication>
-#include "base/Track.h"
 
 
 namespace Rosegarden
 {
 
-class Track;
-class Segment;
-class Composition;
 
-
-class DeleteTracksCommand : public NamedCommand
+class MultiSegmentColourCommand : public NamedCommand
 {
-    Q_DECLARE_TR_FUNCTIONS(Rosegarden::DeleteTracksCommand)
+    Q_DECLARE_TR_FUNCTIONS(Rosegarden::MultiSegmentColourCommand)
 
 public:
-    DeleteTracksCommand(Composition *composition,
-                        std::vector<TrackId> trackIds);
-    ~DeleteTracksCommand() override;
+    MultiSegmentColourCommand(std::vector<Segment*> &segments);
+    ~MultiSegmentColourCommand() override;
 
-    static QString getGlobalName() { return tr("Delete Tracks..."); }
+    static QString getGlobalName()
+        { return tr("Change Segment Color..."); }
 
     void execute() override;
     void unexecute() override;
 
 protected:
-    Composition           *m_composition;
-    std::vector<TrackId>   m_trackIds;
-    std::vector<Track*>    m_tracks;
+    void exchange();
 
-    std::vector<Track*>    m_oldTracks;
-    std::vector<Segment*>  m_oldSegments;
-    bool                   m_detached;
+    std::vector<Segment*>       m_segments;
+    std::vector<unsigned int>   m_prevColours;
+    bool                        m_firstExecute;
 };
 
 

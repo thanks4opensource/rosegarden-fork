@@ -87,18 +87,26 @@
     <Action name="erase_range_tempos" text="Clear Range of Tempos" />
   <Separator/>
     <Action name="select_all" text="Select &amp;All Segments" shortcut="Ctrl+A" />
+    <Action name="clear_selection" text="C&amp;lear Selection" shortcut="Ctrl+Shift+A" />
     <Menu name="segment_colors" toolTipsVisible="true">
       <text>Segment colors</text>
+      <Action name="color_instrument" text="Instrument"
+       tooltip="Color segment by instrument name"/>
+      <Action name="color_contrasting" text="Contrasting"
+       tooltip="Maximum difference between colors" />
+      <Action name="color_random" text="Random"
+       tooltip="Random color"/>
       <Action name="color_default_only" text="Default only" checked="true"
        tooltip="Only affect segments with default color."/>
       <Action name="color_per_track" text="Per track" checked="true"
        tooltip="Same color for all segments in track." />
-      <Action name="color_instrument" text="Instrument"
-       tooltip="Color segment by instrument name"/>
-      <Action name="color_random" text="Random"
-       tooltip="Random color"/>
-      <Action name="color_optimal" text="Optimal"
-       tooltip="Maximum difference between colors (not implemented yet)" />
+      <Action name="color_only_selected" text="Only selected" checked="false"
+       tooltip="Only affected selected segments." />
+      <Menu name="segment_color_display">
+	<text>Display</text>
+        <Action name="segment_color_dark" text="Selected dark" checked="true" />
+        <Action name="segment_color_bright" text="Selected bright" checked="false" />
+      </Menu>
     </Menu>
   <Separator/>
     <Action name="options_configure" text="&amp;Preferences..." icon="configure" />
@@ -237,6 +245,7 @@
     <Action name="add_track" text="Add &amp;Track" icon="add_tracks" shortcut="Ctrl+T" />
     <Action name="add_tracks" text="&amp;Add Tracks..." shortcut="Ctrl+Shift+T" />
     <Action name="delete_track" text="D&amp;elete Track" icon="delete_track" shortcut="Ctrl+D" />
+    <Action name="delete_empty_tracks" text="Delete Empty Tracks" />
   <Separator/>
     <Action name="move_track_down" text="Move Track &amp;Down" icon="move_track_down" shortcut="Shift+Down" />
     <Action name="move_track_up" text="Mo&amp;ve Track Up" icon="move_track_up" shortcut="Shift+Up" />

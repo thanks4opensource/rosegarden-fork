@@ -63,7 +63,7 @@ class SegmentRect;
  * class works together with CompositionModelImpl to provide the composition
  * user interface (the segment canvas).
  */
-class CompositionView : public RosegardenScrollView 
+class CompositionView : public RosegardenScrollView
 {
     Q_OBJECT
 public:
@@ -98,6 +98,16 @@ public:
      * @see drawCompRectLabel()
      */
     void setShowSegmentLabels(bool labels)  { m_showSegmentLabels = labels; }
+
+    /**
+     * From menu: Edit > Segment colors > Display
+     *
+     * @see drawRect()
+     */
+    void setSegmentSelectedColorMode(bool darkSelected)
+    {
+        m_selectedSegmentColorDark = darkSelected;
+    }
 
     /// Set whether the segment items contain previews or not.
     /**
@@ -511,6 +521,7 @@ private:
 
     bool m_showPreviews;
     bool m_showSegmentLabels;
+    bool m_selectedSegmentColorDark;
 
     /// Layer that contains the segment rectangles.
     /**

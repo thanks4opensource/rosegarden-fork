@@ -516,7 +516,7 @@ MatrixWidget::setSegments(RosegardenDocument *document,
 
     m_chordNameRuler->setReady();
 
-    updateToCurrentSegment();
+    updateToCurrentSegment(true);  // true == set instrument playback override
 
     // If there is only one Segment, hide the widgets that are only needed
     // for multiple Segments.
@@ -529,6 +529,9 @@ MatrixWidget::setSegments(RosegardenDocument *document,
     setHorizontalZoomFactor(segments[0]->matrixHZoomFactor);
     setVerticalZoomFactor(segments[0]->matrixVZoomFactor);
 
+    // For updating note, current segment info bar, and segment changer
+    connect(m_document, &RosegardenDocument::docColoursChanged,
+            this, &MatrixWidget::slotDocColoursChanged);
 }
 
 void
@@ -860,7 +863,7 @@ MatrixWidget::previousSegment()
     if (s)
         m_scene->setCurrentSegment(s);
     updatePointer(m_document->getComposition().getPosition());
-    updateToCurrentSegment();
+    updateToCurrentSegment(true);  // true == set instrument playback override
 }
 
 void
@@ -873,7 +876,7 @@ MatrixWidget::nextSegment()
     if (s)
         m_scene->setCurrentSegment(s);
     updatePointer(m_document->getComposition().getPosition());
-    updateToCurrentSegment();
+    updateToCurrentSegment(true);  // true == set instrument playback override
 }
 
 Device *
@@ -1429,7 +1432,7 @@ MatrixWidget::slotSegmentChangerMoved(int v)
     }
 
     m_lastSegmentChangerValue = v;
-    updateToCurrentSegment();
+    updateToCurrentSegment(true);  // true == set instrument playback override
 
     // If we are switching between a pitched instrument segment and a pecussion
     // segment or betwween two percussion segments with different percussion
@@ -1444,7 +1447,7 @@ MatrixWidget::slotSegmentChangerMoved(int v)
 }
 
 void
-MatrixWidget::updateToCurrentSegment()
+MatrixWidget::updateToCurrentSegment(bool setInstrumentOverride)
 {
     Composition &composition = m_document->getComposition();
     const Segment *segment = m_scene->getCurrentSegment();
@@ -1480,9 +1483,11 @@ MatrixWidget::updateToCurrentSegment()
                                     getInstrumentById(instrumentId);
     if (!instrument) return;
 
-    // Set to play MIDI with current segment's instrument
-    RosegardenSequencer::getInstance()->setTrackInstrumentOverride(
-        instrumentId, instrument->getNaturalChannel());
+    if (setInstrumentOverride) {
+        // Set to play MIDI with current segment's instrument
+        RosegardenSequencer::getInstance()->setTrackInstrumentOverride(
+            instrumentId, instrument->getNaturalChannel());
+    }
 
     QString programName = QString::fromStdString(instrument->getProgramName());
     if (programName == "") programName = tr("<unnamed>");
@@ -1703,7 +1708,7 @@ MatrixWidget::slotPlayPreviewNote(Segment *segment, int pitch)
 }
 
 void
-MatrixWidget::slotDocumentModified(bool)
+MatrixWidget::slotDocumentModified(bool /*arg*/)
 {
     // This covers the test case when the user toggles the "Percussion"
     // checkbox on the MIPP.  Also covers the test case where the key
@@ -1714,35 +1719,18 @@ MatrixWidget::slotDocumentModified(bool)
     //     the UI must update.  Unfortunately, the design of MatrixWidget
     //     does not include an updateWidgets().  We'll probably have to
     //     redesign and rewrite MatrixWidget before this becomes possible.
-
-    // To make sure MIDI input plays the matrix editor's current
-    // segement's track's instrument, updateToCurrentSegment()
-    // calls Composition::setSelectedTrack, and
-    // Composition::notifyTrackSelectionChanged(), the latter to update
-    // the CompositionView. But slotDocumentModified() is called on
-    // any/all document changes, including the user changing the current
-    // track in the main RG window. In that case, if we continue here
-    // we'll immediately change it back. But the normal case of the
-    // matrix editor changing it does require calling the Composition
-    // methods -- if not, the main window UI is incorrect which in
-    // particular causes a problem if the user does Tracks -> Delete Track
-    // and a different track is deleted than the on shown as current.
-    // The following code detects and short-circuits the problem .
-    // Note that the case of the current selected track changing because
-    // it was deleted is handled by MatrixView::slotSegmentDeleted().
-#if 0
-    Composition &composition = m_document->getComposition();
-    const Segment *segment = m_scene->getCurrentSegment();
-    if (segment && segment->getTrack() != composition.getSelectedTrack())
-        return;
-    generatePitchRuler();
-    updateToCurrentSegment();
-#else
     if (!m_scene->getCurrentSegment()) {
         generatePitchRuler();
-        updateToCurrentSegment();
+        updateToCurrentSegment(false);  // false == don't set instrument
+                                        // playback override
     }
-#endif
+}
+
+void
+MatrixWidget::slotDocColoursChanged()
+{
+    m_scene->updateAllSegmentsColors();
+    updateToCurrentSegment(false);  // don't set instrument playback override
 }
 
 void
