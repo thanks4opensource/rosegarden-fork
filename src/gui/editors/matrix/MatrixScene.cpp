@@ -73,8 +73,8 @@ MatrixScene::MatrixScene() :
     m_selection(nullptr),
     m_highlightType(HT_BlackKeys)
 {
-    connect(CommandHistory::getInstance(), SIGNAL(commandExecuted()),
-            this, SLOT(slotCommandExecuted()));
+    connect(CommandHistory::getInstance(), &CommandHistory::commandExecuted,
+            this, &MatrixScene::slotCommandExecuted);
 }
 
 MatrixScene::~MatrixScene()

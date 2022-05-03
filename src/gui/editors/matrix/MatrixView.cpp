@@ -180,8 +180,8 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     slotUpdateMenuStates();
     slotTestClipboard();
 
-    connect(CommandHistory::getInstance(), SIGNAL(commandExecuted()),
-            this, SLOT(slotUpdateMenuStates()));
+    connect(CommandHistory::getInstance(), &CommandHistory::commandExecuted,
+            this, &MatrixView::slotUpdateMenuStates);
 
     connect(m_matrixWidget, &MatrixWidget::selectionChanged,
             this, &MatrixView::slotUpdateMenuStates);
@@ -508,6 +508,43 @@ MatrixView::setupActions()
     createAction("retrograde_invert", SLOT(slotRetrogradeInvert()));
     createAction("jog_left", SLOT(slotJogLeft()));
     createAction("jog_right", SLOT(slotJogRight()));
+
+    QMenu *addControlRulerMenu = new QMenu;
+    Controllable *c =
+        dynamic_cast<MidiDevice *>(getCurrentDevice());
+    if (!c) {
+        c = dynamic_cast<SoftSynthDevice *>(getCurrentDevice());
+    }
+
+    if (c) {
+
+        const ControlList &list = c->getControlParameters();
+
+        QString itemStr;
+
+        for (ControlList::const_iterator it = list.begin();
+             it != list.end(); ++it) {
+
+            // Pitch Bend is treated separately now, and there's no
+            // point in adding "unsupported" controllers to the menu,
+            // so skip everything else
+            if (it->getType() != Controller::EventType) continue;
+
+            const QString hexValue =
+                QString::asprintf("(0x%x)", it->getControllerNumber());
+
+            // strings extracted from data files must be QObject::tr()
+            itemStr = QObject::tr("%1 Controller %2 %3")
+                .arg(QObject::tr(it->getName().c_str()))
+                .arg(it->getControllerNumber())
+                .arg(hexValue);
+
+            addControlRulerMenu->addAction(itemStr);
+        }
+    }
+
+    connect(addControlRulerMenu, &QMenu::triggered,
+            this, &MatrixView::slotAddControlRuler);
 
     // Code in setupAddRulerActions() below was here.
     // See call in constructor for reason why moved.

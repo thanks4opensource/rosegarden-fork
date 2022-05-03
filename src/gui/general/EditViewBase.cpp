@@ -16,6 +16,7 @@
 */
 
 #define RG_MODULE_STRING "[EditViewBase]"
+#define RG_NO_DEBUG_PRINT
 
 #include "EditViewBase.h"
 
@@ -66,8 +67,8 @@ EditViewBase::EditViewBase(std::vector<Segment *> segments,
     m_doc = RosegardenDocument::currentDocument;
     RosegardenDocument::currentDocument->attachEditView(this);
 
-    connect(CommandHistory::getInstance(), SIGNAL(commandExecuted()),
-            this, SLOT(slotTestClipboard()));
+    connect(CommandHistory::getInstance(), &CommandHistory::commandExecuted,
+            this, &EditViewBase::slotTestClipboard);
 }
 
 EditViewBase::~EditViewBase()
@@ -320,7 +321,9 @@ EditViewBase::getTitle(const QString& view)
 {
     QString title;
     QString indicator = (RosegardenDocument::currentDocument->isModified() ? "*" : "");
-    if (m_segments.size() == 1) {
+    int nsegs = m_segments.size();
+    RG_DEBUG << "getTitle segs:" << nsegs;
+    if (nsegs == 1) {
 
         TrackId trackId = m_segments[0]->getTrack();
         Track *track =

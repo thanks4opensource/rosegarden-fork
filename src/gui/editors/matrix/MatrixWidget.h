@@ -408,7 +408,8 @@ private:
      * For the Percussion matrix editor, we ignore key release events from
      * the PitchRuler.
      */
-     bool m_drumMode;
+    bool m_drumMode;
+
     // For determining if pitch ruler needs to be regenerated when
     // changing segments.
     enum class PrevPitchRulerType {NONE, PIANO, PERCUSSION} m_prevPitchRulerType;

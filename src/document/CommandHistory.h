@@ -32,7 +32,7 @@ class QTimer;
 
 #include "base/TimeT.h"
 
-namespace Rosegarden 
+namespace Rosegarden
 {
 
 class Command;
@@ -74,7 +74,7 @@ public:
      * The command will be executed before being added
      */
     void addCommand(Command *command);
-    
+
     /// Return the maximum number of items in the undo history.
     int getUndoLimit() const { return m_undoLimit; }
 
@@ -86,7 +86,7 @@ public:
 
     /// Set the maximum number of items in the redo history.
     void setRedoLimit(int limit);
-    
+
     /// Return the maximum number of items visible in undo and redo menus.
     int getMenuLimit() const { return m_menuLimit; }
 
@@ -120,7 +120,7 @@ public slots:
 protected slots:
     void undoActivated(QAction *);
     void redoActivated(QAction *);
-    
+
 signals:
     /**
      * Emitted just before commandExecuted() so that linked segments can
@@ -132,9 +132,6 @@ signals:
      * Emitted whenever a command has just been executed or
      * unexecuted, whether by addCommand, undo, or redo.  Note in
      * particular that this is emitted by both undo and redo.
-     *
-     * ??? rename: commandExecutedOrUn(), this would make it easier
-     *             to use Qt5 connect() syntax.
      */
     void commandExecuted();
 
@@ -142,8 +139,10 @@ signals:
      * Emitted whenever a command has just been executed, whether by
      * addCommand or redo.  Note that this is not emitted by undo,
      * which emits commandUnexecuted(Command *) instead.
+     *
+     * ??? Appears to be unused.
      */
-    void commandExecuted(Command *);
+    //void commandExecuted2(Command *);
 
     /**
      * Emitted whenever a command has just been unexecuted, whether by
@@ -187,10 +186,6 @@ protected:
     QAction *m_undoAction;
     /// Edit > Redo on all menus.
     QAction *m_redoAction;
-    /// RosegardenMainWindow toolbar undo.
-    QAction *m_undoMenuAction;
-    /// RosegardenMainWindow toolbar redo.
-    QAction *m_redoMenuAction;
 
     QMenu *m_undoMenu;
     QMenu *m_redoMenu;
@@ -223,7 +218,7 @@ protected:
 
     // pointer position
     timeT m_pointerPosition;
-    
+
 };
 
 }
