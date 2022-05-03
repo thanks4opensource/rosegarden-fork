@@ -62,7 +62,7 @@ protected slots:
 protected:
     MatrixMover(MatrixWidget *);
 
-    void setBasicContextHelp(bool ctrlPressed = false);
+    void setBasicContextHelp(const MatrixMouseEvent *e);
 
     MatrixElement *m_currentElement;
     /// The Event associated with m_currentElement.

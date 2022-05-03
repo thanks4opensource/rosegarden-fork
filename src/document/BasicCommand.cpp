@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -35,7 +35,7 @@
 
 namespace Rosegarden
 {
-    
+
 BasicCommand::BasicCommand(const QString &name, Segment &segment,
                            timeT start, timeT end, bool bruteForceRedo) :
     NamedCommand(name),
@@ -214,6 +214,10 @@ BasicCommand::execute()
 {
     requireSegment();
 
+    RG_WARNING << "execute()"   // t4osDEBUG
+               << getName()
+               << m_segment->getLabel();
+
     RG_DEBUG << getName() << "before execute";
     RG_DEBUG << getName() << "segment" <<
                 m_segment->getStartTime() << m_segment->getEndTime();
@@ -226,7 +230,7 @@ BasicCommand::execute()
         copyFrom(m_redoEvents);
      else
         modifySegment();
-    
+
     // calculate the start and end of the modified region
     calculateModifiedStartEnd();
 
@@ -319,7 +323,7 @@ BasicCommand::unexecute()
     RG_DEBUG << *m_segment;
     RG_DEBUG << getName() << "segment end";
 }
-    
+
 void
 BasicCommand::copyTo(QSharedPointer<Segment> dest)
 {
@@ -345,7 +349,7 @@ BasicCommand::copyTo(QSharedPointer<Segment> dest)
         dest->insert(new Event(**i));
     }
 }
-   
+
 void BasicCommand::copyFrom(QSharedPointer<Segment> source, bool wholeSegment)
 {
     requireSegment();
@@ -442,25 +446,25 @@ BasicCommand::calculateModifiedStartEnd()
     } else {
         Segment::const_iterator i = m_segment->begin();
         Segment::const_iterator j = m_originalEvents->begin();
-        
+
         while (true) {
             // If we are at the end of m_segment, we're done.
             if (i == m_segment->end())
                 break;
-            
+
             // If we are at the end of the undo buffer, we're done.
             if (j == m_originalEvents->end())
                 break;
-            
+
             const Event *segEvent = (*i);
             const Event *savedEvent = (*j);
-            
+
             m_modifiedEventsStart = std::min(savedEvent->getAbsoluteTime(),
                                              segEvent->getAbsoluteTime()) - 1;
             // If we found a changed Event, we're done searching.
             if (!segEvent->isCopyOf(*savedEvent))
                 break;
-            
+
             // Try the next Event.
             ++i;
             ++j;
@@ -494,13 +498,13 @@ BasicCommand::calculateModifiedStartEnd()
         // Try the previous Event.
         ++ir;
         ++jr;
-    }        
+    }
 
 
     // End before start?  Go with a null range.
-    if (m_modifiedEventsEnd < m_modifiedEventsStart) 
+    if (m_modifiedEventsEnd < m_modifiedEventsStart)
         m_modifiedEventsEnd = m_modifiedEventsStart;
-        
+
     RG_DEBUG << "calculateModifiedStartEnd: " << m_modifiedEventsStart <<
         m_modifiedEventsEnd;
 }

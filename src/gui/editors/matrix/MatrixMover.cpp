@@ -54,6 +54,8 @@ MatrixMover::MatrixMover(MatrixWidget *parent) :
     m_quickCopy(false),
     m_lastPlayedPitch(-1)
 {
+ // RG_WARNING << "MatrixMover::MatrixMover";     // t4osDEBUG
+
     createAction("select", SLOT(slotSelectSelected()));
     createAction("draw", SLOT(slotDrawSelected()));
     createAction("erase", SLOT(slotEraseSelected()));
@@ -97,13 +99,36 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
     // accident, and will probably fly.  Especially since the multi-segment
     // matrix is new, and we're defining the terms of how it works.
     if (e->element->getSegment() != segment) {
-
+#if 0   // t4os, above written 2009-12-18 05:01:46 +0000, will implement now
         RG_WARNING << "handleLeftButtonPress(): Clicked element not owned by active segment.  Returning...";
         return;
+#else
+        // Switch active segemnt on alt-click
+        if (e->modifiers & Qt::AltModifier) {
+            // But don't do if also shift or ctrl. Gets too confusing
+            // for both code and user to simultaneously switch segments
+            // and move/copy notes and/or add/subtract selection.
+            if (e->modifiers & (Qt::ControlModifier | Qt::ShiftModifier)) {
+                return;
+            }
+            m_widget->getScene()->setCurrentSegment(
+                const_cast<Segment*>(e->element->getSegment()));
+            m_widget->clearSelection();
+            m_widget->updateToCurrentSegment(true); // true == change instrument
+            m_widget->generatePitchRuler(); //in case normal->drum or vice-versa
+            m_currentViewSegment = nullptr;
+            m_currentElement = nullptr;
+            m_event = nullptr;
+            setBasicContextHelp(e);
+            return;  // do nothing more -- wait for fresh click in new segment
+        } else {
+            // Not an error, no need for bogus stdout/stderr warning.
+            return;
+        }
+#endif
     }
 
     m_currentViewSegment = e->viewSegment;
-
     m_currentElement = e->element;
     m_event = m_currentElement->event();
 
@@ -127,12 +152,14 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
 
     if (selection) {
         EventSelection *newSelection;
+        bool didShiftRemove = false;
 
         if ((e->modifiers & Qt::ShiftModifier) ||
             selection->contains(m_event)) {
             newSelection = new EventSelection(*selection);
         } else {
-            newSelection = new EventSelection(m_currentViewSegment->getSegment());
+            newSelection = new EventSelection(m_currentViewSegment->
+                                              getSegment());
         }
 
         // if the selection already contains the event, remove it from the
@@ -140,12 +167,21 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
         if (selection->contains(m_event)) {
             if (e->modifiers & Qt::ShiftModifier) {
                 newSelection->removeEvent(m_event);
+                didShiftRemove = true;
             }
         } else {
             newSelection->addEvent(m_event);
         }
 
         m_scene->setSelection(newSelection, true);
+
+        if (didShiftRemove) {
+            m_currentElement = nullptr;
+            m_event = nullptr;
+            setBasicContextHelp(e);
+            return;
+        }
+
         selection = newSelection;
     } else {
         m_scene->setSingleSelectedEvent(m_currentViewSegment,
@@ -175,6 +211,7 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
                  selection->getSegmentEvents().begin();
              i != selection->getSegmentEvents().end(); ++i) {
 
+            RG_WARNING << "handleLeftButtonPress() new MatrixElement";  // t4osDEBUG
             MatrixElement *duplicate = new MatrixElement
                 (m_scene, new Event(**i),
                  m_widget->isDrumMode(), pitchOffset,
@@ -183,24 +220,30 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
             m_duplicateElements.push_back(duplicate);
         }
     }
+
+    setBasicContextHelp(e);
 }
 
 FollowMode
 MatrixMover::handleMouseMove(const MatrixMouseEvent *e)
 {
+ // RG_WARNING << "handleMouseMove()" << e;   // t4osDEBUG
+
     if (!e) return NO_FOLLOW;
 
     //RG_DEBUG << "handleMouseMove() snapped time = " << e->snappedLeftTime;
 
-    setBasicContextHelp(e->modifiers & Qt::ControlModifier);
+    setBasicContextHelp(e);
 
     if (!m_currentElement || !m_currentViewSegment) return NO_FOLLOW;
 
+#if 0   // t4os
     if (getSnapGrid()->getSnapSetting() != SnapGrid::NoSnap) {
         setContextHelp(tr("Hold Shift to avoid snapping to beat grid"));
     } else {
         clearContextHelp();
     }
+#endif
 
     timeT newTime = e->snappedLeftTime - m_clickSnappedLeftDeltaTime;
     int newPitch = e->pitch;
@@ -223,9 +266,10 @@ MatrixMover::handleMouseMove(const MatrixMouseEvent *e)
     long pitchOffset = selection->getSegment().getTranspose();
     diffPitch += (pitchOffset * -1);
 
+#if 0   // t4os
     for (EventContainer::iterator it =
              selection->getSegmentEvents().begin();
-         it != selection->getSegmentEvents().end(); ++it) {
+         it != selection->getSegmentEvents().end(); ++it)
 
         MatrixElement *element = nullptr;
         ViewElementList::iterator vi = m_currentViewSegment->findEvent(*it);
@@ -233,7 +277,10 @@ MatrixMover::handleMouseMove(const MatrixMouseEvent *e)
             element = static_cast<MatrixElement *>(*vi);
         }
         if (!element) continue;
-
+#else
+    for (MatrixElement *element : m_currentViewSegment->getSelectedElements())
+#endif
+    {
         timeT diffTime = element->getViewAbsoluteTime() -
             m_currentElement->getViewAbsoluteTime();
 
@@ -242,9 +289,11 @@ MatrixMover::handleMouseMove(const MatrixMouseEvent *e)
             epitch = element->event()->get<Int>(PITCH);
         }
 
+        bool setPen = false;
         element->reconfigure(newTime + diffTime,
                              element->getViewDuration(),
-                             epitch + diffPitch);
+                             epitch + diffPitch,
+                             setPen);
 
         element->setSelected(true);
     }
@@ -402,13 +451,17 @@ MatrixMover::handleMouseRelease(const MatrixMouseEvent *e)
     m_currentElement = nullptr;
     m_event = nullptr;
 
-    setBasicContextHelp();
+#if 0   // t4osDEBUG
+    setBasicContextHelp(e);
+#else
+    setBasicContextHelp(nullptr);
+#endif
 }
 
 void MatrixMover::ready()
 {
     m_widget->setCanvasCursor(Qt::SizeAllCursor);
-    setBasicContextHelp();
+    setBasicContextHelp(nullptr);
 }
 
 void MatrixMover::stow()
@@ -416,22 +469,99 @@ void MatrixMover::stow()
     // Nothing of this vestigial code remains in modern Qt Rosegarden.
 }
 
-void MatrixMover::setBasicContextHelp(bool ctrlPressed)
+void MatrixMover::setBasicContextHelp(const MatrixMouseEvent *e)
 {
+ // RG_WARNING << "setBasicContextHelp()" << e;   // t4osDEBUG
+ // if (e) RG_WARNING << e->element;   // t4osDEBUG
+
+    bool mouseButton     = false;
+ // bool ctrlPressed     = false;
+ // bool shiftPressed    = false;
+    bool altPressed      = false;
+    bool onNote          = false;
+    bool inActiveSegment = false;
+    const Segment *newSegment = nullptr;
+
+    if (e) {
+        mouseButton     = static_cast<bool>(e->buttons);  // t4osDEBUG
+     // ctrlPressed     = e->modifiers & Qt::ControlModifier;
+        altPressed      = e->modifiers & Qt::AltModifier;
+     // shiftPressed    = e->modifiers & Qt::ShiftModifier;
+        onNote          = e->element;
+        if (e->element) {
+            newSegment = e->element->getSegment();
+            inActiveSegment = onNote &&
+                              newSegment == m_scene->getCurrentSegment();
+        }
+    }
+
+    const EventSelection *selection = m_scene->getSelection();
+    unsigned selectionSize = selection ? selection->getAddedEvents() : 0;
+#if 0
+    bool inSelection = e && e->element && selection &&
+                        selection->contains(e->element->getEvent());
+#endif
+
+    QString msg("");
+
+ // RG_WARNING << m_currentElement << mouseButton;  // t4osDEBUG
+
+    if (m_currentElement && mouseButton && !altPressed) {
+        if (selectionSize  > 0) {
+            msg = tr("Move");
+            if (selectionSize == 1) msg += tr(" note");
+            else                    msg += tr(" notes");
+            msg += tr(", release mouse button to place.");
+        }
+    } else if (onNote) {
+        if (inActiveSegment) {
+#if 1
+            msg = ("Click/drag to move, Ctrl-click/drag to copy, "
+                   "Shift-click to add or remove from selection.");
+#else
+            if (ctrlPressed) msg = tr("Click and drag to copy");
+            else             msg = tr("Click and drag to move");
+
+            if (selectionSize > 1) msg += tr(" selection");
+            else                   msg += tr(" note");
+
+            if (!ctrlPressed) msg += tr(", or hold Ctrl to copy");
+
+            if (shiftPressed) msg += tr(", click to");
+            else              msg += tr(", or Shift-click to");
+
+            if (inSelection) msg += tr(" remove from selection.");
+            else             msg += tr(" add to selection.");
+#endif
+        } else {
+            msg =   tr("Alt-click to switch to")
+                  + m_widget->segmentTrackInstrumentLabel(
+                    " %5 (Track %1, %2, %3, %4)", newSegment);
+        }
+    }
+    else msg = tr("Hover over note to move/copy/select/deselect "
+                  "or switch active segment.");
+
+    setContextHelp(msg);
+
+#if 0
     EventSelection *selection = m_scene->getSelection();
     if (!selection || selection->getAddedEvents() < 2) {
         if (!ctrlPressed) {
-            setContextHelp(tr("Click and drag to move a note; hold Ctrl as well to copy it"));
+            setContextHelp(tr("Click and drag to move a note; "
+                              "hold Ctrl as well to copy it"));
         } else {
             setContextHelp(tr("Click and drag to copy a note"));
         }
     } else {
         if (!ctrlPressed) {
-            setContextHelp(tr("Click and drag to move selected notes; hold Ctrl as well to copy"));
+            setContextHelp(tr("Click and drag to move selected notes; "
+                              "hold Ctrl as well to copy"));
         } else {
             setContextHelp(tr("Click and drag to copy selected notes"));
         }
     }
+#endif
 }
 
 QString MatrixMover::ToolName() { return "mover"; }

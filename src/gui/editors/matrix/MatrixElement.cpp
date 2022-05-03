@@ -50,16 +50,30 @@ MatrixElement::MatrixElement(MatrixScene *scene, Event *event,
                              const Segment *segment) :
     ViewElement(event),
     m_scene(scene),
+    m_event(event),
     m_drumMode(drum),
     m_drumDisplay(drum),
     m_current(true),
+    m_selected(false),
     m_noteItem(nullptr),
     m_drumItem(nullptr),
     m_textItem(nullptr),
     m_pitchOffset(pitchOffset),
+    m_pitch(255),
     m_segment(segment)
 {
     RG_DEBUG << "MatrixElement()";
+
+#if 1   // t4osDEBUG
+ // long pitch = 60;
+    event->get<Int>(BaseProperties::PITCH, m_pitch);
+    RG_WARNING << "MatrixElement"
+                << this
+                << m_pitch
+                << event->getAbsoluteTime()
+                << event->getDuration();
+#endif
+
     if (segment && scene && segment != scene->getCurrentSegment()) {
         m_current = false;
     }
@@ -101,19 +115,36 @@ MatrixElement::reconfigure(timeT time, timeT duration)
 }
 
 void
-MatrixElement::reconfigure(timeT time, timeT duration, int pitch)
+MatrixElement::reconfigure(timeT time, timeT duration, int pitch, bool setPen)
 {
     long velocity = 100;
     event()->get<Int>(BaseProperties::VELOCITY, velocity);
 
-    reconfigure(time, duration, pitch, velocity);
+    reconfigure(time, duration, pitch, velocity, setPen);
 }
 
 void
-MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
+MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity,
+                           bool setPen)
 {
     RG_DEBUG << "reconfigure" << time << duration <<
         pitch << velocity << m_current;
+
+#if 0   // t4osDEBUG
+    RG_WARNING << "reconfigure()"   // t4osDEBUG
+               << this
+               << m_segment->getLabel()
+               << m_pitch
+               << "->"
+               << pitch
+               << "@"
+               << time
+               << "+"
+               << duration
+               << "v"
+               << velocity;
+    m_pitch = pitch;
+#endif
 
     const RulerScale *scale = m_scene->getRulerScale();
     int resolution = m_scene->getYResolution();
@@ -148,20 +179,18 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
     // on various modes and settings. Is cheaper to keep both around
     // with inactive one set to hide() vs dynamically creating/deleting
     // and/or adding/removing from scene.
-    double fres(resolution + 1);
+    /*double*/ qreal fres(resolution + 1);
     if (m_drumDisplay) {
         if (m_noteItem) m_noteItem->hide();
         if (m_drumItem) m_drumItem->show();
         else            m_drumItem = m_scene->graphicsPolyPool.getFrom();
-        QPolygonF polygon;
-        polygon << QPointF(0, 0)
-                << QPointF(fres/2, fres/2)
-                << QPointF(0, fres)
-                << QPointF(-fres/2, fres/2)
-                << QPointF(0, 0);
+        QPolygonF polygon = drumPolygon(fres, 0.0);
         m_drumItem->setPolygon(polygon);
-        m_drumItem->setPen
-            (QPen(GUIPalette::getColour(GUIPalette::MatrixElementBorder), 0));
+        if (setPen) {
+            m_drumItem->setPen
+                (QPen(GUIPalette::getColour(GUIPalette::MatrixElementBorder),
+                0));
+        }
         m_drumItem->setBrush(QBrush(colour, brushPattern));
         m_drumItem->setPos(x0, pitchy);
         m_drumItem->setZValue(m_current ? ACTIVE_SEGMENT_NOTE_Z
@@ -179,8 +208,11 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
         }
         QRectF rect(0, 0, width, fres);
         m_noteItem->setRect(rect);
-        m_noteItem->setPen
-            (QPen(GUIPalette::getColour(GUIPalette::MatrixElementBorder), 0));
+        if (setPen) {
+            m_noteItem->setPen
+                (QPen(GUIPalette::getColour(GUIPalette::MatrixElementBorder),
+                0));
+        }
         m_noteItem->setBrush(QBrush(colour, brushPattern));
         m_noteItem->setPos(x0, pitchy);
         m_noteItem->setZValue(m_current ? ACTIVE_SEGMENT_NOTE_Z
@@ -232,6 +264,17 @@ MatrixElement::isNote() const
     return event()->isa(Note::EventType);
 }
 
+QPolygonF MatrixElement::drumPolygon(qreal resolution, qreal outline)
+{
+    QPolygonF polygon;
+    polygon << QPointF(-outline, -outline)
+            << QPointF(resolution * 0.5 + outline, resolution * 0.5 + outline)
+            << QPointF(-outline, resolution + outline)
+            << QPointF(-resolution * 0.5 + outline, resolution * 0.5 + outline)
+            << QPointF(-outline, -outline);
+    return polygon;
+}
+
 QAbstractGraphicsShapeItem*
 MatrixElement::getActiveItem()
 {
@@ -247,9 +290,22 @@ void
 MatrixElement::setSelected(bool selected)
 {
     RG_DEBUG << "setSelected" << event()->getAbsoluteTime() << selected;
+    if (selected == m_selected) return;
 
     QAbstractGraphicsShapeItem *item = getActiveItem();
     if (!item) return;
+
+#if 0   // t4osDEBUG
+    RG_WARNING << "setSelected()"   // t4osDEBUG
+               << m_segment->getLabel()
+               << item->pos()
+               << m_selected
+               << "->"
+               << selected;
+#endif
+
+    static const qreal OUTLINE = 1.0,
+                       DOUBLE = 2.0;
 
     if (selected) {
         // Outline in default blue for velocity color mode, otherwise
@@ -265,13 +321,35 @@ MatrixElement::setSelected(bool selected)
                                     (item->brush().color().hue() + 180) % 360,
                                     255, 224);
         }
-        QPen pen(selectionColor, 2, Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin);
-        pen.setCosmetic(!m_drumDisplay);
+
+        float res = m_scene->getYResolution() + 1;
+        if (item == m_noteItem) {
+            QRectF rect = m_noteItem->rect();
+         // RG_WARNING << rect;  // t4osDEBUG
+            rect.adjust(OUTLINE, OUTLINE, -OUTLINE, -OUTLINE);
+            m_noteItem->setRect(rect);
+         // RG_WARNING  << rect << '\n';     // t4osDEBUG
+        } else {
+            QPolygonF polygon = drumPolygon(res, OUTLINE);
+            m_drumItem->setPolygon(polygon);
+        }
+
+     // pen.setCosmetic(!m_drumDisplay);
+        QPen pen(selectionColor, DOUBLE, Qt::SolidLine, Qt::SquareCap,
+                 Qt::MiterJoin);
         item->setPen(pen);
     } else {
+        if (item == m_noteItem) {
+            QRectF rect = m_noteItem->rect();
+         // RG_WARNING << rect;  // t4osDEBUG
+            rect.adjust(-OUTLINE, -OUTLINE, OUTLINE, OUTLINE);
+         // RG_WARNING  << rect << '\n';     // t4osDEBUG
+            m_noteItem->setRect(rect);
+        }
         item->setPen
             (QPen(GUIPalette::getColour(GUIPalette::MatrixElementBorder), 0));
     }
+    m_selected = selected;
 }
 
 void

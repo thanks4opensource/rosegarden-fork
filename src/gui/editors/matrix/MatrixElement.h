@@ -69,18 +69,23 @@ public:
     void reconfigure(timeT time, timeT duration);
 
     /// Adjust the item to reflect the given values, not those of our event
-    void reconfigure(timeT time, timeT duration, int pitch);
+    void reconfigure(timeT time, timeT duration, int pitch, bool setPen = true);
 
     // See comment at m_segment
     const Segment *getSegment() const  { return m_segment; }
 
     MatrixScene *getScene() { return m_scene; }
 
+    // Need for tools to know if MatrixMouseEvent is in selection
+    Event *getEvent() { return m_event; }
+
     static MatrixElement *getMatrixElement(QGraphicsItem *);
 
     void setColor();
 
     void setDrumMode(bool isDrum) { m_drumMode = isDrum;}
+
+    bool isSelected() const { return m_selected; }
 
     // Z values for occlusion/layering of object in graph display.
     // Diffence between NORMAL_ and ACTIVE_  needed when notes from
@@ -104,9 +109,11 @@ protected:
                      GRAY_BLUE_COMPONENT = 200;
 
     MatrixScene *m_scene;
+    Event* const m_event;
     bool m_drumMode;
     bool m_drumDisplay;
     bool m_current;
+    bool m_selected;
     QGraphicsRectItem *m_noteItem;
     QGraphicsPolygonItem *m_drumItem;
     QGraphicsSimpleTextItem *m_textItem;
@@ -121,6 +128,9 @@ protected:
      */
     long m_pitchOffset;
 
+    long m_pitch;   // t4osDEBUG: cached to avoid crash fetching from
+                    // m_event in destructor debug print
+
     // Bug #1624: Allows MatrixPainter::handleLeftButtonPress() and
     // other MatrixSomeClass::handleSomeButtonSomeAction() methods to tell
     // if existing note at same pitch/time as new one being created is
@@ -130,6 +140,7 @@ protected:
     // a MatrixMouseEvent) so Segment member must be here instead.
     // Future work: Might also allow elimination of m_pitchOffset, above.
     const Segment *m_segment;
+
 
     // Common code used by reconfigure(timeT, timeT, int, int),
     // setCurrent(), and setColor().
@@ -142,11 +153,14 @@ protected:
     // Common code used by setSelected() and setCurrent()
     QAbstractGraphicsShapeItem *getActiveItem();
 
+    // Common code used by reconfigure(timeT, timeT, int, int)
+    // and setSelected()
+    static QPolygonF drumPolygon(qreal resolution, qreal outline);
 
 private:
     /// Adjust the item to reflect the given values, not those of our event
-    void reconfigure(timeT time, timeT duration, int pitch, int velocity);
-
+    void reconfigure(timeT time, timeT duration, int pitch, int velocity,
+                     bool setPen = true);
 };
 
 

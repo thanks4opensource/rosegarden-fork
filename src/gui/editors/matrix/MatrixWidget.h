@@ -141,6 +141,11 @@ public:
     /// Show the highlight on the piano/percussion rulers.
     void showHighlight(bool visible);
 
+    /// (Re)generate the pitch ruler (useful when key mapping changed)
+    //  Needs to be public so MatrixMover::handleLeftButtonPress() can
+    //  invoke when changing active segement (in case normal->percussion
+    //  or vice-versa).
+    void generatePitchRuler();
 
     // SelectionManager interface.
 
@@ -158,6 +163,12 @@ public:
 
     /// Used by the tools to set an appropriate mouse cursor.
     void setCanvasCursor(QCursor cursor);
+
+    // Used by updateSegmentChangerBackground() for main segment
+    // label bar, and MatrixTool subclasses for help text when
+    // switching active segment.
+    QString segmentTrackInstrumentLabel(const QString formatString,
+                                        const Segment *segment);
 
     bool getShowNoteNames() const { return m_showNoteNames; }
     void setShowNoteNames(bool show) { m_showNoteNames = show; }
@@ -386,8 +397,6 @@ private:
     QSharedPointer<MidiKeyMapping> m_localMapping;
     /// Either a PercussionPitchRuler or a PianoKeyboard object.
     PitchRuler *m_pitchRuler; // I own this
-    /// (Re)generate the pitch ruler (useful when key mapping changed)
-    void generatePitchRuler();
     /// Contains m_pitchRuler.
     QGraphicsScene *m_pianoScene; // I own this
     /// Contains m_pianoScene.

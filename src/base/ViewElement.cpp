@@ -18,7 +18,7 @@
 
 #include <QtGlobal>
 
-namespace Rosegarden 
+namespace Rosegarden
 {
 
 extern const int MIN_SUBORDERING;
@@ -44,20 +44,20 @@ operator<(const ViewElement &a, const ViewElement &b)
     timeT at = a.getViewAbsoluteTime(), bt = b.getViewAbsoluteTime();
 /*
     if (at < bt) {
-	if (!(*(a.event()) < *(b.event()))) {
-	    std::cerr << "    types: a: " << a.event()->getType() << " b: " << b.event()->getType() << std::endl;
-	    std::cerr << "performed: a: " << a.event()->getAbsoluteTime() << " b: " << b.event()->getAbsoluteTime() << std::endl;
-	    std::cerr << "  notated: a: " << a.getViewAbsoluteTime() << " b: " << b.getViewAbsoluteTime() << std::endl;
-//	assert(*(a.event()) < *(b.event()));
-	}
+        if (!(*(a.event()) < *(b.event()))) {
+            std::cerr << "    types: a: " << a.event()->getType() << " b: " << b.event()->getType() << std::endl;
+            std::cerr << "performed: a: " << a.event()->getAbsoluteTime() << " b: " << b.event()->getAbsoluteTime() << std::endl;
+            std::cerr << "  notated: a: " << a.getViewAbsoluteTime() << " b: " << b.getViewAbsoluteTime() << std::endl;
+//      assert(*(a.event()) < *(b.event()));
+        }
     }
     else if (at > bt) {
-	if (*(a.event()) < *(b.event())) {
-	    std::cerr << "    types: a: " << a.event()->getType() << " b: " << b.event()->getType() << std::endl;
-	    std::cerr << "performed: a: " << a.event()->getAbsoluteTime() << " b: " << b.event()->getAbsoluteTime() << std::endl;
-	    std::cerr << "  notated: a: " << a.getViewAbsoluteTime() << " b: " << b.getViewAbsoluteTime() << std::endl;
-//	    assert(!(*(a.event()) < *(b.event())));
-	}
+        if (*(a.event()) < *(b.event())) {
+            std::cerr << "    types: a: " << a.event()->getType() << " b: " << b.event()->getType() << std::endl;
+            std::cerr << "performed: a: " << a.event()->getAbsoluteTime() << " b: " << b.event()->getAbsoluteTime() << std::endl;
+            std::cerr << "  notated: a: " << a.getViewAbsoluteTime() << " b: " << b.getViewAbsoluteTime() << std::endl;
+//          assert(!(*(a.event()) < *(b.event())));
+        }
     }
 */
     if (at == bt) return *(a.event()) < *(b.event());
@@ -83,6 +83,7 @@ ViewElementList::insert(ViewElement* el)
 void
 ViewElementList::erase(iterator pos)
 {
+    RG_WARNING << "ViewElementList::erase():" << *pos;  // t4osDEBUG
     delete *pos;
     set_type::erase(pos);
 }
@@ -133,7 +134,7 @@ ViewElementList::findSingle(ViewElement *el)
     iterator res = end();
 
     std::pair<iterator, iterator> interval = equal_range(el);
-    
+
     for (iterator i = interval.first; i != interval.second; ++i) {
         if (*i == el) {
             res = i;
@@ -157,11 +158,11 @@ ViewElementList::findNearestTime(timeT t)
 {
     iterator i = findTime(t);
     if (i == end() || (*i)->getViewAbsoluteTime() > t) {
-	if (i == begin()) return end();
-	else --i;
+        if (i == begin()) return end();
+        else --i;
     }
     return i;
 }
- 
+
 }
 

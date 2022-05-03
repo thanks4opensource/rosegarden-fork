@@ -17,7 +17,7 @@
 
 #include <QtGlobal>
 
-namespace Rosegarden 
+namespace Rosegarden
 {
 
 
@@ -49,13 +49,14 @@ ViewSegment::getViewElementList()
             if (!wrapEvent(*i))
                 continue;
 
+            RG_WARNING << "ViewSegment::getViewElementList() makeViewElement";  // t4osDEBUG
             ViewElement *el = makeViewElement(*i);
             m_viewElementList->insert(el);
         }
 
         m_segment.addObserver(this);
     }
-    
+
     return m_viewElementList;
 }
 
@@ -80,13 +81,14 @@ ViewSegment::findEvent(const Event *e)
     // ViewElementList -- ViewElementList has no equivalent of
     // makeViewElement.)
 
+    RG_WARNING << "ViewSegment::findEvent() makeViewElement";   // t4osDEBUG
     // Cast away const since this is a temp we will not modify.
     ViewElement *dummy = makeViewElement(const_cast<Event *>(e));
-    
+
     std::pair<ViewElementList::iterator,
               ViewElementList::iterator>
         r = m_viewElementList->equal_range(dummy);
- 
+
     delete dummy;
 
     for (ViewElementList::iterator i = r.first; i != r.second; ++i) {
@@ -104,6 +106,7 @@ ViewSegment::eventAdded(const Segment *t, Event *e)
     (void)t; // avoid warnings
 
     if (wrapEvent(e)) {
+        RG_WARNING << "ViewSegment::eventAdded() makeViewElement";  // t4osDEBUG
         ViewElement *el = makeViewElement(e);
         m_viewElementList->insert(el);
         notifyAdd(el);
@@ -156,8 +159,16 @@ ViewSegment::endMarkerTimeChanged(const Segment *segment, bool shorten)
 
             ViewElementList::iterator newi = findEvent(*j);
             if (newi == m_viewElementList->end()) {
+#if 0   // t40sDEBUG
                 if (wrapEvent(*j))
                     m_viewElementList->insert(makeViewElement(*j));
+#else
+                if (wrapEvent(*j)) {
+                    RG_WARNING << "ViewSegment::endMarkerTimeChanged():"
+                                  "makeViewElement";      // t4osDEBUG
+                    m_viewElementList->insert(makeViewElement(*j));
+                }
+#endif
             }
         }
     }
