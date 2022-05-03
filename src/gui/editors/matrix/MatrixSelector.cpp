@@ -4,16 +4,19 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
     License, or (at your option) any later version.  See the file
     COPYING included with this distribution for more information.
 */
+
+#define RG_MODULE_STRING "[MatrixSelector]"
+#define RG_NO_DEBUG_PRINT 1
 
 #include "MatrixSelector.h"
 
@@ -136,7 +139,7 @@ MatrixSelector::handleLeftButtonPress(const MatrixMouseEvent *e)
         if ((x + width) - resizeStart > 10) resizeStart = x + width - 10;
 
         m_dispatchTool = nullptr;
-        
+
         if (e->sceneX > resizeStart) {
             m_dispatchTool =
                 dynamic_cast<MatrixTool *>
@@ -198,7 +201,16 @@ MatrixSelector::handleMidButtonPress(const MatrixMouseEvent *e)
     m_event = nullptr;
 
     // Don't allow overlapping elements on the same channel
-    if (e->element) return;
+    // if (e->element) return;
+    if (e->element &&
+        e->element->getScene() &&
+        e->element->getSegment() ==
+        e->element->getScene()->getCurrentSegment()) {
+        RG_DEBUG << "handleMidButtonPress(): Will not create note at "
+                    "same pitch and time as existing note in active "
+                    "segment.";
+        return;
+    }
 
     m_dispatchTool =
         dynamic_cast<MatrixTool *>
@@ -222,6 +234,18 @@ MatrixSelector::handleMouseDoubleClick(const MatrixMouseEvent *e)
     if (!vs) return;
 
     if (element) {
+        // Don't allow editing note's parameters if not in active segment
+        // because there might be multiple overlapping non-active segment's
+        // notes at same pitch/time, and one chosen would be semi-arbitrary
+        // (e.g. first segment(??) in lowest numbered track).
+        if (!(element &&
+              element->getScene() &&
+              element->getSegment() ==
+              element->getScene()->getCurrentSegment())) {
+            RG_DEBUG << "handleMouseDoubleClick(): Note must be "
+                        "in active segment.";
+            return;
+        }
 
         if (element->event()->isa(Note::EventType) &&
             element->event()->has(BaseProperties::TRIGGER_SEGMENT_ID)) {
@@ -261,25 +285,25 @@ MatrixSelector::handleMouseDoubleClick(const MatrixMouseEvent *e)
         }
 
     } /*
-    	  
+
           #988167: Matrix:Multiclick select methods don't work in matrix editor
           Postponing this, as it falls foul of world-matrix transformation
           etiquette and other such niceties
-     
-    	  else {
-     
-    	QRect rect = staff->getBarExtents(ev->x(), ev->y());
-     
-    	m_selectionRect->setX(rect.x() + 2);
-    	m_selectionRect->setY(rect.y());
-    	m_selectionRect->setSize(rect.width() - 4, rect.height());
-     
-    	m_selectionRect->show();
-    	m_updateRect = false;
-    	
-    	m_justSelectedBar = true;
-    	QTimer::singleShot(QApplication::doubleClickInterval(), this,
-    			   SLOT(slotClickTimeout()));
+
+          else {
+
+        QRect rect = staff->getBarExtents(ev->x(), ev->y());
+
+        m_selectionRect->setX(rect.x() + 2);
+        m_selectionRect->setY(rect.y());
+        m_selectionRect->setSize(rect.width() - 4, rect.height());
+
+        m_selectionRect->show();
+        m_updateRect = false;
+
+        m_justSelectedBar = true;
+        QTimer::singleShot(QApplication::doubleClickInterval(), this,
+                           SLOT(slotClickTimeout()));
         } */
 }
 
@@ -336,7 +360,7 @@ MatrixSelector::handleMouseMove(const MatrixMouseEvent *e)
 
     setViewCurrentSelection(false);
 
-    
+
 
 /*
     int w = int(p.x() - m_selectionRect->x());
@@ -487,7 +511,7 @@ MatrixSelector::setViewCurrentSelection(bool always)
 
     if (m_selectionToMerge && selection &&
         m_selectionToMerge->getSegment() == selection->getSegment()) {
-        
+
         selection->addFromSelection(m_selectionToMerge);
         m_scene->setSelection(selection, true);
 
@@ -534,7 +558,8 @@ MatrixSelector::getSelection(EventSelection *&selection)
         for (int i = 0; i < l.size(); ++i) {
             QGraphicsItem *item = l[i];
             MatrixElement *element = MatrixElement::getMatrixElement(item);
-            if (element) {
+            if (element && element->getSegment() ==
+                           element->getScene()->getCurrentSegment()) {
                 //!!! NB. In principle, this element might not come
                 //!!! from the right segment (in practice we only have
                 //!!! one segment, but that may change)
@@ -557,14 +582,14 @@ MatrixSelector::setContextHelpFor(const MatrixMouseEvent *e, bool ctrlPressed)
     MatrixElement *element = e->element;
 
     if (!element) {
-        
+
         setContextHelp
             (tr("Click and drag to select; middle-click and drag to draw new note"));
 
     } else {
-        
+
         // same logic as in handleLeftButtonPress
-        
+
         float x = element->getLayoutX();
         float width = element->getWidth();
         float resizeStart = int(double(width) * 0.85) + x;
@@ -593,7 +618,7 @@ MatrixSelector::setContextHelpFor(const MatrixMouseEvent *e, bool ctrlPressed)
                 } else {
                     setContextHelp(tr("Click and drag to copy note"));
                 }
-            }                
+            }
         }
     }
 }

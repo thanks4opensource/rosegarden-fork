@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -16,6 +16,7 @@
 */
 
 #define RG_MODULE_STRING "[MatrixMover]"
+#define RG_NO_DEBUG_PRINT 1
 
 #include "MatrixMover.h"
 
@@ -81,6 +82,9 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
 
     if (!e->element) return;
 
+    Segment *segment = m_scene->getCurrentSegment();
+    if (!segment) return;
+
     // Check the scene's current segment (apparently not necessarily the same
     // segment referred to by the scene's current view segment) for this event;
     // return if not found, indicating that this event is from some other,
@@ -92,15 +96,9 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
     // than being able to click on non-active elements to create new events by
     // accident, and will probably fly.  Especially since the multi-segment
     // matrix is new, and we're defining the terms of how it works.
-    Segment *segment = m_scene->getCurrentSegment();
-    if (!segment) return;
-    bool found = false;
-    for (Segment::iterator i = segment->begin(); i != segment->end(); ++i) {
-        if ((*i) == e->element->event()) found = true;
-    }
+    if (e->element->getSegment() != segment) {
 
-    if (!found) {
-        RG_WARNING << "handleLeftButtonPress(): Clicked element not owned by active segment.  Returning...";
+        RG_DEBUG << "handleLeftButtonPress(): Clicked element not owned by active segment.  Returning...";
         return;
     }
 
@@ -129,7 +127,7 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
 
     if (selection) {
         EventSelection *newSelection;
-        
+
         if ((e->modifiers & Qt::ShiftModifier) ||
             selection->contains(m_event)) {
             newSelection = new EventSelection(*selection);
@@ -153,7 +151,7 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
         m_scene->setSingleSelectedEvent(m_currentViewSegment,
                                         m_currentElement, true);
     }
-    
+
     long velocity = m_widget->getCurrentVelocity();
     m_event->get<Int>(BaseProperties::VELOCITY, velocity);
 
@@ -179,7 +177,8 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
 
             MatrixElement *duplicate = new MatrixElement
                 (m_scene, new Event(**i),
-                 m_widget->isDrumMode(), pitchOffset);
+                 m_widget->isDrumMode(), pitchOffset,
+                 m_scene->getCurrentSegment());
 
             m_duplicateElements.push_back(duplicate);
         }
@@ -343,7 +342,7 @@ MatrixMover::handleMouseRelease(const MatrixMouseEvent *e)
             if (time < normalizeStart) normalizeStart = time;
             if (endTime > normalizeEnd) normalizeEnd = endTime;
             macro->addCommand(new MatrixInsertionCommand
-                              (segment, time, endTime, 
+                              (segment, time, endTime,
                                m_duplicateElements[i]->event()));
             delete m_duplicateElements[i]->event();
             delete m_duplicateElements[i];
@@ -351,7 +350,7 @@ MatrixMover::handleMouseRelease(const MatrixMouseEvent *e)
         m_duplicateElements.clear();
         m_quickCopy = false;
     }
-        
+
     for (; it != selection->getSegmentEvents().end(); ++it) {
 
         timeT newTime = (*it)->getAbsoluteTime() + diffTime;
@@ -390,11 +389,11 @@ MatrixMover::handleMouseRelease(const MatrixMouseEvent *e)
 
     normalizeStart = std::min(normalizeStart, newSelection->getStartTime());
     normalizeEnd = std::max(normalizeEnd, newSelection->getEndTime());
-    
+
     macro->addCommand(new NormalizeRestsCommand(segment,
                                                 normalizeStart,
                                                 normalizeEnd));
-    
+
     m_scene->setSelection(nullptr, false);
     CommandHistory::getInstance()->addCommand(macro);
     m_scene->setSelection(newSelection, false);

@@ -45,12 +45,14 @@ public:
 
     void updateAll();
 
+    MatrixScene* getMatrixScene() const { return m_scene; }
+
 protected:
 //!!!    const MidiKeyMapping *getKeyMapping() const;
 
     /**
      * Override from ViewSegment
-     * Wrap only notes 
+     * Wrap only notes
      */
     bool wrapEvent(Event*) override;
 

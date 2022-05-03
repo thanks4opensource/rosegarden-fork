@@ -461,6 +461,19 @@ ActionFileParser::setActionShortcut(QString actionName, QString shortcut, bool i
     if (!action) action = findStandardAction(actionName);
     if (!action) return false;
 
+    // special case for undo/redo - only take the data from
+    // rosegardenmainwindow
+    QString basefile = m_currentFile;
+    basefile.remove(QRegularExpression("^.*/"));
+    if (actionName == "edit_undo" || actionName == "edit_redo") {
+        if (basefile != "rosegardenmainwindow.rc")
+            {
+                RG_DEBUG << "setActionShortcut ignoring" << actionName <<
+                    "in file" << m_currentFile;
+                return true;
+            }
+        }
+
     /*
      * Enable one or multiple shortcuts.  Only the first shortcut, which is
      * considered as the primary one, will be shown in the menus.
@@ -468,8 +481,6 @@ ActionFileParser::setActionShortcut(QString actionName, QString shortcut, bool i
     // Do not use the shortcut here - if there are user defined
     // shortcuts get all from ActionData
     ActionData* adata = ActionData::getInstance();
-    QString basefile = m_currentFile;
-    basefile.remove(QRegularExpression("^.*/"));
     QString key = basefile + ":" + actionName;
     std::set<QKeySequence> shortcutSet = adata->getShortcuts(key);
     QList<QKeySequence> shortcutList;
@@ -495,12 +506,13 @@ ActionFileParser::setActionShortcut(QString actionName, QString shortcut, bool i
 bool
 ActionFileParser::setActionToolTip(QString actionName, QString tooltip)
 {
+    RG_DEBUG << "setActionToolTip" << actionName << tooltip;
     if (actionName == "") return false;
     QAction *action = findAction(actionName);
     if (!action) action = findStandardAction(actionName);
     if (!action) return false;
-    action->setToolTip(tooltip);
-    m_tooltipSet.insert(action);
+    // do not set the ttoltip here - it will be set in addActionToToolbar
+    m_tooltipMap[actionName] = tooltip;
     return true;
 }
 
@@ -636,32 +648,42 @@ ActionFileParser::addActionToToolbar(QString toolbarName, QString actionName)
     if (!toolbar) return false;
     toolbar->addAction(action);
 
-    // duration toolbar tooltips:
-    // no text() toolTip() in English like "Double Whole Note (5)"
-    if (!action->toolTip().isEmpty() && action->text().isEmpty()) {
-        QString m(action->toolTip());
-        QString tip = QObject::tr("%1").arg(QObject::tr(m.toStdString().c_str()));
-        action->setToolTip(tip);
-        //RG_DEBUG << "setting tip: " << tip;
-        // transport toolbar tooltips:
-        // text() translated, toolTip() in English
-    } else if (strippedText(action->text()) != action->toolTip()) {
-        QString m(action->toolTip());
-        QString tip = QObject::tr("%1").arg(QObject::tr(m.toStdString().c_str()));
-        action->setToolTip(tip);
-        //RG_DEBUG << "setting tip: " << tip;
-    } else if (action->shortcut() != QKeySequence()) {
-        // Avoid setting an automatic tooltip if an explicit one has
-        // been provided via setActionToolTip earlier.  We need to
-        // remember this ourselves, as action->toolTip() will return a
-        // Qt-generated automatic default if we haven't set it
-        if (m_tooltipSet.find(action) == m_tooltipSet.end()) {
-            QString tooltip = QObject::tr("%1 (%2)")
-                .arg(strippedText(action->text()))
-                .arg(action->shortcut().toString());
-            action->setToolTip(tooltip);
-        }
+    // special case for undo/redo. The tooltip is generated in
+    // CommandHistory so do not set the tooltip here for those two
+    // actions
+    if (actionName == "edit_undo" || actionName == "edit_redo") {
+        RG_DEBUG << "not setting tooltip for" << actionName;
+        return true;
     }
+
+    QString toolTipText;
+    if (m_tooltipMap.find(actionName) != m_tooltipMap.end()) {
+        QString tt = m_tooltipMap[actionName];
+        toolTipText = QObject::tr(tt.toStdString().c_str());
+        RG_DEBUG << "setting manual tooltip" << actionName << toolTipText;
+    } else if (! action->text().isEmpty()) {
+        QString tt = strippedText(action->text());
+        toolTipText = QObject::tr(tt.toStdString().c_str());
+        RG_DEBUG << "setting automatic tooltip" << actionName << toolTipText;
+    }
+
+    if (toolTipText == "") {
+        RG_DEBUG << "no tooltip for" << actionName;
+    }
+
+    QList<QKeySequence> shortcuts = action->shortcuts();
+    QStringList kssl;
+    foreach(auto ks, shortcuts) {
+        kssl.append(ks.toString(QKeySequence::NativeText));
+    }
+    QString scString = kssl.join(", ");
+
+    if (kssl.size() > 0) {
+        // add the shortcuts to the tooltip
+        toolTipText = toolTipText + "(" + scString + ")";
+    }
+
+    action->setToolTip(toolTipText);
     return true;
 }
 

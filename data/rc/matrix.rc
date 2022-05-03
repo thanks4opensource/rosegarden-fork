@@ -11,9 +11,9 @@
 
   <Menu name="edit">
     <text>&amp;Edit</text>
-    <!-- JAS 'Undo' and 'Redo' use dynamic text.  Put default text for new project in. -->
-    <Action name="edit_undo" text="Nothing to &amp;Undo" icon="undo" shortcut="Ctrl+Z" />
-    <Action name="edit_redo" text="Nothing to &amp;Redo" icon="redo" shortcut="Ctrl+Shift+Z" />
+    <!-- 'Undo' and 'Redo' use dynamic text. Do not provide data here. -->
+    <Action name="edit_undo"/>
+    <Action name="edit_redo"/>
   <Separator/>
     <!-- JAS use multiple shorcuts found in QT reference for gnome/KDE -->
     <Action name="edit_cut" text="Cu&amp;t" icon="editcut" shortcut="Ctrl+X, F20, Shift+Del" />
@@ -191,8 +191,8 @@
       <Action name="play" text="&amp;Play" icon="transport-play" />
       <Action name="stop" text="&amp;Stop" icon="transport-stop" />
       <!-- JAS action called "rewind" in rosegardenui.rc.  Is this the same call? -->
-      <Action name="cursor_back" text="Step &amp;Back" icon="step-back" tooltip="Step Back (Left)" shortcut="Left" />
-      <Action name="cursor_forward" text="Step &amp;Forward" icon="step-forward" tooltip="Step Forward (Right)"  shortcut="Right" />
+      <Action name="cursor_back" text="Step &amp;Back" icon="step-back" shortcut="Left" />
+      <Action name="cursor_forward" text="Step &amp;Forward" icon="step-forward" shortcut="Right" />
       <Action name="playback_pointer_back_bar" text="Re&amp;wind" icon="transport-rewind" shortcut="Ctrl+Left" />
       <!-- JAS action called "fast_forward" in rosegardenui.rc.  Is this the same call? -->
       <Action name="playback_pointer_forward_bar" text="&amp;Fast Forward" icon="transport-ffwd" shortcut="Ctrl+Right" />

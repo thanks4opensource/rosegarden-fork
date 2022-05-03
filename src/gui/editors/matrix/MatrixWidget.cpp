@@ -54,6 +54,7 @@
 
 #include "gui/studio/StudioControl.h"
 
+#include "misc/Preferences.h"
 #include "misc/Debug.h"
 
 #include "base/Composition.h"
@@ -119,6 +120,7 @@ MatrixWidget::MatrixWidget(bool drumMode) :
     m_pianoView(nullptr),
     m_onlyKeyMapping(false),
     m_drumMode(drumMode),
+    m_prevPitchRulerType(PrevPitchRulerType::NONE),
     m_firstNote(0),
     m_lastNote(0),
     m_highlightVisible(true),
@@ -179,7 +181,7 @@ MatrixWidget::MatrixWidget(bool drumMode) :
     bool useRed = true;
     m_segmentChanger = new Thumbwheel(Qt::Vertical, useRed);
     m_segmentChanger->setToolTip(tr("<qt>Rotate wheel to change the active segment</qt>"));
-    m_segmentChanger->setFixedWidth(18);
+    m_segmentChanger->setFixedWidth(32); // was 18, widen to make easier to grab
     m_segmentChanger->setMinimumValue(-120);
     m_segmentChanger->setMaximumValue(120);
     m_segmentChanger->setDefaultValue(0);
@@ -231,7 +233,7 @@ MatrixWidget::MatrixWidget(bool drumMode) :
 
     m_Hzoom->setMinimumValue(-25);
     m_Hzoom->setMaximumValue(60);
-    m_Hzoom->setDefaultValue(0); 
+    m_Hzoom->setDefaultValue(0);
     m_Hzoom->setBright(false);
     controlsLayout->addWidget(m_Hzoom, 1, 0);
     connect(m_Hzoom, &Thumbwheel::valueChanged, this,
@@ -255,7 +257,7 @@ MatrixWidget::MatrixWidget(bool drumMode) :
     m_reset->setToolTip(tr("Reset Zoom"));
     controlsLayout->addWidget(m_reset, 1, 1, Qt::AlignCenter);
 
-    connect(m_reset, &QAbstractButton::clicked, this, 
+    connect(m_reset, &QAbstractButton::clicked, this,
             &MatrixWidget::slotResetZoomClicked);
 
     pannerLayout->addWidget(controls);
@@ -442,7 +444,7 @@ MatrixWidget::setSegments(RosegardenDocument *document,
     // ( ^^^ it's because m_scene is only set after construction --cc)
     connect(m_scene, &MatrixScene::currentViewSegmentChanged,
             m_controlsWidget, &ControlRulerWidget::slotSetCurrentViewSegment);
-    
+
     connect(m_scene, &MatrixScene::selectionChangedES,
             m_controlsWidget, &ControlRulerWidget::slotSelectionChanged);
 
@@ -529,7 +531,6 @@ MatrixWidget::generatePitchRuler()
     if (m_scene->getCurrentSegment() == nullptr)
         return;
 
-    delete m_pianoScene;   // Delete the old m_pitchRuler if any
     m_localMapping.reset();
     bool isPercussion = false;
 
@@ -555,7 +556,18 @@ MatrixWidget::generatePitchRuler()
             isPercussion = false;
         }
     }
-    if (mapping && !m_localMapping->getMap().empty()) {
+
+    if (isPercussion) {
+        if (m_prevPitchRulerType == PrevPitchRulerType::PERCUSSION) return;
+        m_prevPitchRulerType = PrevPitchRulerType::PERCUSSION;
+    } else {
+        if (m_prevPitchRulerType == PrevPitchRulerType::PIANO) return;
+        m_prevPitchRulerType = PrevPitchRulerType::PIANO;
+    }
+
+    delete m_pianoScene;   // Delete the old m_pitchRuler if any
+
+    if (mapping && !m_localMapping->getMap().empty()){
         m_pitchRuler = new PercussionPitchRuler(nullptr, m_localMapping,
                                                 m_scene->getYResolution());
     } else {
@@ -1084,7 +1096,7 @@ MatrixWidget::addControlRuler(QAction *action)
                                      .arg(QObject::tr(it->getName().c_str()))
                                      .arg(it->getControllerNumber())
                                      .arg(hexValue);
-        
+
         if (name != itemStr)
             continue;
 
@@ -1094,7 +1106,7 @@ MatrixWidget::addControlRuler(QAction *action)
 
 //      if (i == menuIndex) m_controlsWidget->slotAddControlRuler(*p);
 //      else i++;
-    }   
+    }
 }
 
 void
@@ -1397,11 +1409,14 @@ MatrixWidget::slotSegmentChangerMoved(int v)
     int steps = v - m_lastSegmentChangerValue;
     if (steps < 0) steps *= -1;
 
+    bool    segmentChanged = true;
     for (int i = 0; i < steps; ++i) {
         if (v < m_lastSegmentChangerValue)
             nextSegment();
         else if (v > m_lastSegmentChangerValue)
             previousSegment();
+        else
+            segmentChanged = false;
     }
 
     m_lastSegmentChangerValue = v;
@@ -1410,14 +1425,19 @@ MatrixWidget::slotSegmentChangerMoved(int v)
     // If we are switching between a pitched instrument segment and a pecussion
     // segment or betwween two percussion segments with different percussion
     // sets, the pitch ruler may need to be regenerated.
-    // TODO : test if regeneration is really needed before doing it
-    generatePitchRuler();
+    //
+    // Only call if necessary, and generatePitchRuler() also checks
+    // if percussion->normal or normal->percussion.
+    if (segmentChanged) {
+        clearSelection();
+        generatePitchRuler();
+    }
 }
 
 void
 MatrixWidget::updateSegmentChangerBackground()
 {
-    const Composition &composition = m_document->getComposition();
+    Composition &composition = m_document->getComposition();
     const Segment *segment = m_scene->getCurrentSegment();
 
     // set the changer widget background to the now current segment's
@@ -1429,9 +1449,23 @@ MatrixWidget::updateSegmentChangerBackground()
     palette.setColor(QPalette::Window, segmentColor);
     m_changerWidget->setPalette(palette);
 
-    const Track *track = composition.getTrackById(segment->getTrack());
+    const TrackId trackId = segment->getTrack();
+    const Track *track = composition.getTrackById(trackId);
     if (!track)
         return;
+
+    // Experimental feature.  See Bug #1623 and comments below.
+    if (Preferences::getBug1623()) {
+        // Set active track so that external MIDI notes play with
+        // correct instrument (regardless whether Step Recording is on or off)
+        composition.setSelectedTrack(trackId);
+        // Need to call RosegardenDocument::slotDocumentModified() as well
+        // otherwise the UI will not update to stay in sync with this.
+        // Also, TrackButtons does not handle documentModified(), so it
+        // will get out of sync regardless.
+        // See https://www.rosegardenmusic.com/wiki/dev:tnp
+        RosegardenDocument::currentDocument->slotDocumentModified();
+    }
 
     QString trackLabel = QString::fromStdString(track->getLabel());
     if (trackLabel == "")
@@ -1524,7 +1558,7 @@ void MatrixWidget::slotKeySelected(unsigned int y, bool repeating)
     slotHoveredOverKeyChanged(y);
 
 //    getCanvasView()->scrollVertSmallSteps(y);
-    
+
     int evPitch = m_scene->calculatePitchFromY(y);
 
     // If we are part of a run up the keyboard, don't send redundant

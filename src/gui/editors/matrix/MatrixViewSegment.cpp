@@ -35,7 +35,7 @@ namespace Rosegarden
 {
 
 MatrixViewSegment::MatrixViewSegment(MatrixScene *scene,
-				     Segment *segment,
+                                     Segment *segment,
                                      bool drum) :
     ViewSegment(*segment),
     m_scene(scene),
@@ -97,7 +97,7 @@ MatrixViewSegment::makeViewElement(Event* e)
 
     //RG_DEBUG << "  I am segment \"" << getSegment().getLabel() << "\"";
 
-    return new MatrixElement(m_scene, e, m_drum, pitchOffset);
+    return new MatrixElement(m_scene, e, m_drum, pitchOffset, &getSegment());
 }
 
 void
