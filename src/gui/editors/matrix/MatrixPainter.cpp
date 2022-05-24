@@ -109,8 +109,6 @@ void MatrixPainter::handleMouseDoubleClick(const MatrixMouseEvent *e){
             CommandHistory::getInstance()->addCommand(command);
         }
         //}
-        RG_WARNING << "handleMouseDoubleClick(): delete"  // t4osDEBUG
-                   << m_currentElement;
         delete m_currentElement;
         m_currentElement = nullptr;
         return;
@@ -129,7 +127,9 @@ void MatrixPainter::handleMouseDoubleClick(const MatrixMouseEvent *e){
     ev->set<Int>(BaseProperties::PITCH, e->pitch);
     ev->set<Int>(BaseProperties::VELOCITY, velocity);
 
-    RG_WARNING << "handleMouseDoubleClick() new MatrixElement";   // t4osDEBUG
+#if 0   // DEBUG
+    RG_WARNING << "handleMouseDoubleClick() new MatrixElement";
+#endif
     m_currentElement = new MatrixElement(m_scene, ev, m_widget->isDrumMode(),
                                          m_scene->getCurrentSegment());
 
@@ -170,8 +170,6 @@ void MatrixPainter::handleLeftButtonPress(const MatrixMouseEvent *e)
                           "same pitch and time as existing note in active "
                           "segment.";
         }
-        RG_WARNING << "handleLeftButtonPress(): delete"  // t4osDEBUG
-                   << m_currentElement;
         delete m_currentElement;
         m_currentElement = nullptr;
         return;
@@ -210,7 +208,6 @@ void MatrixPainter::handleLeftButtonPress(const MatrixMouseEvent *e)
 
     RG_DEBUG << "handleLeftButtonPress(): I'm working from segment \"" << m_currentViewSegment->getSegment().getLabel() << "\"" << "  clicked pitch: " << e->pitch << " adjusted pitch: " << adjustedPitch;
 
-    RG_WARNING << "handleLeftButtonPress() new MatrixElement";    // t4osDEBUG
     m_currentElement = new MatrixElement(m_scene, ev, m_widget->isDrumMode(),
                                          pitchOffset,
                                          m_scene->getCurrentSegment());
@@ -277,13 +274,10 @@ MatrixPainter::handleMouseMove(const MatrixMouseEvent *e)
     }
 
     Event *oldEv = m_currentElement->event();
-    RG_WARNING << "handleMouseMove(): delete"  // t4osDEBUG
-               << m_currentElement;
     delete m_currentElement;
     delete oldEv;
 
     // const Segment *segment = e->element ? e->element->getSegment() : nullptr;
-    RG_WARNING << "handleMouseMove(): new MatrixElement";     // t4osDEBUG
     m_currentElement = new MatrixElement(m_scene, ev, m_widget->isDrumMode(),
                                          pitchOffset,
                                          m_scene->getCurrentSegment());
@@ -333,8 +327,10 @@ void MatrixPainter::handleMouseRelease(const MatrixMouseEvent *e)
         CommandHistory::getInstance()->addCommand(command);
 
         Event* ev = m_currentElement->event();
-        RG_WARNING << "handleMouseRelease(): drum mode delete"   // t4osDEBUG
+#if 0   // DEBUG
+        RG_WARNING << "handleMouseRelease(): drum mode delete"
                    << m_currentElement;
+#endif
         delete m_currentElement;
         delete ev;
 
@@ -362,8 +358,6 @@ void MatrixPainter::handleMouseRelease(const MatrixMouseEvent *e)
         CommandHistory::getInstance()->addCommand(command);
 
         Event* ev = m_currentElement->event();
-        RG_WARNING << "handleMouseRelease(): non-drum  delete"   // t4osDEBUG
-                   << m_currentElement;
         delete m_currentElement;
         delete ev;
 

@@ -25,6 +25,10 @@
 #include "MatrixWidget.h"
 #include "MatrixElement.h"
 
+#include "IsotropicDiamondItem.h"
+#include "IsotropicRectItem.h"
+#include "IsotropicTextItem.h"
+
 #include "gui/application/RosegardenMainWindow.h"
 #include "document/RosegardenDocument.h"
 #include "document/CommandHistory.h"
@@ -60,8 +64,9 @@ using namespace BaseProperties;
 
 MatrixScene::MatrixScene() :
     graphicsRectPool(this),
-    graphicsPolyPool(this),
     graphicsTextPool(this),
+    graphicsIsotropicRectPool(this),
+    graphicsIsotropicDiamondPool(this),
     m_widget(nullptr),
     m_document(nullptr),
     m_observerAdded(false),
@@ -192,14 +197,7 @@ MatrixScene::setSegments(RosegardenDocument *document,
     // So the only (easy) way I found is to use the resolution fitting with
     // piano keyboard when at least one segment needs it.
 
-    bool drumMode = false;
-    bool keyMapping = false;
-    if (m_widget) {
-        drumMode = m_widget->isDrumMode();
-        keyMapping = m_widget->hasOnlyKeyMapping();
-    }
-    m_resolution = 8;
-    if (keyMapping) m_resolution = 11;
+    m_resolution = (m_widget && m_widget->hasPercussionSegments()) ? 11 : 8;
 
     bool haveSetSnap = false;
     Composition &composition = m_document->getComposition();
@@ -220,7 +218,7 @@ MatrixScene::setSegments(RosegardenDocument *document,
         Track *track = composition.getTrackById(trackId);
         Instrument *instr = m_document->getStudio().getInstrumentById(
                                                   track->getInstrument());
-        drumMode = instr->getKeyMapping();
+        bool drumMode = instr->getKeyMapping();
 
         MatrixViewSegment *vs = new MatrixViewSegment(this,
                                                       m_segments[i],
@@ -256,15 +254,15 @@ MatrixScene::getCurrentSegment()
 }
 
 void
-MatrixScene::setCurrentSegment(Segment *s)
+MatrixScene::setCurrentSegment(const Segment* const segment)
 {
     // Unset old current segment
-    updateCurrentSegment(false);
+    updateCurrentSegment(false);  // !isCurrent
 
     for (int i = 0; i < int(m_segments.size()); ++i) {
-        if (s == m_segments[i]) {
+        if (m_segments[i] == segment) {
             m_currentSegmentIndex = i;
-            updateCurrentSegment(true);
+            updateCurrentSegment(true);  // isCurrent
             break;
         }
     }
@@ -621,39 +619,34 @@ MatrixScene::recreatePitchHighlights()
         settings.value("highlight_type", HT_BlackKeys).toInt());
     settings.endGroup();
 
-    if (chosenHighlightType == HT_BlackKeys) {
-        RG_DEBUG << "highlight the black notes";
-        // highlight the black notes
-        if (m_highlightType != chosenHighlightType) {
-            // hide all highlights from triad highlight
-            RG_DEBUG << "hide all old triad highlights";
-            int i = 0;
-            while (i < (int)m_highlights.size()) {
-                m_highlights[i]->hide();
-                ++i;
-            }
-        }
-        m_highlightType = HT_BlackKeys;
-        recreateBlackkeyHighlights();
-        return;
+    // Need to do this regardless if new highlight type is same
+    // or different than old, because will be called when changing
+    // active segment, and new vs previous active segments might
+    // span different ranges of measures.
+    for (unsigned i = 0 ; i < m_highlights.size() ; ++i) {
+        // Need to repaint highlight area to background because
+        // Qt can leave trash behind otherwise.
+        m_highlights[i]->setBrush(GUIPalette::getColour
+                                  (GUIPalette::SegmentCanvas));
     }
+    // Force update to repaint before possibly hiding some highlights
+    // that won't be reset to new type/time/pitch
+    update();
 
-    // Not highlighting black notes so highlight the major/minor triad
-
-    RG_DEBUG << "highlight key triad";
-    if (m_highlightType != HT_Triads) {
-        // hide all highlights of black notes
-        RG_DEBUG << "hide all old blacknote highlights";
-        int i = 0;
-        while (i < (int)m_highlights.size()) {
+    if (m_highlightType != chosenHighlightType) {
+        // Hide all previous highlights.
+        for (unsigned i = 0 ; i < m_highlights.size() ; ++i) {
             m_highlights[i]->hide();
-            ++i;
         }
-        m_highlightType = HT_BlackKeys;
+        m_highlightType = chosenHighlightType;
     }
 
-    recreateTriadHighlights();
+    switch (chosenHighlightType) {
+        case HT_BlackKeys: recreateBlackkeyHighlights(); break;
+        case HT_Triads:    recreateTriadHighlights();    break;
+    }
 
+    update();
 }
 
 void
@@ -768,7 +761,9 @@ MatrixScene::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *e)
 void
 MatrixScene::slotCommandExecuted()
 {
+#if 0   // Experimenta. Respond to finer-grained notifications instead
     checkUpdate();
+#endif
 }
 
 void
@@ -792,7 +787,6 @@ MatrixScene::checkUpdate()
     }
 
     if (updateSelectionElementStatus) {
-     // RG_WARNING << "checkUpdate()";    // t4osDEBUG
         setSelectionElementStatus(m_selection, true);
     }
 }
@@ -869,20 +863,53 @@ MatrixScene::trackChanged(const Composition *composition, Track *track)
     Instrument *instr = m_document->getStudio().getInstrumentById(
                                                 track->getInstrument());
     bool trackIsNowDrum = instr->getKeyMapping();
-    bool segmentUpdated = false;
+    bool trackDrumChanged = false;
+    const Segment *currentSegment = getCurrentSegment();
+    bool currentSegmentChanged = false;
 
     for (std::vector<MatrixViewSegment *>::iterator i = m_viewSegments.begin();
          i != m_viewSegments.end(); ++i) {
+
         TrackId trackId = (*i)->getSegment().getTrack();
         Track *segmentTrack = composition->getTrackById(trackId);
 
-        if (segmentTrack == track && (*i)->isDrumMode() != trackIsNowDrum) {
-            (*i)->setDrumMode(trackIsNowDrum);
-            segmentUpdated = true;
+        if (segmentTrack == track) {
+            if (!currentSegmentChanged && currentSegment &&
+                &(*i)->getSegment() == currentSegment) {
+                currentSegmentChanged = true;
+            }
+
+            if ((*i)->isDrumMode() != trackIsNowDrum) {
+                (*i)->setDrumMode(trackIsNowDrum);
+                trackDrumChanged = true;
+            }
         }
     }
 
-    if (segmentUpdated) recreatePitchHighlights();
+    if (currentSegmentChanged) {
+        if (trackDrumChanged) m_widget->generatePitchRuler();
+
+        // Don't need to call MatrixWidget::updateToCurrent(true)
+        // because that sets current instrument playback (with "true"
+        // argument) in addition to setting track/instrument label,
+        // but this method is called by main window which is already
+        // doing normal (not override) setting of instrument playback.
+        m_widget->setSegmentTrackInstrumentLabel(currentSegment);
+    }
+}
+
+void MatrixScene::segmentTrackChanged(
+const Composition* /*composition*/,
+Segment *segment,
+TrackId /*trackId*/)
+{
+    // Only care if need to update current segment
+    if (segment == getCurrentSegment()) {
+        // true == set instrument souind
+        m_widget->updateToCurrentSegment(true, segment);
+        // Segment might have moved from pitched to drum track or vice-versa
+        m_widget->generatePitchRuler();
+    }
 }
 
 void
@@ -907,13 +934,6 @@ MatrixScene::handleEventRemoved(Event *e)
 void
 MatrixScene::setSelection(EventSelection *s, bool preview)
 {
-#if 0    // t4osDEBUG
-    RG_WARNING << "setSelection()"   // t4osDEBUG
-               << s
-               << preview
-               << m_selection;
-#endif
-
     if (!m_selection && !s) return;
     if (m_selection == s) return;
     if (m_selection && s && *m_selection == *s) {
@@ -926,18 +946,12 @@ MatrixScene::setSelection(EventSelection *s, bool preview)
         return;
     }
 
- // RG_WARNING << "setSelection() didn't return";   // t4osDEBUG
-
     EventSelection *oldSelection = m_selection;
     m_selection = s;
 
-    if (oldSelection) {
-     // RG_WARNING << "setSelection() old" << s << preview;    // t4osDEBUG
-        setSelectionElementStatus(oldSelection, false);
-    }
+    if (oldSelection) setSelectionElementStatus(oldSelection, false);
 
     if (m_selection) {
-     // RG_WARNING << "setSelection() new" << s << preview;    // t4osDEBUG
         setSelectionElementStatus(m_selection, true);
         // ??? But we are going to do this at the end of this routine.
         //     Is this needed?  Notation only does this at the end.
@@ -993,8 +1007,6 @@ MatrixScene::selectAll()
 void
 MatrixScene::setSelectionElementStatus(EventSelection *s, bool set)
 {
- // RG_WARNING << "setSelectionElementStatus()" << s << set;   // t4osDEBUG
-
     if (!s) return;
 
     MatrixViewSegment *vs = nullptr;
@@ -1054,7 +1066,14 @@ MatrixScene::previewSelection(EventSelection *s,
 void
 MatrixScene::updateCurrentSegment(bool isCurrent)
 {
-    MATRIX_DEBUG << "MatrixScene::updateCurrentSegment: current is " << m_currentSegmentIndex;
+    if (isCurrent) {
+        // Not that highlight type (triads, piano black keys, etc) has
+        // changed but rather the  new current segment might span a
+        // different range of measures than old one and highlights
+        // are only shown with current segment's span.
+        recreatePitchHighlights();
+    }
+
     MatrixViewSegment *vs = getCurrentViewSegment();
     if (vs) {
         ViewElementList *vel = vs->getViewElementList();
@@ -1068,7 +1087,6 @@ MatrixScene::updateCurrentSegment(bool isCurrent)
     }
 
     // changing the current segment may have overridden selection border colours
- // RG_WARNING << "updateCurrentSegment()" << isCurrent;       // t4osDEBUG
     setSelectionElementStatus(m_selection, true);
 }
 

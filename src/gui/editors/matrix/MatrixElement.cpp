@@ -16,18 +16,20 @@
 */
 
 #define RG_MODULE_STRING "[MatrixElement]"
-#define RG_NO_DEBUG_PRINT 1
 
 #include "MatrixElement.h"
 #include "MatrixScene.h"
 #include "MatrixWidget.h"
+
+#include "IsotropicDiamondItem.h"
+#include "IsotropicRectItem.h"
+#include "IsotropicTextItem.h"
 
 #include "misc/Debug.h"
 #include "base/RulerScale.h"
 #include "misc/ConfigGroups.h"
 
 #include <QGraphicsRectItem>
-#include <QGraphicsPolygonItem>
 #include <QBrush>
 #include <QColor>
 #include <QSettings>
@@ -42,6 +44,7 @@
 
 namespace Rosegarden
 {
+
 
 static const int MatrixElementData = 2;
 
@@ -58,22 +61,11 @@ MatrixElement::MatrixElement(MatrixScene *scene, Event *event,
     m_noteItem(nullptr),
     m_drumItem(nullptr),
     m_textItem(nullptr),
+    m_noteSelectItem(nullptr),
+    m_drumSelectItem(nullptr),
     m_pitchOffset(pitchOffset),
-    m_pitch(255),
     m_segment(segment)
 {
-    RG_DEBUG << "MatrixElement()";
-
-#if 1   // t4osDEBUG
- // long pitch = 60;
-    event->get<Int>(BaseProperties::PITCH, m_pitch);
-    RG_WARNING << "MatrixElement"
-                << this
-                << m_pitch
-                << event->getAbsoluteTime()
-                << event->getDuration();
-#endif
-
     if (segment && scene && segment != scene->getCurrentSegment()) {
         m_current = false;
     }
@@ -83,7 +75,9 @@ MatrixElement::MatrixElement(MatrixScene *scene, Event *event,
 MatrixElement::~MatrixElement()
 {
     m_scene->graphicsRectPool.putBack(m_noteItem);
-    m_scene->graphicsPolyPool.putBack(m_drumItem);
+    m_scene->graphicsIsotropicDiamondPool.putBack(m_drumItem);
+    m_scene->graphicsIsotropicRectPool.putBack(m_noteSelectItem);
+    m_scene->graphicsIsotropicDiamondPool.putBack(m_drumSelectItem);
     m_scene->graphicsTextPool.putBack(m_textItem);
 }
 
@@ -115,37 +109,17 @@ MatrixElement::reconfigure(timeT time, timeT duration)
 }
 
 void
-MatrixElement::reconfigure(timeT time, timeT duration, int pitch, bool setPen)
+MatrixElement::reconfigure(timeT time, timeT duration, int pitch)
 {
     long velocity = 100;
     event()->get<Int>(BaseProperties::VELOCITY, velocity);
 
-    reconfigure(time, duration, pitch, velocity, setPen);
+    reconfigure(time, duration, pitch, velocity);
 }
 
 void
-MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity,
-                           bool setPen)
+MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
 {
-    RG_DEBUG << "reconfigure" << time << duration <<
-        pitch << velocity << m_current;
-
-#if 0   // t4osDEBUG
-    RG_WARNING << "reconfigure()"   // t4osDEBUG
-               << this
-               << m_segment->getLabel()
-               << m_pitch
-               << "->"
-               << pitch
-               << "@"
-               << time
-               << "+"
-               << duration
-               << "v"
-               << velocity;
-    m_pitch = pitch;
-#endif
-
     const RulerScale *scale = m_scene->getRulerScale();
     int resolution = m_scene->getYResolution();
 
@@ -161,7 +135,7 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity,
                      event()->has(BaseProperties::TIED_BACKWARD));
     Qt::BrushStyle brushPattern = (tiedNote ? Qt::Dense2Pattern : Qt::SolidPattern);
 
-    QColor colour = noteColor();
+    const QColor colour(noteColor());
 
     // Turned off because adds little or no information to user (another
     // segment's notes are underneath?) and generally just confusingly
@@ -176,78 +150,128 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity,
         !m_scene->getMatrixWidget()->getShowPercussionDurations();
 
     // Only one of m_noteItem() or m_drumItem() active, depending
-    // on various modes and settings. Is cheaper to keep both around
+    // on various modes and settings. Is more efficient to have  both
     // with inactive one set to hide() vs dynamically creating/deleting
-    // and/or adding/removing from scene.
-    /*double*/ qreal fres(resolution + 1);
+    // and adding/removing from scene.
+    // The various MatrixScene::graphicsXxxPools create and cache
+    // QGraphicsItems for reuse as needed.
+    qreal fres(resolution + 1);
+    float safeWidth =  m_width;
     if (m_drumDisplay) {
-        if (m_noteItem) m_noteItem->hide();
-        if (m_drumItem) m_drumItem->show();
-        else            m_drumItem = m_scene->graphicsPolyPool.getFrom();
-        QPolygonF polygon = drumPolygon(fres, 0.0);
-        m_drumItem->setPolygon(polygon);
-        if (setPen) {
-            m_drumItem->setPen
-                (QPen(GUIPalette::getColour(GUIPalette::MatrixElementBorder),
-                0));
+        if (m_noteItem) {
+            // Very rare case of changing segment from pitched to percussion.
+            // Could just m_noteItem->hide(), but even if changed back to
+            // pitched will be fully re-initialized and getFrom() is no-cost,
+            // so might as well putBack() for possible reuse by a different
+            // segment.
+            m_scene->graphicsRectPool.putBack(m_noteItem);
+            m_noteItem = nullptr;
+            if (m_noteSelectItem) {
+                // Even rarer case of changing from pitched to percussion
+                // while note is selected.
+                m_scene->graphicsIsotropicRectPool.putBack(m_noteSelectItem);
+                m_noteSelectItem = nullptr;
+            }
         }
+        if (!m_drumItem) {
+            m_drumItem = m_scene->graphicsIsotropicDiamondPool.getFrom();
+        }
+        m_drumItem->setSize(0.5 * fres, fres);
+        m_drumItem->setPen(outlinePen());
         m_drumItem->setBrush(QBrush(colour, brushPattern));
         m_drumItem->setPos(x0, pitchy);
-        m_drumItem->setZValue(m_current ? ACTIVE_SEGMENT_NOTE_Z
-                                        : NORMAL_SEGMENT_NOTE_Z);
+        if (m_selected) {
+            m_drumItem->setZValue(SELECTED_SEGMENT_NOTE_Z);
+            // First true is selected, second to force update if already
+            // selected (extreme edge case of changing segment's track
+            // from notes to drum while element is selected)
+            setSelected(true, true);
+        } else {
+            m_drumItem->setZValue(m_current ? ACTIVE_SEGMENT_NOTE_Z
+                                            : NORMAL_SEGMENT_NOTE_Z);
+        }
         m_drumItem->setData(MatrixElementData,
                             QVariant::fromValue((void *)this));
-    } else {
-        if (m_drumItem) m_drumItem->hide();
-        if (m_noteItem) m_noteItem->show();
-        else            m_noteItem = m_scene->graphicsRectPool.getFrom();
-        float width = m_width;
-        if (width < 1) {
+    } else {  // !m_drumDisplay, i.e. is pitched note segment
+        if (m_drumItem) {
+            // Very rare case of changing segment from percussion to pitched.
+            // Could just m_drumItem->hide(), but even if changed back to
+            // percussion will be fully re-initialized, and getFrom() is
+            // no-cost, so might as well putBack() for possible reuse by a
+            // different segment.
+            m_scene->graphicsIsotropicDiamondPool.putBack(m_drumItem);
+            m_drumItem = nullptr;
+            if (m_drumSelectItem) {
+                // Even rarer case of changing from percussion to pitched
+                // while drumbeat is selected.
+                m_scene->graphicsIsotropicDiamondPool.putBack(
+                                                        m_drumSelectItem);
+                m_drumSelectItem = nullptr;
+            }
+        }
+        if (!m_noteItem) m_noteItem = m_scene->graphicsRectPool.getFrom();
+        safeWidth = m_width;
+        if (safeWidth < 1) {
             x0 = std::max(0.0, x1 - 1);
-            width = 1;
+            safeWidth = 1;
         }
-        QRectF rect(0, 0, width, fres);
+        QRectF rect(0, 0, safeWidth, fres);
         m_noteItem->setRect(rect);
-        if (setPen) {
-            m_noteItem->setPen
-                (QPen(GUIPalette::getColour(GUIPalette::MatrixElementBorder),
-                0));
-        }
+        m_noteItem->setPen(outlinePen());
         m_noteItem->setBrush(QBrush(colour, brushPattern));
         m_noteItem->setPos(x0, pitchy);
-        m_noteItem->setZValue(m_current ? ACTIVE_SEGMENT_NOTE_Z
-                                        : NORMAL_SEGMENT_NOTE_Z);
+
+        if (m_selected) {
+            m_noteItem->setZValue(SELECTED_SEGMENT_NOTE_Z);
+            // First true is selected, second to force update if already
+            // selected (extreme edge case of changing segment's track
+            // from notes to drum while element is selected)
+            setSelected(true, true);
+        } else {
+            m_noteItem->setZValue(m_current ? ACTIVE_SEGMENT_NOTE_Z
+                                            : NORMAL_SEGMENT_NOTE_Z);
+        }
         m_noteItem->setData(MatrixElementData,
                             QVariant::fromValue((void *)this));
     }
 
     // Optional note name.
-    // But don't show on normal diamond percussion notes
+    // But no note names on diamond-shaped percussion notes.
     bool showName = m_scene->getMatrixWidget()->getShowNoteNames() &&
                     !m_drumDisplay;
     if (showName) {
         if (!m_textItem) m_textItem = m_scene->graphicsTextPool.getFrom();
 
         // Draw text on top of note, see constants in .h file
-        m_textItem->setZValue(m_current ? ACTIVE_SEGMENT_TEXT_Z
-                                        : NORMAL_SEGMENT_TEXT_Z);
+        if (m_selected)
+            m_textItem->setZValue(SELECTED_SEGMENT_TEXT_Z);
+        else
+            m_textItem->setZValue(m_current ? ACTIVE_SEGMENT_TEXT_Z
+                                            : NORMAL_SEGMENT_TEXT_Z);
+
         m_textItem->setBrush(textColor(colour));
 
-        QString noteName = MidiPitchLabel(pitch).getQString();
-        m_textItem->setText(noteName);
+        QString noteName = MidiPitchLabel(pitch, "").getQString();
+        m_textItem->setText(noteName, m_noteItem->rect());
         QFont font;
-        font.setPixelSize(8);
+        font.setPixelSize(resolution);
         m_textItem->setFont(font);
         m_textItem->setData(MatrixElementData,
                             QVariant::fromValue((void *)this));
-        m_textItem->show();
+        m_textItem->setPos(x0, pitchy - fres * 0.1);
     }
     else if (m_textItem) {
-        m_textItem->hide();
-    }
-
-    if (m_textItem && showName) {
-        m_textItem->setPos(x0 + 1, pitchy - 1);
+        // Could just m_textItem->hide() and then only ->show() above if
+        // not doing getFrom(). But only additional optimization would be
+        // not doing setFont (because resolution can't change, is dependent
+        // on whether any percussion segments) (and isn't recomputed  even
+        // if had drum segemnt but that then deleted in main window). So
+        // even though unlikely, might as well putBack() in case segment's
+        // number of notes decreases before next "View -> Notes -> Show
+        // note names" and a different segment can reuse from pool. No
+        // large impact either way.
+        m_scene->graphicsTextPool.putBack(m_textItem);
+        m_textItem = nullptr;
     }
 
     setLayoutX(x0);
@@ -264,90 +288,85 @@ MatrixElement::isNote() const
     return event()->isa(Note::EventType);
 }
 
-QPolygonF MatrixElement::drumPolygon(qreal resolution, qreal outline)
-{
-    QPolygonF polygon;
-    polygon << QPointF(-outline, -outline)
-            << QPointF(resolution * 0.5 + outline, resolution * 0.5 + outline)
-            << QPointF(-outline, resolution + outline)
-            << QPointF(-resolution * 0.5 + outline, resolution * 0.5 + outline)
-            << QPointF(-outline, -outline);
-    return polygon;
-}
-
 QAbstractGraphicsShapeItem*
 MatrixElement::getActiveItem()
 {
-    if (m_drumDisplay) {
-        return dynamic_cast<QAbstractGraphicsShapeItem *>(m_drumItem);
-    }
-    else {
+    if (!m_drumDisplay && m_noteItem)
         return dynamic_cast<QAbstractGraphicsShapeItem *>(m_noteItem);
-    }
+    else if (m_drumItem)  // must be true
+        return dynamic_cast<QAbstractGraphicsShapeItem *>(m_drumItem);
+    else  // safety check, can't happen
+        return nullptr;
 }
 
 void
-MatrixElement::setSelected(bool selected)
+MatrixElement::setSelected(bool selected, bool force)
 {
-    RG_DEBUG << "setSelected" << event()->getAbsoluteTime() << selected;
-    if (selected == m_selected) return;
+    // force==true is for use by reconfigure() in extreme edge
+    // case of changing segment from drums to notes or vice-versa
+    // while element is selected
+    if (!force && selected == m_selected) return;
 
     QAbstractGraphicsShapeItem *item = getActiveItem();
     if (!item) return;
 
-#if 0   // t4osDEBUG
-    RG_WARNING << "setSelected()"   // t4osDEBUG
-               << m_segment->getLabel()
-               << item->pos()
-               << m_selected
-               << "->"
-               << selected;
-#endif
-
-    static const qreal OUTLINE = 1.0,
-                       DOUBLE = 2.0;
-
     if (selected) {
-        // Outline in default blue for velocity color mode, otherwise
-        // choose contrasting color.
-        QColor selectionColor;
-        if (m_scene->getMatrixWidget()->getNoteColorType() ==
-            MatrixWidget::NoteColorType::VELOCITY) {
-            selectionColor = GUIPalette::getColour(GUIPalette::
-                                                   SelectedElement);
-        }
-        else {
-            selectionColor = QColor::fromHsv(
-                                    (item->brush().color().hue() + 180) % 360,
-                                    255, 224);
-        }
-
+        QColor selectionColor = selectionBorderColor(item);
         float res = m_scene->getYResolution() + 1;
+        item->setZValue(SELECTED_SEGMENT_NOTE_Z);
         if (item == m_noteItem) {
-            QRectF rect = m_noteItem->rect();
-         // RG_WARNING << rect;  // t4osDEBUG
-            rect.adjust(OUTLINE, OUTLINE, -OUTLINE, -OUTLINE);
-            m_noteItem->setRect(rect);
-         // RG_WARNING  << rect << '\n';     // t4osDEBUG
-        } else {
-            QPolygonF polygon = drumPolygon(res, OUTLINE);
-            m_drumItem->setPolygon(polygon);
+            if (m_textItem) m_textItem->setZValue(SELECTED_SEGMENT_TEXT_Z);
+            if (!m_noteSelectItem) {
+                m_noteSelectItem = m_scene->graphicsIsotropicRectPool.getFrom();
+                m_noteSelectItem->setZValue(SELECTION_BORDER_Z);
+            }
+            m_noteSelectItem->setRect(m_noteItem->rect());
+            m_noteSelectItem->setPos(m_noteItem->pos());
+            m_noteSelectItem->setBrush(QBrush(selectionColor));
+            m_noteSelectItem->setData(MatrixElementData,
+                                QVariant::fromValue((void *)this));
+        } else {   // item == m_drumItem
+            m_drumItem->setPen(Qt::NoPen);
+            if (!m_drumSelectItem) {
+                m_drumSelectItem = m_scene->graphicsIsotropicDiamondPool.
+                                   getFrom();
+                m_drumSelectItem->setZValue(SELECTION_BORDER_Z);
+                m_drumSelectItem->setPen(Qt::NoPen);
+            }
+            m_drumSelectItem->setSize(res * 0.5 + DRUM_SELECT_BORDER_WIDTH,
+                                      res       + DRUM_SELECT_BORDER_WIDTH * 2);
+            m_drumSelectItem->setPos(m_drumItem->pos().x(),
+                                     m_drumItem->pos().y() -
+                                       DRUM_SELECT_BORDER_WIDTH);
+            m_drumSelectItem->setBrush(QBrush(selectionColor));
+            m_drumSelectItem->setData(MatrixElementData,
+                                QVariant::fromValue((void *)this));
         }
-
-     // pen.setCosmetic(!m_drumDisplay);
-        QPen pen(selectionColor, DOUBLE, Qt::SolidLine, Qt::SquareCap,
-                 Qt::MiterJoin);
-        item->setPen(pen);
-    } else {
+    } else {  // not selected
         if (item == m_noteItem) {
-            QRectF rect = m_noteItem->rect();
-         // RG_WARNING << rect;  // t4osDEBUG
-            rect.adjust(-OUTLINE, -OUTLINE, OUTLINE, OUTLINE);
-         // RG_WARNING  << rect << '\n';     // t4osDEBUG
-            m_noteItem->setRect(rect);
+            m_noteItem->setZValue(ACTIVE_SEGMENT_NOTE_Z);
+            if (m_textItem) m_textItem->setZValue(ACTIVE_SEGMENT_TEXT_Z);
+            if (m_noteSelectItem) {
+                // Definitely putBack() instead of hide(). See comments
+                // in reconfigure(timeT,timeT,int,int) above. If just
+                // hide() pool would continuously grow each time a new
+                // element was selected until all had selectItems, even
+                // though very few are likely be active at any given time.
+                // Plus, almost all initialization above needs to be done
+                // if was show() instead of getFrom() (and getFrom() is
+                // cheap) so no good reason to do hide()/show() instead.
+                m_scene->graphicsIsotropicRectPool.putBack(m_noteSelectItem);
+                m_noteSelectItem = nullptr;
+            }
+        } else {   // item == m_drumItem
+            m_drumItem->setZValue(ACTIVE_SEGMENT_NOTE_Z);
+            m_drumItem->setPen(outlinePen());
+            if (m_drumSelectItem) {
+                // See comment above
+                m_scene->graphicsIsotropicDiamondPool.putBack(m_drumSelectItem);
+                m_drumSelectItem = nullptr;
+            }
         }
-        item->setPen
-            (QPen(GUIPalette::getColour(GUIPalette::MatrixElementBorder), 0));
     }
     m_selected = selected;
 }
@@ -355,8 +374,6 @@ MatrixElement::setSelected(bool selected)
 void
 MatrixElement::setCurrent(bool current)
 {
-    RG_DEBUG << "setCurrent" << event()->getAbsoluteTime() <<
-        current << m_current;
     if (m_current == current) return;
 
     m_current = current;  // must be done before call to noteColor()
@@ -367,6 +384,7 @@ MatrixElement::setCurrent(bool current)
     QColor  color = noteColor();
 
     item->setBrush(color);
+    item->setPen(outlinePen());
 
     item->setZValue(current ? ACTIVE_SEGMENT_NOTE_Z : NORMAL_SEGMENT_NOTE_Z);
 
@@ -374,14 +392,6 @@ MatrixElement::setCurrent(bool current)
         m_textItem->setBrush(textColor(color));
         m_textItem->setZValue(current ? ACTIVE_SEGMENT_TEXT_Z
                                       : NORMAL_SEGMENT_TEXT_Z);
-    }
-
-    if (current) {
-        item->setPen
-            (QPen(GUIPalette::getColour(GUIPalette::MatrixElementBorder), 0));
-    } else {
-        item->setPen
-            (QPen(GUIPalette::getColour(GUIPalette::MatrixElementLightBorder), 0));
     }
 }
 
@@ -404,6 +414,20 @@ void MatrixElement::setColor()
     item->update();
 
     if (m_textItem) m_textItem->setBrush(textColor(color));
+
+    if (item == m_noteItem && m_noteSelectItem)
+        m_noteSelectItem->setBrush(selectionBorderColor(m_noteItem));
+    else if (item == m_drumItem && m_drumSelectItem)
+        m_drumSelectItem->setBrush(selectionBorderColor(m_drumItem));
+}
+
+QPen MatrixElement::outlinePen() const
+{
+    const QColor outlineColor =
+        m_current ?
+        GUIPalette::getColour(GUIPalette::MatrixElementBorder) :
+        GUIPalette::getColour(GUIPalette::MatrixElementLightBorder);
+    return QPen(outlineColor, 0);
 }
 
 QColor
@@ -478,6 +502,38 @@ const
     int intensity = qGray(noteColor.rgb());
     if (intensity > 112) return Qt::black;
     else                 return Qt::white;
+}
+
+QColor
+MatrixElement::selectionBorderColor(
+const QAbstractGraphicsShapeItem *item)
+const
+{
+    // Outline in default blue for velocity color mode, otherwise
+    // choose contrasting color.
+
+    if (m_scene->getMatrixWidget()->getNoteColorType() ==
+        MatrixWidget::NoteColorType::VELOCITY)
+    {
+        return GUIPalette::getColour(GUIPalette::SelectedElement);
+    } else {
+        const QColor noteColor = item->brush().color();
+
+        // map 0,63,64,127,128,191,192,255 to 160,191,192,223,224,255,128,159
+        auto mapTo128_255 = [](unsigned satVal) {
+            unsigned rot_64   = (satVal + 64) % 256,
+                     map_0_to_127  = static_cast<unsigned>(rot_64 * 127.0 /
+                                                           255.0 + 0.5);
+            return map_0_to_127 + 128;
+            };
+
+        const QColor result =
+               QColor::fromHsv((noteColor.hue() + 240) % 360,
+                               mapTo128_255(noteColor.saturation()),
+                               mapTo128_255(noteColor.value()));
+
+        return result;
+    }
 }
 
 }  // namespace

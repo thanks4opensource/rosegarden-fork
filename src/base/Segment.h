@@ -451,7 +451,7 @@ public:
     //////
     //
     // ADVANCED, ESOTERIC, or PLAIN STUPID MANIPULATION
-    
+
     /**
      * Returns the range [start, end[ of events which are at absoluteTime
      */
@@ -572,7 +572,7 @@ public:
     * default clef and/or key signature as needed.
     */
     void enforceBeginWithClefAndKey();
-    
+
     /**
      * Stop sending move or resize notifications to the observers.
      * (May be useful to avoid sending lot of unnecessary resize notifications
@@ -581,15 +581,15 @@ public:
      * Should be used with caution!
      */
     void lockResizeNotifications();
-    
+
     /**
      * Revert lockResizeNotifications() effect. If segment has been move
      * or resized, send one, and only one, notification to the observers.
      * Should only be called after lockResizeNotifications() has been called.
      * Nested lock/unlock calls are not allowed currently.
-     */ 
-    void unlockResizeNotifications();    
-    
+     */
+    void unlockResizeNotifications();
+
     /**
      * YG: This one is only for debug
      */
@@ -776,7 +776,7 @@ public:
 
     // Get the segments in the current composition.
     static SegmentMultiSet& getCompositionSegments();
-    
+
     void  addObserver(SegmentObserver *obs);
     void removeObserver(SegmentObserver *obs);
 
@@ -802,7 +802,7 @@ public:
 
    /**
     * Return true if the segment is connected to a SegmentLinker.
-    * This doesn't always mean that the segment is really linked : 
+    * This doesn't always mean that the segment is really linked :
     *    - The segment may be the only one referenced by the SegmentLinker.
     *      (Probably this should not be, but nevertheless is not impossible.)
     *    - The segment is a repeating one opened in the notation editor.
@@ -815,7 +815,7 @@ public:
      * Return true if the segment is link to at least one other segment
      * which is not a temporary one nor being outside ofthe composition
      * (i.e. deleted).
-     */ 
+     */
     bool isTrulyLinked() const;
 
     /**
@@ -823,18 +823,18 @@ public:
      * local change (as transpositon...).
      * This method is intended to help exporting linked segments as repeat with
      * volta in LilyPond.
-     */ 
+     */
     bool isPlainlyLinked() const;
 
     /**
      * Return true if the given segment is linked to this.
-     */ 
+     */
     bool isLinkedTo(Segment *) const;
 
     /**
      * Return true if the given segment is a plain link linked to the current
      * object which is equally a plain link
-     */ 
+     */
     bool isPlainlyLinkedTo(Segment *) const;
 
     SegmentLinker * getLinker() const { return m_segmentLinker; }
@@ -875,7 +875,7 @@ public:
      * that it is temporary or read-only.
      **/
     void setGreyOut();
-    
+
     /**
      * Set the current segment as the reference of the linked segment group and
      * return true.
@@ -896,7 +896,7 @@ public:
      * May return 0 if segment is linked but no reference is defined.
      */
     const Segment * getRealSegment() const;
-    
+
     /// Exclude from printing (lilypond).
     /**
      * linkedSegmentsAlso parameter is provided to prevent recursion when
@@ -935,7 +935,7 @@ private:
      * Used by getVerseCount().
      */
     void countVerses();
-    
+
     Composition *m_composition; // owns me, if it exists
 
     timeT  m_startTime;
@@ -990,12 +990,14 @@ private: // stuff to support SegmentObservers
 
     void notifyAdd(Event *) const;
     void notifyRemove(Event *) const;
+    void notifyColourChange() const;
+    void notifyLabelChange() const;
     void notifyAppearanceChange() const;
     void notifyStartChanged(timeT);
     void notifyEndMarkerChange(bool shorten);
     void notifyTransposeChange();
     void notifySourceDeletion() const;
-    
+
     bool m_notifyResizeLocked;
     timeT m_memoStart;
     timeT *m_memoEndMarkerTime;
@@ -1005,7 +1007,7 @@ signals:
  public:
     void signalChanged(timeT start, timeT end)
     { emit contentsChanged(start,end); }
-    
+
 private:
 
     // assignment operator not provided
@@ -1077,10 +1079,17 @@ public:
     virtual void allEventsChanged(const Segment *);
 
     /**
-     * Called after a change in the segment that will change the way its displays,
-     * like a label change for instance
+     * Called after a change in the segment that will change the way it is
+     * displayed. Used for label and/or color change.
      */
     virtual void appearanceChanged(const Segment *) { }
+
+    // Additions to appearanceChanged() for clients
+    // that would prefer to have finer-grained notifications. Are
+    // called before, and in addition to, appearanceChanged(), not
+    // "instead of".
+    virtual void colourChanged(const Segment *) { }
+    virtual void labelChanged(const Segment *) { }
 
     /// Called after a change that affects the start time of the segment.
     virtual void startChanged(const Segment *, timeT) { }

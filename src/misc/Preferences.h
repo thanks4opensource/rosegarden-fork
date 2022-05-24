@@ -64,8 +64,7 @@ namespace Preferences
     QString getCustomAudioLocation();
 
     // Experimental
-    bool getBug1623();
-
+    bool getChordRulerNonDiatonicChords();
 }
 
 

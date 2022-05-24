@@ -36,6 +36,10 @@ public:
                       bool drumMode);
     ~MatrixViewSegment() override;
 
+    // SegmentObserver (base class ViewSegment) notifications
+    void colourChanged(const Segment *segment) override;
+    void labelChanged(const Segment *segment) override;
+    void appearanceChanged(const Segment *segment) override;
     void endMarkerTimeChanged(const Segment *segment, bool shorten) override;
 
     SegmentRefreshStatus &getRefreshStatus() const;

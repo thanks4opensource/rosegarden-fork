@@ -29,6 +29,7 @@
 #include "CompositionTimeSliceAdapter.h"
 #include "base/BaseProperties.h"
 #include "Composition.h"
+#include "misc/Preferences.h"
 
 #include "Sets.h"
 #include "Quantizer.h"
@@ -158,7 +159,8 @@ ChordLabel::ChordLabel(Key key, int mask, int /* bass */) :
          i != m_chordMap.end() && i->first==mask; ++i)
     {
 
-        if (Pitch(i->second.m_rootPitch).isDiatonicInKey(key))
+        if (Preferences::getChordRulerNonDiatonicChords() ||
+            Pitch(i->second.m_rootPitch).isDiatonicInKey(key))
         {
             m_data = i->second;
         }
@@ -180,10 +182,9 @@ ChordLabel::ChordLabel(Key key, int mask, int /* bass */) :
 }
 
 std::string
-ChordLabel::getName(Key key) const
+ChordLabel::getName(Key /* key */) const
 {
-    return Pitch(m_data.m_rootPitch).getAsString(key.isSharp(), false) +
-        m_data.m_type;
+    return Pitch(m_data.m_rootPitch).getAsString(false) + m_data.m_type;
         // + (m_data.m_inversion>0 ? " in first inversion" : "");
 }
 
@@ -1152,9 +1153,9 @@ AnalysisHelper::guessKeyAtTime(Composition &comp, timeT t,
             }
         }
     }
-    
+
     // Return the most common one, if any.
-    if (!keyCounts.empty()) { 
+    if (!keyCounts.empty()) {
         unsigned int mostFound = 0;
         Key bestKey = Key();
         for (MapKeys::iterator i = keyCounts.begin();
@@ -1174,7 +1175,7 @@ AnalysisHelper::guessKeyAtTime(Composition &comp, timeT t,
     return helper.guessKey(adapter);
 }
 
-// Guess the appropriate key signature for segment at this time.  
+// Guess the appropriate key signature for segment at this time.
 // @returns Key in concert pitch
 // @param t is the target time
 // @param segment is the target segment

@@ -120,13 +120,16 @@ public:
     /// Updates the wheel background, segment label text, and
     /// MIDI out instrument (whether step recording or not) if
     /// setInstrumentOverride == true
-    void updateToCurrentSegment(bool setInstrumentOverride);
+    /// Optional Segment* argument if caller already has that,
+    /// otherwise will get from MatrixScene::getCurrentSegment()
+    void updateToCurrentSegment(bool setInstrumentOverride,
+                                const Segment *segment = nullptr);
 
     /// MatrixScene::segmentsContainNotes()
     bool segmentsContainNotes() const;
 
-    /// All segments only have a key mapping.
-    bool hasOnlyKeyMapping() const { return m_onlyKeyMapping; }
+    /// One or more segments are percussion
+    bool hasPercussionSegments() const { return m_hasPercussionSegments; }
 
     ControlRulerWidget *getControlsWidget()  { return m_controlsWidget; }
 
@@ -168,7 +171,14 @@ public:
     // label bar, and MatrixTool subclasses for help text when
     // switching active segment.
     QString segmentTrackInstrumentLabel(const QString formatString,
-                                        const Segment *segment);
+                                        const Segment* constsegment);
+
+    // Used by MatrixScene::trackChanged()
+    void setSegmentTrackInstrumentLabel(const Segment* const segment);
+
+    // Used by MatrixViewSegment::colourChanged()
+    void setSegmentLabelAndChangerColor(const Segment* const segment,
+                                        const QColor *segmentColor = nullptr);
 
     bool getShowNoteNames() const { return m_showNoteNames; }
     void setShowNoteNames(bool show) { m_showNoteNames = show; }
@@ -403,6 +413,8 @@ private:
     Panned *m_pianoView; // I own this
     /// All Segments only have key mappings.  Use a PercussionPitchRuler.
     bool m_onlyKeyMapping;
+    /// One or more segments are percussion
+    bool m_hasPercussionSegments;
     /// Percussion matrix editor?
     /**
      * For the Percussion matrix editor, we ignore key release events from

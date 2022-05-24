@@ -124,10 +124,7 @@ Event::EventData::setTime(const PropertyName &name, timeT t, timeT deft)
 PropertyMap *
 Event::find(const PropertyName &name, PropertyMap::iterator &i)
 {
-    if (!m_data) {
-        RG_WARNING << "find() !m_data";   // t4osDEBUG
-        return nullptr;
-    }
+    if (!m_data) return nullptr;
 
     PropertyMap *map = m_data->m_properties;
 

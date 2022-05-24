@@ -1242,6 +1242,7 @@ Segment::setLabel(const std::string &label)
 {
     m_label = label;
     if (m_composition) m_composition->updateRefreshStatuses();
+    notifyLabelChange();
     notifyAppearanceChange();
 }
 
@@ -1527,6 +1528,27 @@ Segment::notifyAppearanceChange() const
     }
 }
 
+
+void
+Segment::notifyColourChange() const
+{
+    for (ObserverSet::const_iterator i = m_observers.begin();
+         i != m_observers.end(); ++i) {
+        (*i)->colourChanged(this);
+    }
+}
+
+
+void
+Segment::notifyLabelChange() const
+{
+    for (ObserverSet::const_iterator i = m_observers.begin();
+         i != m_observers.end(); ++i) {
+        (*i)->labelChanged(this);
+    }
+}
+
+
 void
 Segment::notifyStartChanged(timeT newTime)
 {
@@ -1614,6 +1636,7 @@ Segment::setColourIndex(const unsigned int input)
     m_colourIndex = input;
     updateRefreshStatuses(getStartTime(), getEndTime());
     if (m_composition) m_composition->updateRefreshStatuses();
+    notifyColourChange();
     notifyAppearanceChange();
 }
 

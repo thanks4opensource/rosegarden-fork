@@ -75,6 +75,7 @@
 
 #include "gui/rulers/ControlRulerWidget.h"
 
+#include "gui/general/EditTempoController.h"
 #include "gui/general/ThornStyle.h"
 
 #include "base/Quantizer.h"
@@ -1479,23 +1480,8 @@ MatrixView::slotToggleTempoRuler()
 
 void MatrixView::slotAddTempo()
 {
-    timeT insertionTime = getInsertionTime();
-
-    TempoDialog tempoDlg(this, RosegardenDocument::currentDocument);
-
-    connect(&tempoDlg,
-             SIGNAL(changeTempo(timeT,
-                    tempoT,
-                    tempoT,
-                    TempoDialog::TempoDialogAction)),
-                    this,
-                    SIGNAL(changeTempo(timeT,
-                           tempoT,
-                           tempoT,
-                           TempoDialog::TempoDialogAction)));
-
-    tempoDlg.setTempoPosition(insertionTime);
-    tempoDlg.exec();
+    const timeT insertionTime = getInsertionTime();
+    EditTempoController::self()->editTempo(this, insertionTime);
 }
 
 void MatrixView::slotAddTimeSignature()

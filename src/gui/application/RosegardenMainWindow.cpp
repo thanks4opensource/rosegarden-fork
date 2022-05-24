@@ -459,6 +459,17 @@ RosegardenMainWindow::RosegardenMainWindow(bool enableSound,
 
     readOptions();
 
+    // Must be done after readOptions() for case when starting RG
+    // new, blank document.
+    // But also see same call at end of initView(), called from
+    // setDocument(), because  RosegardenMainViewWidget and/or
+    // its TrackEditor are constructed/swapped/etc and
+    // RosegardenMainViewWidget::setSegmentSelectedColorMode
+    // calls TrackEditor::getCompositionView()->setSegmentSelectedColorMode()
+    // and CompositionView::m_selectedSegmentColorDark
+    // gets reset in CompositionView constructor.
+    slotSegmentColorMode();
+
     // All toolbars should be created before this is called
     //### implement or find alternative : rgTempQtIV->setAutoSaveSettings(MainWindowConfigGroup, true);
 
@@ -2523,9 +2534,7 @@ RosegardenMainWindow::slotSegmentColorMode()
 {
     QAction *act = this->findAction("segment_color_dark");
 
-    if (act) {
-        m_view->setSegmentSelectedColorMode(act->isChecked());
-    }
+    if (act) m_view->setSegmentSelectedColorMode(act->isChecked());
 }
 
 void

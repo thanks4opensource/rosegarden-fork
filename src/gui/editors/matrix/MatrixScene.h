@@ -33,6 +33,9 @@ class Segment;
 class RosegardenDocument;
 class Event;
 class EventSelection;
+class IsotropicRectItem;
+class IsotropicDiamondItem;
+class IsotropicTextItem;
 class MatrixElement;
 class MatrixMouseEvent;
 class MatrixViewSegment;
@@ -105,7 +108,7 @@ public:
     const RosegardenDocument *getDocument() const { return m_document; }
 
     Segment *getCurrentSegment();
-    void setCurrentSegment(Segment *);
+    void setCurrentSegment(const Segment* const);
 
     Segment *getPriorSegment();
     Segment *getNextSegment();
@@ -192,10 +195,10 @@ public:
         std::vector<GraphicsItemType*> m_items;
     };
 
-    GraphicsItemPool<QGraphicsRectItem>       graphicsRectPool;
-    GraphicsItemPool<QGraphicsPolygonItem>    graphicsPolyPool;
-    GraphicsItemPool<QGraphicsSimpleTextItem> graphicsTextPool;
-
+    GraphicsItemPool<QGraphicsRectItem>     graphicsRectPool;
+    GraphicsItemPool<IsotropicTextItem>     graphicsTextPool;
+    GraphicsItemPool<IsotropicRectItem>     graphicsIsotropicRectPool;
+    GraphicsItemPool<IsotropicDiamondItem>  graphicsIsotropicDiamondPool;
 
 signals:
     void mousePressed(const MatrixMouseEvent *e);
@@ -229,8 +232,10 @@ protected:
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *) override;
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *) override;
 
-    void segmentRemoved(const Composition *, Segment *) override; // CompositionObserver
-    void trackChanged(const Composition *,Track*) override;  //  CompositionObserver
+    // CompositionObserver notifications
+    void segmentRemoved(const Composition *, Segment *) override;
+    void trackChanged(const Composition *,Track*) override;
+    void segmentTrackChanged(const Composition *, Segment *, TrackId) override;
 
 private:
     MatrixWidget *m_widget; // I do not own this

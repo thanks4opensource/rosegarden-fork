@@ -83,7 +83,6 @@ ViewElementList::insert(ViewElement* el)
 void
 ViewElementList::erase(iterator pos)
 {
-    RG_WARNING << "ViewElementList::erase():" << *pos;  // t4osDEBUG
     delete *pos;
     set_type::erase(pos);
 }

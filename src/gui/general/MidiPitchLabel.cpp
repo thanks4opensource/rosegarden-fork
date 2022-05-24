@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -27,7 +27,7 @@
 namespace Rosegarden
 {
 
-MidiPitchLabel::MidiPitchLabel(int pitch)
+MidiPitchLabel::MidiPitchLabel(int pitch, const char *separator)
 {
     // this was refactored to take advantage of these translations being
     // available in other contexts, and to avoid extra work for translators
@@ -52,7 +52,8 @@ MidiPitchLabel::MidiPitchLabel(int pitch)
         int baseOctave = settings.value("midipitchoctave", -2).toInt() ;
 
         int octave = (int)(((float)pitch) / 12.0) + baseOctave;
-        m_midiNote = QString("%1 %2").arg(notes[pitch % 12]).arg(octave);
+        m_midiNote = QString("%1%2%3").arg(notes[pitch % 12]).arg(separator).
+                             arg(octave);
 
         settings.endGroup();
     }

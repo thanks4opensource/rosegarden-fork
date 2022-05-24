@@ -214,10 +214,6 @@ BasicCommand::execute()
 {
     requireSegment();
 
-    RG_WARNING << "execute()"   // t4osDEBUG
-               << getName()
-               << m_segment->getLabel();
-
     RG_DEBUG << getName() << "before execute";
     RG_DEBUG << getName() << "segment" <<
                 m_segment->getStartTime() << m_segment->getEndTime();

@@ -52,12 +52,7 @@ void MatrixEraseCommand::modifySegment()
 
     std::string eventType = m_event->getType();
 
-    if (eventType == Note::EventType) {
-        RG_WARNING << "MatrixEraseCommand():" << m_event;   // t4osDEBUG
-
-        helper.deleteNote(m_event, false);
-
-    }
+    if (eventType == Note::EventType) helper.deleteNote(m_event, false);
 }
 
 }

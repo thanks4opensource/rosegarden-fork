@@ -24,8 +24,7 @@ class QAbstractGraphicsShapeItem;
 class QColor;
 class QGraphicsItem;
 class QGraphicsRectItem;
-class QGraphicsPolygonItem;
-class QGraphicsSimpleTextItem;
+
 
 namespace Rosegarden
 {
@@ -33,6 +32,9 @@ namespace Rosegarden
 class MatrixScene;
 class Event;
 class Segment;
+class IsotropicRectItem;
+class IsotropicTextItem;
+class IsotropicDiamondItem;
 
 class MatrixElement : public ViewElement
 {
@@ -55,7 +57,7 @@ public:
     double getWidth() const { return (m_width >= 6.0f ? m_width : 6.0f); }
     double getElementVelocity() { return m_velocity; }
 
-    void setSelected(bool selected);
+    void setSelected(bool selected, bool force = false);
 
     void setCurrent(bool current);
 
@@ -69,7 +71,7 @@ public:
     void reconfigure(timeT time, timeT duration);
 
     /// Adjust the item to reflect the given values, not those of our event
-    void reconfigure(timeT time, timeT duration, int pitch, bool setPen = true);
+    void reconfigure(timeT time, timeT duration, int pitch);
 
     // See comment at m_segment
     const Segment *getSegment() const  { return m_segment; }
@@ -93,20 +95,25 @@ public:
     // to ensure that mouse click will get active segment's note
     // regardless if clicked on note or text (latter in case
     // "View -> Show note names" is in effect).
-    static constexpr float ACTIVE_SEGMENT_TEXT_Z =   3.0,
-                           ACTIVE_SEGMENT_NOTE_Z =   2.0,
-                           NORMAL_SEGMENT_TEXT_Z =   1.0,
-                           NORMAL_SEGMENT_NOTE_Z =   0.0,
-                           VERTICAL_BAR_LINE_Z   =  -8.0,
-                           HORIZONTAL_LINE_Z     =  -9.0,
-                           VERTICAL_BEAT_LINE_Z  = -10.0,
-                           HIGHLIGHT_Z           = -11.0;
+    static constexpr float SELECTED_SEGMENT_TEXT_Z =   6.0,
+                           SELECTED_SEGMENT_NOTE_Z =   5.0,
+                           SELECTION_BORDER_Z      =   4.0,
+                           ACTIVE_SEGMENT_TEXT_Z   =   3.0,
+                           ACTIVE_SEGMENT_NOTE_Z   =   2.0,
+                           NORMAL_SEGMENT_TEXT_Z   =   1.0,
+                           NORMAL_SEGMENT_NOTE_Z   =   0.0,
+                           VERTICAL_BAR_LINE_Z     =  -8.0,
+                           HORIZONTAL_LINE_Z       =  -9.0,
+                           VERTICAL_BEAT_LINE_Z    = -10.0,
+                           HIGHLIGHT_Z             = -11.0;
 
 
 protected:
-    static const int GRAY_RED_COMPONENT = 200,
-                     GRAY_GREEN_COMPONENT = 200,
-                     GRAY_BLUE_COMPONENT = 200;
+    static const unsigned GRAY_RED_COMPONENT   = 200,
+                          GRAY_GREEN_COMPONENT = 200,
+                          GRAY_BLUE_COMPONENT  = 200;
+
+    static const unsigned DRUM_SELECT_BORDER_WIDTH = 4;
 
     MatrixScene *m_scene;
     Event* const m_event;
@@ -115,8 +122,11 @@ protected:
     bool m_current;
     bool m_selected;
     QGraphicsRectItem *m_noteItem;
-    QGraphicsPolygonItem *m_drumItem;
-    QGraphicsSimpleTextItem *m_textItem;
+    IsotropicDiamondItem *m_drumItem;
+    IsotropicTextItem *m_textItem;
+    IsotropicRectItem *m_noteSelectItem;
+    IsotropicDiamondItem *m_drumSelectItem;
+
     double m_width;
     double m_velocity;
 
@@ -127,9 +137,6 @@ protected:
      * parameter, and use it appropriately when doing height calculations
      */
     long m_pitchOffset;
-
-    long m_pitch;   // t4osDEBUG: cached to avoid crash fetching from
-                    // m_event in destructor debug print
 
     // Bug #1624: Allows MatrixPainter::handleLeftButtonPress() and
     // other MatrixSomeClass::handleSomeButtonSomeAction() methods to tell
@@ -146,21 +153,20 @@ protected:
     // setCurrent(), and setColor().
     QColor textColor(const QColor noteColor) const;
 
+    // Common code used by setSelected() and setColor()
+    QColor selectionBorderColor(const QAbstractGraphicsShapeItem*) const;
+
     // Common code used by reconfigure(timeT, timeT, int, int)
     // and setCurrent(bool).
     QColor noteColor() const;
+    QPen outlinePen() const;
 
     // Common code used by setSelected() and setCurrent()
     QAbstractGraphicsShapeItem *getActiveItem();
 
-    // Common code used by reconfigure(timeT, timeT, int, int)
-    // and setSelected()
-    static QPolygonF drumPolygon(qreal resolution, qreal outline);
-
 private:
     /// Adjust the item to reflect the given values, not those of our event
-    void reconfigure(timeT time, timeT duration, int pitch, int velocity,
-                     bool setPen = true);
+    void reconfigure(timeT time, timeT duration, int pitch, int velocity);
 };
 
 

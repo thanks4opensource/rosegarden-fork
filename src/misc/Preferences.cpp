@@ -36,7 +36,7 @@ namespace
     int afldLocation = 0;
     QString afldCustomLocation;
 
-    bool bug1623 = false;
+    bool chordRulerNonDiatonicChords = false;
 }
 
 void Preferences::setSendProgramChangesWhenLooping(bool value)
@@ -227,7 +227,7 @@ QString Preferences::getCustomAudioLocation()
     return afldCustomLocation;
 }
 
-bool Preferences::getBug1623()
+bool Preferences::getChordRulerNonDiatonicChords()
 {
     static bool firstGet = true;
 
@@ -236,14 +236,15 @@ bool Preferences::getBug1623()
 
         QSettings settings;
         settings.beginGroup(ExperimentalConfigGroup);
-        bug1623 = settings.value("bug1623", "false").toBool();
+        chordRulerNonDiatonicChords = settings.value(
+                                        "chordRulerNonDiatonicChords",
+                                        "false").toBool();
         // Write it back out so we can find it if it wasn't there.
-        settings.setValue("bug1623", bug1623);
+        settings.setValue("chordRulerNonDiatonicChords",
+                          chordRulerNonDiatonicChords);
     }
 
-    return bug1623;
+    return chordRulerNonDiatonicChords;
 }
-
-
 
 }

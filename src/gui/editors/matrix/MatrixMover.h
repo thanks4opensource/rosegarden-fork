@@ -74,6 +74,11 @@ protected:
     bool m_quickCopy;
 
     int m_lastPlayedPitch;
+
+    static const int IMPOSSIBLE_DIFF_PITCH = 128;
+
+    timeT m_crntElementCrntTime;
+    int m_prevDiffPitch;
 };
 
 }

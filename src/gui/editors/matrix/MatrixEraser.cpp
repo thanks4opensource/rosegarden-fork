@@ -58,11 +58,8 @@ void MatrixEraser::handleLeftButtonPress(const MatrixMouseEvent *e)
 
 void MatrixEraser::ready()
 {
-#if 0   // t4os
-    if (m_widget) m_widget->setCanvasCursor(Qt::PointingHandCursor);
-#else
+    // Was stock Qt::PointingHandCursor
     if (m_widget && m_cursor) m_widget->setCanvasCursor(*m_cursor);
-#endif
     setBasicContextHelp();
 }
 

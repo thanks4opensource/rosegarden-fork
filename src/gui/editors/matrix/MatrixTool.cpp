@@ -26,8 +26,6 @@
 #include "MatrixWidget.h"
 #include "MatrixScene.h"
 
-#include <gui/editors/notation/NotePixmapFactory.h>  // t4osDEBUG
-
 #include <QAction>
 #include <QString>
 #include <QMenu>

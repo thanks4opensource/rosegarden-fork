@@ -16,7 +16,8 @@
 */
 
 #define RG_MODULE_STRING "[MatrixWidget]"
-#define RG_NO_DEBUG_PRINT 1
+#define NDEBUG 1
+
 
 #include "MatrixWidget.h"
 
@@ -55,7 +56,6 @@
 
 #include "gui/studio/StudioControl.h"
 
-#include "misc/Preferences.h"
 #include "misc/Debug.h"
 
 #include "sequencer/RosegardenSequencer.h"
@@ -123,6 +123,7 @@ MatrixWidget::MatrixWidget(MatrixView *matrixView) :
     m_pianoScene(nullptr),
     m_pianoView(nullptr),
     m_onlyKeyMapping(false),
+    m_hasPercussionSegments(false),
     m_drumMode(false),
     m_prevPitchRulerType(PrevPitchRulerType::NONE),
     m_firstNote(0),
@@ -395,18 +396,19 @@ MatrixWidget::setSegments(RosegardenDocument *document,
     // Look at segments to see if we need piano keyboard or key mapping ruler
     // (cf comment in MatrixScene::setSegments())
     m_onlyKeyMapping = true;
+    m_hasPercussionSegments = false;
     std::vector<Segment *>::iterator si;
     for (si=segments.begin(); si!=segments.end(); ++si) {
         track = comp.getTrackById((*si)->getTrack());
         instr = document->getStudio().getInstrumentById(track->getInstrument());
         if (instr) {
-            if (!instr->getKeyMapping()) {
-                m_onlyKeyMapping = false;
-            }
+            if (instr->getKeyMapping()) m_hasPercussionSegments = true;
+            else m_onlyKeyMapping = false;
         }
     }
-    // Note : m_onlyKeyMapping, whose value is defined above,
-    // must be set before calling m_scene->setSegments()
+
+    // Note : m_hasPercussionSegments, set above must be set
+    // before calling m_scene->setSegments()
 
     delete m_scene;
     m_scene = new MatrixScene();
@@ -551,19 +553,16 @@ MatrixWidget::generatePitchRuler()
     m_instrument = m_document->getStudio().
                             getInstrumentById(track->getInstrument());
     if (m_instrument) {
-
         // Make instrument tell us if it gets destroyed.
         connect(m_instrument, &QObject::destroyed,
                 this, &MatrixWidget::slotInstrumentGone);
 
         mapping = m_instrument->getKeyMapping();
         if (mapping) {
-            //RG_DEBUG << "generatePitchRuler(): Instrument has key mapping: " << mapping->getName();
             m_localMapping.reset(new MidiKeyMapping(*mapping));
             m_localMapping->extend();
             isPercussion = true;
         } else {
-            //RG_DEBUG << "generatePitchRuler(): Instrument has no key mapping";
             isPercussion = false;
         }
     }
@@ -915,7 +914,6 @@ MatrixWidget::slotDispatchMousePress(const MatrixMouseEvent *e)
         m_currentTool->handleRightButtonPress(e);
     }
 
-    RG_DEBUG << "slotDispatchMousePress autoscroll start";
     m_autoScroller.start();
 }
 
@@ -933,7 +931,6 @@ MatrixWidget::slotDispatchMouseMove(const MatrixMouseEvent *e)
 
     FollowMode followMode = m_currentTool->handleMouseMove(e);
 
-    RG_DEBUG << "slotDispatchMouseMove mode" << followMode;
     m_autoScroller.setFollowMode(followMode);
 }
 
@@ -945,7 +942,6 @@ MatrixWidget::slotDispatchMouseRelease(const MatrixMouseEvent *e)
     if (!m_currentTool)
         return;
 
-    RG_DEBUG << "slotDispatchMouseRelease autoscroll stop";
     m_currentTool->handleMouseRelease(e);
 }
 
@@ -998,6 +994,41 @@ const Segment* const segment)
                arg(instrument->getLocalizedPresentationName()).
                arg(programName).
                arg(QString::fromStdString(segment->getLabel()));
+}
+
+void MatrixWidget::setSegmentTrackInstrumentLabel(
+const Segment* const segment)
+{
+    const QString segmentTrackInstrumentLabelText =
+        segmentTrackInstrumentLabel(tr("Track %1: (%2) -- %3 -- %4    "
+                                        "Segment: %5"), segment);
+    m_segmentLabel->setText(segmentTrackInstrumentLabelText);
+}
+
+void MatrixWidget::setSegmentLabelAndChangerColor(
+const Segment* const segment,
+const QColor *segmentColor)
+{
+    QColor gottenColor;
+
+    if (!segmentColor) {
+        gottenColor = m_document->getComposition().getSegmentColourMap().
+                        getColour(segment->getColourIndex());
+        segmentColor = &gottenColor;
+    }
+
+    // Segment changer color
+    QPalette palette = m_changerWidget->palette();
+    palette.setColor(QPalette::Window, *segmentColor);
+    m_changerWidget->setPalette(palette);
+
+    // Segment label colors
+    palette = m_segmentLabel->palette();
+    // Background
+    palette.setColor(QPalette::Window, *segmentColor);
+    // Foreground/Text
+    palette.setColor(QPalette::WindowText, segment->getPreviewColour());
+    m_segmentLabel->setPalette(palette);
 }
 
 void
@@ -1459,7 +1490,6 @@ MatrixWidget::slotSegmentChangerMoved(int v)
     }
 
     m_lastSegmentChangerValue = v;
-    updateToCurrentSegment(true);  // true == set instrument playback override
 
     // If we are switching between a pitched instrument segment and a pecussion
     // segment or betwween two percussion segments with different percussion
@@ -1470,14 +1500,19 @@ MatrixWidget::slotSegmentChangerMoved(int v)
     if (segmentChanged) {
         clearSelection();
         generatePitchRuler();
+        updateToCurrentSegment(true);  // true == set instrument
     }
 }
 
 void
-MatrixWidget::updateToCurrentSegment(bool setInstrumentOverride)
+MatrixWidget::updateToCurrentSegment(
+bool setInstrumentOverride,
+const Segment *segment)
 {
     Composition &composition = m_document->getComposition();
-    const Segment *segment = m_scene->getCurrentSegment();
+
+    // Caller will provide if alread has, but if not ...
+    if (!segment) segment = m_scene->getCurrentSegment();
 
     // This can happen when called from slotDocumentModified()
     // and the last remaining last track in the editor is deleted.
@@ -1500,19 +1535,6 @@ MatrixWidget::updateToCurrentSegment(bool setInstrumentOverride)
     if (!track)
         return;
 
-    // Experimental feature.  See Bug #1623 and comments below.
-    if (Preferences::getBug1623()) {
-        // Set active track so that external MIDI notes play with
-        // correct instrument (regardless whether Step Recording is on or off)
-        composition.setSelectedTrack(trackId);
-        // Need to call RosegardenDocument::slotDocumentModified() as well
-        // otherwise the UI will not update to stay in sync with this.
-        // Also, TrackButtons does not handle documentModified(), so it
-        // will get out of sync regardless.
-        // See https://www.rosegardenmusic.com/wiki/dev:tnp
-        RosegardenDocument::currentDocument->slotDocumentModified();
-    }
-
     QString trackLabel = QString::fromStdString(track->getLabel());
     if (trackLabel == "")
         trackLabel = tr("<untitled>");
@@ -1528,6 +1550,11 @@ MatrixWidget::updateToCurrentSegment(bool setInstrumentOverride)
         RosegardenSequencer::getInstance()->setTrackInstrumentOverride(
             instrumentId, instrument->getNaturalChannel());
     }
+
+    // Not using setSegmenttrackinstrumentlabel() because that
+    // calls segmentTrackInstrumentLabel() which goes through
+    // extracting track/instrument/programName/etc which we
+    // already have here.
 
     QString programName = QString::fromStdString(instrument->getProgramName());
     if (programName == "") programName = tr("<unnamed>");
@@ -1759,18 +1786,31 @@ MatrixWidget::slotDocumentModified(bool /*arg*/)
     //     the UI must update.  Unfortunately, the design of MatrixWidget
     //     does not include an updateWidgets().  We'll probably have to
     //     redesign and rewrite MatrixWidget before this becomes possible.
+
+#if 0
+    // All above comments long out-of-date and inapplicable.
+    // Code below no longer needed, is superfluous duplicate of nerw
+    // finer-grained notifications.
     if (!m_scene->getCurrentSegment()) {
         generatePitchRuler();
         updateToCurrentSegment(false);  // false == don't set instrument
                                         // playback override
     }
+#endif
 }
 
 void
 MatrixWidget::slotDocColoursChanged()
 {
+#if 0   // Superfluous, for several reasons:
+        // When one or more segment's, colors change, get in order:
+        // MatrixViewSegment::appearanceChanged() <for each segment>
+        // MatrixWidget::slotDocColoursChanged()
+        // MatrixWidget::slotDocumentModified()
+        // MatrixScene::slotCommandExecuted()
     m_scene->updateAllSegmentsColors();
     updateToCurrentSegment(false);  // don't set instrument playback override
+#endif
 }
 
 void

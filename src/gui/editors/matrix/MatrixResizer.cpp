@@ -138,18 +138,10 @@ MatrixResizer::handleMouseMove(const MatrixMouseEvent *e)
     EventSelection* selection = m_scene->getSelection();
     if (!selection || selection->getAddedEvents() == 0) return NO_FOLLOW;
 
-    EventContainer::iterator it =
-        selection->getSegmentEvents().begin();
+    if (durationDiff == 0) return FOLLOW_HORIZONTAL;
 
-    for (; it != selection->getSegmentEvents().end(); ++it) {
-
-        MatrixElement *element = nullptr;
-        ViewElementList::iterator vi = m_currentViewSegment->findEvent(*it);
-        if (vi != m_currentViewSegment->getViewElementList()->end()) {
-            element = static_cast<MatrixElement *>(*vi);
-        }
-        if (!element) continue;
-
+    for (MatrixElement *element : m_currentViewSegment->
+                                    getSelectedElements()) {
         timeT t = element->getViewAbsoluteTime();
         timeT d = element->getViewDuration();
 
@@ -162,8 +154,6 @@ MatrixResizer::handleMouseMove(const MatrixMouseEvent *e)
         }
 
         element->reconfigure(t, d);
-//            m_currentStaff->positionElement(element);
-//        }
     }
 
 //    m_mParentView->canvas()->update();

@@ -16,12 +16,13 @@
 */
 
 #define RG_MODULE_STRING "[MatrixViewSegment]"
-#define RG_NO_DEBUG_PRINT 1
+#define NDEBUG 1
 
 #include "MatrixViewSegment.h"
 
-#include "MatrixScene.h"
 #include "MatrixElement.h"
+#include "MatrixScene.h"
+#include "MatrixWidget.h"
 
 #include "base/NotationTypes.h"
 #include "base/SnapGrid.h"
@@ -78,8 +79,6 @@ void
 MatrixViewSegment::eventRemoved(const Segment *segment,
                                 Event *event)
 {
-    RG_WARNING << "eventRemoved():" << event;   // t4osDEBUG
-
     // !!! This deletes the associated MatrixElement.
     ViewSegment::eventRemoved(segment, event);
 
@@ -97,20 +96,82 @@ MatrixViewSegment::makeViewElement(Event* e)
     // transpose bits
     long pitchOffset = getSegment().getTranspose();
 
-    //RG_DEBUG << "  I am segment \"" << getSegment().getLabel() << "\"";
-
-    RG_WARNING << "makeViewElement(): new MatrixElement";  // t4osDEBUG
-
     return new MatrixElement(m_scene, e, m_drum, pitchOffset, &getSegment());
 }
 
-// This is invoked via Composition::addObserver() notifications.
+// This is invoked via SegmentObserver notifications.
+void
+MatrixViewSegment::appearanceChanged(const Segment* /*segment*/)
+{
+#if 0  // Respond to finer-grained colourChanged() and labelChanged() instead
+    if (m_scene->getCurrentSegment() == segment) {
+        m_scene->getMatrixWidget()->setSegmentTrackInstrumentLabel(segment);
+    }
+#endif
+}
+
+// This is invoked via SegmentObserver notifications.
+void
+MatrixViewSegment::colourChanged(const Segment *segment)
+{
+    for (auto element : *m_viewElementList)
+        static_cast<MatrixElement*>(element)->setColor();
+
+    if (m_scene->getCurrentSegment() == segment) {
+        m_scene->getMatrixWidget()->setSegmentLabelAndChangerColor(segment);
+    }
+}
+
+// This is invoked via SegmentObserver notifications.
+void
+MatrixViewSegment::labelChanged(const Segment *segment)
+{
+    if (m_scene->getCurrentSegment() == segment) {
+        m_scene->getMatrixWidget()->setSegmentTrackInstrumentLabel(segment);
+    }
+}
+
+// This is invoked via SegmentObserver notifications.
 void
 MatrixViewSegment::endMarkerTimeChanged(const Segment *s, bool shorten)
 {
     ViewSegment::endMarkerTimeChanged(s, shorten);
     if (m_scene) m_scene->segmentEndMarkerTimeChanged(s, shorten);
 }
+
+#if 0
+// Is never(??) invoked because when segment is canonically removed
+// in main interface (GDB reverse chronological):
+//  #0  in Rosegarden::Segment::removeObserver(Rosegarden::SegmentObserver*) ()
+//  #1 in non-virtual thunk to Rosegarden::CompositionModelImpl::segmentRemoved(Rosegarden::Composition const*, Rosegarden::Segment*) ()
+//  #2 in Rosegarden::Composition::notifySegmentRemoved(Rosegarden::Segment*) const ()
+//  #3 in Rosegarden::Composition::detachSegment(Rosegarden::Segment*) ()
+//  #4 in Rosegarden::SegmentEraseCommand::execute() ()
+//
+// Therefor (debug output, forward chronological):
+//  Composition::notifySegmentRemoved Rosegarden::Segment(0x32eed00)
+//  [Segment] removeObserver Rosegarden::Segment(0x32eed00) 0x3548e10
+//  [MatrixScene] segmentRemoved() Rosegarden::Segment(0x32eed00)
+//  [Segment] removeObserver Rosegarden::Segment(0x32eed00) 0x303abe0
+//  [MatrixWidget] slotDocumentModified()
+//  [MatrixWidget] slotDocumentModified()
+//  [Segment] dtor Rosegarden::Segment(0x34036f0)
+//  [Segment] notifySourceDeletion Rosegarden::Segment(0x34036f0)
+//
+// So Segment::notifySourceDeletion() no longer has this object in
+// notification set.
+// Needs to be re-thought/redesigned/reimplmented, or
+// Segment::segmentDeleted() removed
+//
+// This is invoked via SegmentObserver notifications.
+void
+MatrixViewSegment::segmentDeleted(const Segment *segment)
+{
+    RG_DEBUG << "segmentDeleted()"
+             << segment
+             << (segment ? segment->getLabel() : std::string("nullptr"));
+}
+#endif
 
 void
 MatrixViewSegment::updateElements(timeT from, timeT to)

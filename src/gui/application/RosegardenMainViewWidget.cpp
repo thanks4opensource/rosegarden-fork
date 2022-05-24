@@ -2334,73 +2334,73 @@ void RosegardenMainViewWidget::recolorSegmentsContrasting(bool defaultOnly,
         distinguishableColors = {
         ColourMap::Entry(139,   0,   0, "DarkRed"          ),   // 349
         ColourMap::Entry(176, 196, 222, "LightSteelBlue"   ),   //  17
-        ColourMap::Entry(  0, 255,   0, "green"            ),   //  38
+        ColourMap::Entry( 34, 139,  34, "ForestGreen"      ),   //  44
         ColourMap::Entry(255, 127,  80, "coral"            ),   //  74
         ColourMap::Entry(186,  85, 211, "MediumOrchid"     ),   //  91
-        ColourMap::Entry(255, 215,   0, "gold"             ),   // 270
+        ColourMap::Entry(210, 180, 140, "tan"              ),   //  65
         ColourMap::Entry( 32, 178, 170, "LightSeaGreen"    ),   //  34
         ColourMap::Entry(255,   0, 132, "DarkPinkCustom"   ),   //  57
-        ColourMap::Entry(245, 222, 179, "wheat"            ),   //  63
+        ColourMap::Entry(255, 215,   0, "gold"             ),   // 270
 
-        ColourMap::Entry(178,  34,  34, "firebrick"        ),   //  67
-        ColourMap::Entry(  0,   0, 128, "NavyBlue"         ),   //   3
+        ColourMap::Entry(233, 150, 122, "DarkSalmon"       ),   //  69
+        ColourMap::Entry( 30, 144, 255, "DodgerBlue"       ),   // 162
         ColourMap::Entry(  0, 250, 154, "MediumSpringGreen"),   //  40
-        ColourMap::Entry(255, 140,   0, "DarkOrange"       ),   //  73
+        ColourMap::Entry(210, 105,  30, "chocolate"        ),   //  66
         ColourMap::Entry(160,  32, 240, "purple"           ),   //  95
-        ColourMap::Entry(240, 230, 140, "khaki"            ),   //  47
-        ColourMap::Entry(  0, 206, 209, "DarkTurquoise"    ),   //  21
-        ColourMap::Entry(208,  32, 144, "VioletRed"        ),   //  86
         ColourMap::Entry(139,  69,  19, "SaddleBrown"      ),   // 309
+        ColourMap::Entry(  0, 128, 128, "TealCustom"       ),   // 420
+        ColourMap::Entry(208,  32, 144, "VioletRed"        ),   //  86
+        ColourMap::Entry(154, 205,  50, "YellowGreen"      ),   // 248
 
         ColourMap::Entry(220,  20,  60, "CrimsonCustom"    ),   // 419
         ColourMap::Entry(  0,   0, 255, "blue"             ),   // 158
-        ColourMap::Entry(  0, 100,   0, "DarkGreen"        ),   //  29
+        ColourMap::Entry(  0, 255,   0, "green"            ),   //  38
         ColourMap::Entry(255, 165,   0, "orange"           ),   // 326
-        ColourMap::Entry(255,   0, 255, "magenta"          ),   // 378
-        ColourMap::Entry(238, 232, 170, "PaleGoldenrod"    ),   //  48
+        ColourMap::Entry(139,   0, 139, "DarkMagenta"      ),   // 381
+        ColourMap::Entry(184, 134,  11, "DarkGoldenrod"    ),   //  55
         ColourMap::Entry( 64, 224, 208, "turquoise"        ),   //  23
         ColourMap::Entry(219, 112, 147, "PaleVioletRed"    ),   //  83
-        ColourMap::Entry(160,  82,  45, "sienna"           ),   //  59
+        ColourMap::Entry(238, 232, 170, "PaleGoldenrod"    ),   //  48
 
         ColourMap::Entry(205,  92,  92, "IndianRed"        ),   //  57
         ColourMap::Entry( 65, 105, 225, "RoyalBlue"        ),   //  10
-        ColourMap::Entry( 34, 139,  34, "ForestGreen"      ),   //  44
-        ColourMap::Entry(210, 105,  30, "chocolate"        ),   //  66
+        ColourMap::Entry(  0, 100,   0, "DarkGreen"        ),   //  29
+        ColourMap::Entry(255, 140,   0, "DarkOrange"       ),   //  73
         ColourMap::Entry(238, 130, 238, "violet"           ),   //  88
-        ColourMap::Entry(173, 255,  47, "GreenYellow"      ),   //  41
+        ColourMap::Entry(222, 183, 135, "Burlywood"        ),   // 418
         ColourMap::Entry(127, 255, 212, "aquamarine"       ),   // 218
         ColourMap::Entry(255, 105, 180, "HotPink"          ),   //  79
-        ColourMap::Entry(184, 134,  11, "DarkGoldenrod"    ),   //  55
+        ColourMap::Entry(173, 255,  47, "GreenYellow"      ),   //  41
 
         ColourMap::Entry(255,   0,   0, "red"              ),   //  78
         ColourMap::Entry(100, 149, 237, "CornflowerBlue"   ),   //   4
         ColourMap::Entry(107, 142,  35, "OliveDrab"        ),   //  45
         ColourMap::Entry(255,  99,  71, "tomato"           ),   // 338
-        ColourMap::Entry(139,   0, 139, "DarkMagenta"      ),   // 381
-        ColourMap::Entry(255, 255,   0, "yellow"           ),   // 266
+        ColourMap::Entry(255,   0, 255, "magenta"          ),   // 378
+        ColourMap::Entry(205, 133,  63, "Peru"             ),   // 304
         ColourMap::Entry(175, 238, 238, "PaleTurquoise"    ),   //  20
         ColourMap::Entry(255,  20, 147, "DeepPink"         ),   // 350
-        ColourMap::Entry(205, 133,  63, "Peru"             ),   // 304
+        ColourMap::Entry(255, 255,   0, "yellow"           ),   // 266
 
-        ColourMap::Entry(233, 150, 122, "DarkSalmon"       ),   //  69
-        ColourMap::Entry( 30, 144, 255, "DodgerBlue"       ),   // 162
+        ColourMap::Entry(178,  34,  34, "firebrick"        ),   //  67
+        ColourMap::Entry(  0,   0, 128, "NavyBlue"         ),   //   3
         ColourMap::Entry( 60, 179, 113, "MediumSeaGreen"   ),   //  33
         ColourMap::Entry(250, 128, 114, "salmon"           ),   //  70
         ColourMap::Entry(148,   0, 211, "DarkViolet"       ),   //  93
-        ColourMap::Entry(154, 205,  50, "YellowGreen"      ),   // 248
+        ColourMap::Entry(160,  82,  45, "sienna"           ),   //  59
         ColourMap::Entry(  0, 255, 255, "cyan"             ),   // 210
         ColourMap::Entry(255, 148, 176, "MediumPinkCustom" ),   //  82
-        ColourMap::Entry(222, 183, 135, "Burlywood"        ),   // 418
+        ColourMap::Entry(240, 230, 140, "khaki"            ),   //  47
 
         ColourMap::Entry(240, 128, 128, "LightCoral"       ),   //  75
         ColourMap::Entry(  0, 191, 255, "DeepSkyBlue"      ),   // 170
         ColourMap::Entry( 50, 205,  50, "LimeGreen"        ),   //  42
         ColourMap::Entry(255,  69,   0, "OrangeRed"        ),   // 342
         ColourMap::Entry(147, 112, 219, "MediumPurple"     ),   //  96
-        ColourMap::Entry(255, 193,  37, "goldenrod"        ),   // 274
-        ColourMap::Entry(  0, 128, 128, "TealCustom"       ),   // 420
-        ColourMap::Entry(255, 192, 203, "pink"             ),   //  81
         ColourMap::Entry(244, 164,  96, "SandyBrown"       ),   //  64
+        ColourMap::Entry(  0, 206, 209, "DarkTurquoise"    ),   //  21
+        ColourMap::Entry(255, 192, 203, "pink"             ),   //  81
+        ColourMap::Entry(255, 193,  37, "goldenrod"        ),   // 274
     };
 
     ColourMap &colourMap = RosegardenDocument::currentDocument
@@ -2476,9 +2476,10 @@ void RosegardenMainViewWidget::recolorSegmentsContrasting(bool defaultOnly,
         int colourMapIndex = colourMap.id(distinguishableColor.colour);
 
         // Add to color map if not already there.
-        if (colourMapIndex == -1)
+        if (colourMapIndex == -1) {
             colourMapIndex = colourMap.addEntry(distinguishableColor.colour,
                                                 distinguishableColor.name);
+        }
 
         if (perTrack) {
             TrackId segmentTrack = segment->getTrack();
