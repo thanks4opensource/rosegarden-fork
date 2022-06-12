@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -23,10 +23,12 @@
 #include "misc/Debug.h"
 #include "base/RulerScale.h"
 #include "base/SnapGrid.h"
+#include "gui/application/RosegardenMainWindow.h"
 #include "gui/general/GUIPalette.h"
 #include "gui/general/RosegardenScrollView.h"
 #include "document/RosegardenDocument.h"
 
+#include <QApplication>
 #include <QPainter>
 #include <QRect>
 #include <QSize>
@@ -55,32 +57,44 @@ LoopRuler::LoopRuler(RosegardenDocument *doc,
     m_isForMainWindow(isForMainWindow),
     m_currentXOffset(0),
     m_width( -1),
-    m_activeMousePress(false),
+    m_mouseButtonIsDown(false),
+    m_mouseMoved(false),
+    m_mouseXAtClick(0.0),
+    m_lastMouseXPos(0.0),
     m_doc(doc),
+    m_comp(doc->getComposition()),
     m_rulerScale(rulerScale),
     m_defaultGrid(rulerScale),
     m_loopGrid(new SnapGrid(rulerScale)),
     m_grid(&m_defaultGrid),
+    m_isMatrixEditor(false),
     m_quickMarkerPen(QPen(GUIPalette::getColour(GUIPalette::QuickMarker), 4)),
-    m_loopingMode(false),
+    m_loopRangeSettingMode(false),
     m_startLoop(0),
     m_endLoop(0),
-    m_storedLoopStart(0),
-    m_storedLoopEnd(0),
-    m_loopSet(false)
+    m_doubleClickTimer(nullptr),
+    m_mouseEvent(nullptr),
+    m_waitingForDoubleClick(false),
+    m_didDoubleClick(false)
 {
-    // Always snap loop extents to beats; by default apply no snap to
-    // pointer position
-    //
+    // Always snap loop extents to beats.
+    // Apply no snap to pointer position unless Ctrl key, except
+    //   backwards of that for matrix editor.
     m_defaultGrid.setSnapTime(SnapGrid::NoSnap);
     m_loopGrid->setSnapTime(SnapGrid::SnapToBeat);
 
-    setToolTip(tr("<qt><p>Click and drag to move the playback pointer.</p><p>Right-click and drag to set a range for looping or editing.</p><p>Right-click to toggle the range.</p><p>Ctrl-click and drag to move the playback pointer with snap to beat.</p><p>Double-click to start playback.</p></qt>"));
+    setCorrectToolTip();
+
+    m_doubleClickTimer = new QTimer(this);
+    connect(m_doubleClickTimer, &QTimer::timeout,
+            this, &LoopRuler::doubleClickTimerTimeout);
 }
 
 LoopRuler::~LoopRuler()
 {
     delete m_loopGrid;
+    delete m_doubleClickTimer;
+    delete m_mouseEvent;
 }
 
 void
@@ -95,13 +109,47 @@ LoopRuler::setSnapGrid(const SnapGrid *grid)
         m_loopGrid = new SnapGrid(*grid);
     }
     m_loopGrid->setSnapTime(SnapGrid::SnapToBeat);
+    m_isMatrixEditor = (m_grid != &m_defaultGrid);
+    setCorrectToolTip();
+}
+
+void LoopRuler::setCursorSnap(bool controlKeyPressed)
+{
+    if (m_isMatrixEditor) controlKeyPressed = !controlKeyPressed;
+
+    if (controlKeyPressed)
+        m_defaultGrid.setSnapTime(SnapGrid::SnapToBeat);
+    else
+        m_defaultGrid.setSnapTime(SnapGrid::NoSnap);
+}
+
+void
+LoopRuler::setCorrectToolTip()
+{
+    if (m_isMatrixEditor)
+        setToolTip(tr("<qt><p>Click and drag to move the playback pointer."
+                      "</p><p>Right-click and drag to set a range within "
+                              "segment limits for looping or editing."
+                      "</p><p>Right-click to toggle the range."
+                      "</p><p>Ctrl-click and drag to move the playback pointer "
+                             "without snap to beat."
+                      "</p><p>Double-click to start playback."
+                      "</p></qt>"));
+    else
+        setToolTip(tr("<qt><p>Click and drag to move the playback pointer."
+                      "</p><p>Right-click and drag to set a range within "
+                              "segment limits for looping or editing."
+                      "</p><p>Right-click to toggle the range."
+                      "</p><p>Ctrl-click and drag to move the playback pointer "
+                             "with snap to beat."
+                      "</p><p>Double-click to start playback."
+                      "</p></qt>"));
 }
 
 void LoopRuler::scrollHoriz(int x)
 {
     // int w = width(); //, h = height();
     // int dx = x - ( -m_currentXOffset);
-
     m_currentXOffset = -x;
 
 //    if (dx > w*3 / 4 || dx < -w*3 / 4) {
@@ -121,29 +169,6 @@ void LoopRuler::scrollHoriz(int x)
     RG_DEBUG << "LoopRuler::scrollHoriz > Dodgy bitBlt end?";
 */
     update();
-}
-
-bool LoopRuler::reinstateRange()
-{
-    if (m_storedLoopStart != m_storedLoopEnd) {
-        // reinstate the stored loop
-        m_startLoop = m_storedLoopStart;
-        m_endLoop = m_storedLoopEnd;
-        m_loopSet = true;
-        emit setLoopRange(m_startLoop, m_endLoop);
-        RG_DEBUG << "reinstateRange OK";
-        return true;
-    }
-    RG_DEBUG << "reinstateRange no stored range";
-    return false;
-}
-
-void LoopRuler::hideRange()
-{
-    m_startLoop = 0;
-    m_endLoop = 0;
-    m_loopSet = false;
-    emit setLoopRange(m_startLoop, m_endLoop);
 }
 
 QSize LoopRuler::sizeHint() const
@@ -168,35 +193,34 @@ QSize LoopRuler::minimumSizeHint() const
 
 void LoopRuler::paintEvent(QPaintEvent* e)
 {
-//    RG_DEBUG << "LoopRuler::paintEvent";
-
     QPainter paint(this);
 
     paint.setClipRegion(e->region());
     paint.setClipRect(e->rect().normalized());
 
-    // In a stylesheet world, we have to draw the ruler backgrounds.  Hopefully
-    // this won't be too flickery.  (Seems OK, and best of all it actually
-    // worked!)
-    QBrush bg = QBrush(GUIPalette::getColour(GUIPalette::LoopRulerBackground));
-    paint.fillRect(e->rect(), bg);
+    // Display loop range or not
+    if (m_comp.loopRangeIsActive() || m_loopRangeSettingMode)
+        drawLoopMarker(&paint, e->rect().width());
+    else
+        paint.fillRect(e->rect(), QBrush(GUIPalette::getColour(
+                                         GUIPalette::LoopRulerBackground)));
 
     paint.setBrush(palette().windowText());
     drawBarSections(&paint);
-    drawLoopMarker(&paint);
-    
+
     if (m_isForMainWindow) {
         timeT tQM = m_doc->getQuickMarkerTime();
         if (tQM >= 0) {
             // draw quick marker
             double xQM = m_rulerScale->getXForTime(tQM)
                        + m_currentXOffset;
-            
+
             paint.setPen(m_quickMarkerPen);
-            
-            // looks necessary to compensate for shift in the CompositionView (cursor)
+
+            // looks necessary to compensate for shift in the
+            // CompositionView (cursor)
             paint.translate(1, 0);
-            
+
             // draw red segment
             paint.drawLine(int(xQM), 1, int(xQM), m_height-1);
         }
@@ -253,7 +277,7 @@ void LoopRuler::drawBarSections(QPainter* paint)
 }
 
 void
-LoopRuler::drawLoopMarker(QPainter *paint)
+LoopRuler::drawLoopMarker(QPainter *paint, unsigned width)
 {
     double x1 = (int)m_rulerScale->getXForTime(m_startLoop);
     double x2 = (int)m_rulerScale->getXForTime(m_endLoop);
@@ -264,12 +288,45 @@ LoopRuler::drawLoopMarker(QPainter *paint)
     x1 += m_currentXOffset;
     x2 += m_currentXOffset;
 
-    paint->save();
-    paint->setBrush(GUIPalette::getColour(GUIPalette::LoopHighlight));
-    paint->setPen(GUIPalette::getColour(GUIPalette::LoopHighlight));
-    paint->drawRect(static_cast<int>(x1), 0, static_cast<int>(x2 - x1), m_height);
-    paint->restore();
+    // Qt fuckup, doesn't draw correctly if start of rectangle is
+    // offscreen (outside clipRec??)
+    if (x1 < 0) x1 = 0;
+    if (x2 < 0) x2 = 0;
 
+    paint->save();
+    QBrush background = QBrush(GUIPalette::getColour(
+                               GUIPalette::LoopBeforeAfterBackground));
+    QBrush foreground;
+
+    paint->fillRect(QRectF(0, 0, x1, m_height), background);
+
+    if (x1 != 0) {  // Loop range is visible onscreen or is offscreen to right
+                    // and doesn't cover entire visible area, so need to draw
+                    // time range before it.
+        foreground.setColor(GUIPalette::getColour(GUIPalette::LoopBefore));
+        foreground.setStyle(Qt::DiagCrossPattern);
+        paint->setBrush(foreground);
+        paint->drawRect(QRectF(0, 0, x1, m_height));
+    }
+
+    if (x2 != 0) {  // Loop range is visible onscreen -- draw it.
+        foreground.setColor(GUIPalette::getColour(GUIPalette::LoopHighlight));
+        foreground.setStyle(Qt::SolidPattern);
+        paint->setBrush(foreground);
+        paint->drawRect(QRectF(x1, 0, x2, m_height));
+    }
+
+    if (x2 < width) {   // Loop range is visible or is offscreen to left and
+                        // doesn't cover entire visible area, so need to draw
+                        // draw time range after it.
+        paint->fillRect(QRectF(x2, 0, width, m_height), background);
+        foreground.setColor(GUIPalette::getColour(GUIPalette::LoopAfter));
+        foreground.setStyle(Qt::DiagCrossPattern);
+        paint->setBrush(foreground);
+        paint->drawRect(QRectF(x2, 0, width, m_height));
+    }
+
+    paint->restore();
 }
 
 double
@@ -279,109 +336,167 @@ LoopRuler::mouseEventToSceneX(QMouseEvent *mE)
     return x;
 }
 
+// The double-click timer code is necessary to implement starting playback
+// on double click at the current playback cursor time without first doing
+// the single click action of jumping the cursor to the mouse position
+// in the ruler. (Applies only to left button click, not to right button
+// setting loop range and active/inactive.)
+// This keeps the user experience consistent: That starting playback is the
+// always the same whether done by a "Play" button, a menu, or a double-click
+// in a LoopRuler. In all cases playback starts at the same precise time.
+// The downside (besides the code complexity) is a slight delay (the
+// double click time period) when single-clicking to set the time cursor,
+// either by an immediate click and release, or when starting a move/drag.
+// The delay is almost imperceptible and considered acceptable given the
+// benefit gained in the double-click interaction.
 void
-LoopRuler::mousePressEvent(QMouseEvent *mouseEvent)
+LoopRuler::doubleClickTimerTimeout()
 {
-    //RG_DEBUG << "LoopRuler::mousePressEvent: x = " << mouseEvent->x();
+    m_doubleClickTimer->stop();
+    m_waitingForDoubleClick = false;
+    doSingleClick();
+}
 
-    const double x = mouseEventToSceneX(mouseEvent);
+void LoopRuler::mousePressEvent(QMouseEvent *mouseEvent)
+{
+    m_mouseButtonIsDown = true;
+    m_mouseMoved = false;
+    m_mouseXAtClick = mouseEventToSceneX(mouseEvent);
 
-    const bool leftButton = (mouseEvent->button() == Qt::LeftButton);
-    const bool rightButton = (mouseEvent->button() == Qt::RightButton);
-    const bool shift = ((mouseEvent->modifiers() & Qt::ShiftModifier) != 0);
+    delete m_mouseEvent;
+    m_mouseEvent = new QMouseEvent(*mouseEvent);
 
-    // If loop mode has been requested
-    if ((shift  &&  leftButton)  ||  rightButton) {
-        // Loop mode
-        m_loopingMode = true;
+    // Check if have to wait to see if is double click.
+    if ( m_mouseEvent->button()                           == Qt::RightButton ||
+        (m_mouseEvent->modifiers() & Qt::ShiftModifier)   != 0               ||
+        (m_mouseEvent->modifiers() & Qt::ControlModifier) != 0) {
+        // No, handle immediately
+        doSingleClick();
+    }
+    else {
+        // Yes, wait for possible 2nd click. See doubleClickTimerTimeout().
+        m_waitingForDoubleClick = true;
+        m_doubleClickTimer->start(QApplication::doubleClickInterval());
+    }
+}
+
+void
+LoopRuler::doSingleClick()
+{
+    const double x = mouseEventToSceneX(m_mouseEvent);
+
+    const bool leftButton = (m_mouseEvent->button() == Qt::LeftButton);
+    const bool rightButton = (m_mouseEvent->button() == Qt::RightButton);
+    const bool shift = (m_mouseEvent->modifiers() & Qt::ShiftModifier) != 0;
+    const bool control = (m_mouseEvent->modifiers() & Qt::ControlModifier) != 0;
+
+    delete m_mouseEvent;
+    m_mouseEvent = nullptr;
+
+    // Check for quick press and release (without any mouse motion)
+    if (!m_mouseButtonIsDown && !m_mouseMoved) {
+        // Yes, so all that's needed is to accept it.
+        emit setPointerPosition(m_rulerScale->getTimeForX(x));
+        return;
+    }
+
+    // Check if starting to define loop range, but don't allow if  empty
+    // composition with no segments (doesn't make sense, and causes problems
+    // later in mouseReleaseEvent() when checking loop range against
+    // start/end times of segments).
+    if (((shift && leftButton) || rightButton) &&
+            m_comp.getNbSegments() != 0) {
+        // Start loop range definition
+        m_loopRangeSettingMode = true;
         m_startLoop = m_loopGrid->snapX(x);
         m_endLoop = m_startLoop;
-        m_activeMousePress = true;
-
         emit startMouseMove(FOLLOW_HORIZONTAL);
-
         return;
     }
 
     // Left button pointer drag
     if (leftButton) {
-
-        // If we are still using the default grid, that means we are being
-        // used by the TrackEditor (instead of the MatrixEditor).
-        if (m_grid == &m_defaultGrid) {
-            // If the ctrl key is pressed, enable snap to beat
-            if ((mouseEvent->modifiers() & Qt::ControlModifier) != 0)
-                m_defaultGrid.setSnapTime(SnapGrid::SnapToBeat);
-            else
-                m_defaultGrid.setSnapTime(SnapGrid::NoSnap);
-        }
-
-        // No -- now that we're emitting when the button is
-        // released, we _don't_ want to emit here as well --
-        // otherwise we get an irritating stutter when simply
-        // clicking on the ruler during playback
-        //emit setPointerPosition(m_rulerScale->getTimeForX(x));
-
-        // But we want to see the pointer under the mouse as soon as the
-        // button is pressed, before we begin to drag it.
-        emit dragPointerToPosition(m_grid->snapX(x));
-
-        m_lastMouseXPos = x;
-
-        m_activeMousePress = true;
+        setCursorSnap(control);
 
         // ??? This signal is never emitted with any other argument.
         //     Remove the parameter.  This gets a little tricky because
         //     some clients need this and share slots with other signal
         //     sources.  It would probably be best to connect this signal
         //     to a slot in the client that is specific to LoopRuler.
+
+        // Check if mouse already moved pointer, and if so don't jump
+        // it back to  where it was before double-click timeout.
+        if (!m_mouseMoved) {
+            m_lastMouseXPos = x;
+            emit setPointerPosition(m_grid->snapX(x));
+        }
         emit startMouseMove(FOLLOW_HORIZONTAL);
-
     }
-
 }
 
 void
 LoopRuler::mouseReleaseEvent(QMouseEvent *mouseEvent)
 {
-    RG_DEBUG << "mouseReleaseEvent loopingMode:" << m_loopingMode;
-    // If we were in looping mode
-    if (m_loopingMode) {
-        m_loopingMode = false;
-        // If there was no drag, toggle the loop.
+    m_mouseButtonIsDown = false;
+
+    if (m_waitingForDoubleClick) {
+        // Waiting to see if double click, so do nothing
+        //
+        // Could possibly use m_doubleClickTimer->isActive() (i.e.
+        // QTimer::isActive()) instead of managing own
+        // bool m_waitingForDoubleClick but would open slight chance of
+        // a race condition if timer has timed out but
+        // doubleClickTimerTimeout() signal hasn't been emitted/received yet.
+        return;
+    }
+
+    if (m_didDoubleClick) {
+        // Don't do single-click release actions.
+        m_didDoubleClick = false;
+        return;
+    }
+
+    // If we were setting loop range
+    if (m_loopRangeSettingMode) {
+        m_loopRangeSettingMode = false;
+
+        // If there was no drag, toggle the loop range active/inactive
+        // instead of defining new range.
         if (m_endLoop == m_startLoop) {
-            m_startLoop = 0;
-            m_endLoop = 0;
-            if (m_loopSet) {
-                // unset the loop
-                RG_DEBUG << "mouseReleaseEvent unset loop";
-                m_loopSet = false;
+            if (m_comp.loopRangeIsActive()) {
+                m_comp.setLoopRangeIsActive(false);
             } else {
-                if (m_storedLoopStart == m_storedLoopEnd) {
-                    // no stored loop - do nothing
-                } else {
-                    // reinstate the stored loop
-                    RG_DEBUG << "mouseReleaseEvent reinstate stored loop";
-                    m_startLoop = m_storedLoopStart;
-                    m_endLoop = m_storedLoopEnd;
-                    m_loopSet = true;
+                m_startLoop = m_comp.getLoopStart();
+                m_endLoop = m_comp.getLoopEnd();
+                if (m_startLoop != m_endLoop) {
+                    limitRangeToSegments();
+                    m_comp.setLoopRangeIsActive(true);
                 }
             }
-            // to clear any other loop rulers
-            emit setLoopRange(m_startLoop, m_endLoop);
-            update();
-        } else {  // There was drag
+        } else {
+            // There was drag, so define new loop range.
+            m_comp.setLoopRangeIsActive(true);
+
             // Make sure start < end
-            if (m_endLoop < m_startLoop)
-                std::swap(m_startLoop, m_endLoop);
-            m_storedLoopStart = m_startLoop;
-            m_storedLoopEnd = m_endLoop;
-            m_loopSet = true;
-            emit setLoopRange(m_startLoop, m_endLoop);
+            if (m_endLoop < m_startLoop) std::swap(m_startLoop, m_endLoop);
+
+            limitRangeToSegments();
         }
 
         emit stopMouseMove();
-        m_activeMousePress = false;
+
+        if (m_comp.loopRangeIsActive()) {
+            // Only set new loop range if has changed
+            if (m_startLoop != m_comp.getLoopStart() ||
+                m_endLoop   != m_comp.getLoopEnd())
+                m_doc->setLoopRange(m_startLoop, m_endLoop);
+            else
+                // Was toggled from inactive to active.
+                m_doc->emitLoopRangeActiveChanged();
+        }
+        else
+            // Was toggled from active to inactive.
+            m_doc->emitLoopRangeActiveChanged();
     }
 
     if (mouseEvent->button() == Qt::LeftButton) {
@@ -392,70 +507,125 @@ LoopRuler::mouseReleaseEvent(QMouseEvent *mouseEvent)
         emit setPointerPosition(m_grid->snapX(m_lastMouseXPos));
 
         emit stopMouseMove();
-        m_activeMousePress = false;
     }
 }
 
 void
-LoopRuler::mouseDoubleClickEvent(QMouseEvent *mE)
+LoopRuler::mouseDoubleClickEvent(QMouseEvent *mouseEvent)
 {
-    double x = mouseEventToSceneX(mE);
-    if (x < 0)
-        x = 0;
+    const bool leftButton = (mouseEvent->button() == Qt::LeftButton);
 
-    RG_DEBUG << "LoopRuler::mouseDoubleClickEvent: x = " << x << ", looping = " << m_loopingMode;
+    if (m_doubleClickTimer) m_doubleClickTimer->stop();
 
-	if (mE->button() == Qt::LeftButton  &&  !m_loopingMode)
-        emit setPlayPosition(m_grid->snapX(x));
+    m_waitingForDoubleClick = false;
+    m_didDoubleClick = true;  // See mouseReleaseEvent()
+
+    if (leftButton) RosegardenMainWindow::self()->slotPlay();
 }
 
 void
 LoopRuler::mouseMoveEvent(QMouseEvent *mE)
 {
-    // If we are still using the default grid, that means we are being
-    // used by the TrackEditor (instead of the MatrixEditor).
-    if (m_grid == &m_defaultGrid) {
-        // If the ctrl key is pressed, enable snap to beat
-        if ((mE->modifiers() & Qt::ControlModifier) != 0)
-            m_defaultGrid.setSnapTime(SnapGrid::SnapToBeat);
-        else
-            m_defaultGrid.setSnapTime(SnapGrid::NoSnap);
-    }
+    setCursorSnap((mE->modifiers() & Qt::ControlModifier) != 0);
 
     double x = mouseEventToSceneX(mE);
-    if (x < 0)
-        x = 0;
+    if (x < 0) x = 0;
 
-    if (m_loopingMode) {
+    // Need to tell doSingleClick that pointer has already moved so
+    // it shouldn't jump it back to where it was when mouse button
+    // was first clicked when it gets triggered by double-click timer
+    // timout.
+    // But wait for significant mouse movement to ignore inadvertent
+    // movement during double-click timer.
+    if (!m_mouseMoved && fabs(x - m_mouseXAtClick) < 5.0) {  // 5 pixels
+        return;
+    }
+    m_mouseMoved = true;
+
+    if (m_loopRangeSettingMode) {
         if (m_loopGrid->snapX(x) != m_endLoop) {
             m_endLoop = m_loopGrid->snapX(x);
-            emit dragLoopToPosition(m_endLoop);
             update();
         }
-    } else {
-        emit dragPointerToPosition(m_grid->snapX(x));
-
-        m_lastMouseXPos = x;
-
+        emit mouseMove();
     }
-
-    emit mouseMove();
+    // Double check that isn't loop range definition aborted because no segments
+    else if (mE->buttons() & Qt::LeftButton) {
+        emit dragPointerToPosition(m_defaultGrid.snapX(x));
+        m_lastMouseXPos = x;
+        emit mouseMove();
+    }
 }
 
-void LoopRuler::slotSetLoopMarker(timeT startLoop,
-                                  timeT endLoop)
+// Make sure loop is within time range spanned by union of segments
+// Returns true if needed to adjust to make so.
+bool LoopRuler::limitRangeToSegments()
 {
-    RG_DEBUG << "slotSetLoopMarker:" << startLoop << endLoop;
+    bool changed = false;
+    timeT loopDuration = m_endLoop - m_startLoop;
+    timeT minSegBeg = m_comp.getMinSegmentStartTime();
+    timeT maxSegEnd = m_comp.getMaxSegmentEndTime();
 
-    m_startLoop = startLoop;
-    m_endLoop = endLoop;
-    if (m_startLoop != m_endLoop) {
-        m_loopSet = true;
-        m_storedLoopStart = m_startLoop;
-        m_storedLoopEnd = m_endLoop;
+    if (m_startLoop < minSegBeg) {
+        m_startLoop = minSegBeg;
+        m_endLoop = minSegBeg + loopDuration;
+        changed = true;
+    }
+    if (m_endLoop > maxSegEnd) {
+        m_endLoop = maxSegEnd;
+        m_startLoop = maxSegEnd - loopDuration;
+        changed = true;
+    }
+    if (m_startLoop < minSegBeg) {
+        m_startLoop = minSegBeg;
+        changed = true;
+    }
+    if (m_endLoop > maxSegEnd) {
+        m_endLoop = maxSegEnd;
+        changed = true;
     }
 
+    return changed;
+}
+
+// Another window or editor's ruler or a /dialog/menu has changed the loop range.
+void LoopRuler::slotSetLoopMarkerStartEnd(timeT startLoop, timeT endLoop)
+{
+    m_startLoop = startLoop;
+    m_endLoop = endLoop;
     update();
 }
 
+// Another window or editor's ruler or a /dialog/menu has changed loop active.
+void LoopRuler::slotSetLoopMarkerActive()
+{
+    update();
 }
+
+void LoopRuler::slotDocumentModified()
+{
+    // Really only want to be called when segment(s) are added/removed/changed
+    // in the composition, but such things are handle by the CompositionObserver
+    // notification mechanism, not signals and slots, and no way to capture
+    // those here because only interesting case is in RosegardenMainWindow
+    // and that isn't a CompositionObserver. So until all of this is sorted
+    // out (along with the granularity of what is being  notified/signalled)
+    // will have to be hit with this when 99% of the time it won't be
+    // applicable here.
+
+    // If no segments makes no sense to have loop range, so remove it.
+    if (m_comp.getNbSegments() == 0 && m_comp.loopRangeIsActive()) {
+        m_comp.setLoopRangeIsActive(false);
+        update();
+    }
+    // Otherwise, make sure loop range is within segments start/end
+    else {
+        m_startLoop = m_comp.getLoopStart();
+        m_endLoop   = m_comp.getLoopEnd();
+        if (limitRangeToSegments()) {
+            m_comp.setLoopRange(m_startLoop, m_endLoop);
+        }
+    }
+}
+
+}  // namespace Rosegarden

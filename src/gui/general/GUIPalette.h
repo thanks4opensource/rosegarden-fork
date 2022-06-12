@@ -80,6 +80,9 @@ public:
     static const char* const LoopRulerBackground;
     static const char* const LoopRulerForeground;
     static const char* const LoopHighlight;
+    static const char* const LoopBeforeAfterBackground;
+    static const char* const LoopBefore;
+    static const char* const LoopAfter;
 
     static const char* const RulerForeground;
     static const char* const RulerBackground;

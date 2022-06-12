@@ -253,8 +253,6 @@ public:
 
     void openWindow(ExternalController::Window window);
 
-    void toggleLoop();
-
 protected:
 
     /// Handle activation change.
@@ -486,6 +484,7 @@ signals:
 
     /// emitted when a plugin dialog (un)bypasses a plugin
     void pluginBypassed(InstrumentId, int, bool);
+
 
 public slots:
 
@@ -1114,17 +1113,6 @@ public slots:
     void slotSetPointerPosition(timeT t);
 
     /**
-     * Set the pointer position and start playing (from LoopRuler)
-     */
-    void slotSetPlayPosition(timeT position);
-
-    /**
-     * Set a loop
-     */
-    void slotSetLoop(timeT lhs, timeT rhs);
-
-
-    /**
      * Update the transport with the bar, beat and unit times for
      * a given timeT
      */
@@ -1135,6 +1123,7 @@ public slots:
      * Transport controls
      */
     void slotPlay();
+    void slotPlaying(bool playing);
     void slotStop();
     void slotRewind();
     void slotFastforward();
@@ -1180,19 +1169,11 @@ public slots:
      */
     void slotToggleSolo(bool);
 
-    /**
-     * Set and unset the loop from the transport loop button with
-     * these slots.
+    /*
+     * Looping buttons
      */
-    void slotSetLoop();
-    void slotUnsetLoop();
-
-    /**
-     * Set and unset the loop start/end time from the transport loop start/stop buttons with
-     * these slots.
-     */
-    void slotSetLoopStart();
-    void slotSetLoopStop();
+    void slotLoopButtonClicked();
+    void slotSetLoopingMode(bool continuous);
 
     /**
      * Toggle the track labels on the TrackEditor
@@ -1656,15 +1637,6 @@ private:
     Typematic m_rewindTypematic;
     /// For the fast-forward button on a keyboard controller.
     Typematic m_fastForwardTypematic;
-
-    /// Flag for looping whole song
-    bool m_loopingAll;
-    timeT m_loopAllEndTime;
-
-    // for deferred looping
-    bool m_deferredLoop;
-    timeT m_deferredLoopStart;
-    timeT m_deferredLoopEnd;
 
     // end of last segment in composition
     timeT m_endOfLatestSegment;

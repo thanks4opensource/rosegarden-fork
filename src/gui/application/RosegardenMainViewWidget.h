@@ -114,7 +114,7 @@ public:
     void setZoomSize(double size);
 
     void initChordNameRuler();
-    
+
     bool haveSelection();
     SegmentSelection getSelection();
     void updateSelectedSegments();
@@ -256,7 +256,7 @@ signals:
      * to edit views
      */
     void compositionStateUpdate();
-    
+
 
     /**
      * This signal is used to dispatch a notification for a request to

@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -183,7 +183,7 @@ RosegardenDocument::getAutoSavePeriod() const
 
     unsigned int ret;
     ret = settings.value("autosaveinterval", 60).toUInt();
-    
+
     settings.endGroup();        // corresponding to: settings.beginGroup( GeneralOptionsConfigGroup );
     return ret;
 }
@@ -299,7 +299,7 @@ void
 RosegardenDocument::setQuickMarker()
 {
     RG_DEBUG << "RosegardenDocument::setQuickMarker";
-    
+
     m_quickMarkerTime = getComposition().getPosition();
 }
 
@@ -603,7 +603,7 @@ bool RosegardenDocument::openDocument(const QString &filename,
 
     // Unzip
     bool okay = GzipFile::readFromFile(filename, fileContents);
-    
+
     QString errMsg;
     bool cancelled = false;
 
@@ -1257,7 +1257,7 @@ bool RosegardenDocument::saveDocumentActual(const QString& filename,
             attsString += QString("linkertransposesegmentback=\"%5\" ");
             QString linkedSegAtts = QString(attsString)
               .arg(segment->getLinker()->getSegmentLinkerId())
-              .arg(segment->getLinkTransposeParams().m_changeKey ? "true" : 
+              .arg(segment->getLinkTransposeParams().m_changeKey ? "true" :
                                                                    "false")
               .arg(segment->getLinkTransposeParams().m_steps)
               .arg(segment->getLinkTransposeParams().m_semitones)
@@ -1441,7 +1441,7 @@ void RosegardenDocument::saveSegment(QTextStream& outStream, Segment *segment,
                       << "\" stretch=\""
                       << segment->getStretchRatio();
         }
-        
+
         outStream << "\">\n";
 
         // convert out - should do this as XmlExportable really
@@ -1685,7 +1685,7 @@ RosegardenDocument::xmlParse(QString fileContents, QString &errMsg,
             }
 
         } else {
-           
+
             bool shownWarning = false;
 
             int sr = 0;
@@ -1705,7 +1705,7 @@ RosegardenDocument::xmlParse(QString fileContents, QString &errMsg,
                     break;
                 }
             }
-                
+
             if (sr != 0 &&
                 handler.hasActiveAudio() &&
                 ((er != 0 && er != sr) ||
@@ -1718,16 +1718,16 @@ RosegardenDocument::xmlParse(QString fileContents, QString &errMsg,
                 QMessageBox::information(dynamic_cast<QWidget *>(parent()), tr("Rosegarden"), tr("<h3>Incorrect audio sample rate</h3><p>This composition contains audio files that were recorded or imported with the audio server running at a different sample rate (%1 Hz) from the current JACK server sample rate (%2 Hz).</p><p>Rosegarden will play this composition at the correct speed, but any audio files in it will probably sound awful.</p><p>Please consider re-starting the JACK server at the correct rate (%3 Hz) and re-loading this composition before you do any more work with it.</p>").arg(er).arg(sr).arg(er));
 
                 shownWarning = true;
- 
+
             } else if (sr != 0 && mixed) {
-                    
+
                 StartupLogo::hideIfStillThere();
 
                 QMessageBox::information(dynamic_cast<QWidget *>(parent()), tr("Rosegarden"), tr("<h3>Inconsistent audio sample rates</h3><p>This composition contains audio files at more than one sample rate.</p><p>Rosegarden will play them at the correct speed, but any audio files that were recorded or imported at rates different from the current JACK server sample rate (%1 Hz) will probably sound awful.</p><p>Please see the audio file manager dialog for more details, and consider resampling any files that are at the wrong rate.</p>").arg(sr));
-                
+
                 shownWarning = true;
             }
- 
+
             if (m_pluginManager && !handler.pluginsNotFound().empty()) {
 
                 // We only warn if a plugin manager is present, so as
@@ -1746,24 +1746,24 @@ RosegardenDocument::xmlParse(QString fileContents, QString &errMsg,
                     msg += tr("<li>%1 (from %2)</li>").arg(label).arg(pluginFileName);
                 }
                 msg += "</ul>";
-                
+
                 StartupLogo::hideIfStillThere();
                 QMessageBox::information(dynamic_cast<QWidget *>(parent()), tr("Rosegarden"), msg);
                 shownWarning = true;
-                
+
             }
 
             if (handler.isDeprecated() && !shownWarning) {
-                
+
                 QString msg(tr("This file contains one or more old element types that are now deprecated.\nSupport for these elements may disappear in future versions of Rosegarden.\nWe recommend you re-save this file from this version of Rosegarden to ensure that it can still be re-loaded in future versions."));
                 slotDocumentModified(); // so file can be re-saved immediately
-                
+
                 StartupLogo::hideIfStillThere();
                 QMessageBox::information(dynamic_cast<QWidget *>(parent()), tr("Rosegarden"), msg);
             }
 
         }
-        
+
         getComposition().resetLinkedSegmentRefreshStatuses();
     }
 
@@ -2147,7 +2147,7 @@ RosegardenDocument::transposeRecordedSegment(Segment *s)
                  for (EventContainer::iterator i =
                       selectedWholeSegment->getSegmentEvents().begin();
                      i != selectedWholeSegment->getSegmentEvents().end(); ++i) {
-                     
+
                      if ((*i)->isa(Note::EventType)) {
                          if (semitones != 0) {
                             if (!(*i)->has(PITCH)) {
@@ -2165,7 +2165,7 @@ RosegardenDocument::transposeRecordedSegment(Segment *s)
                  }
              }
         }
-} 
+}
 
 RosegardenDocument::NoteOnRecSet *
 RosegardenDocument::adjustEndTimes(NoteOnRecSet& rec_vec, timeT endTime)
@@ -2342,7 +2342,7 @@ RosegardenDocument::stopRecordingMidi()
     // the start of an otherwise empty count-in
 
     timeT meaningfulBarStart = c.getBarStartForTime(earliestMeaning);
-    
+
     for (RecordingSegmentMap::iterator i = m_recordMIDISegments.begin();
          i != m_recordMIDISegments.end();
          ++i) {
@@ -2466,12 +2466,65 @@ RosegardenDocument::slotSetPointerPosition(timeT t)
 }
 
 void
-RosegardenDocument::setLoop(timeT t0, timeT t1)
+RosegardenDocument::setLoopRange(timeT t0, timeT t1)
 {
-    RG_DEBUG << "setLoop" << t0 << t1;
-    m_composition.setLoopStart(t0);
-    m_composition.setLoopEnd(t1);
-    emit loopChanged(t0, t1);
+    bool changed = (t0 != m_composition.getLoopStart() ||
+                    t1 != m_composition.getLoopEnd());
+
+    m_composition.setLoopRange(t0, t1);
+
+    if (t0 == t1)
+        setLoopRangeIsActive(false);
+    else
+        m_seqManager->setLoop(t0, t1);
+
+    if (changed) {
+        setModified();  // no notification/signal
+        emit loopRangeStartEndChanged(t0, t1);
+    }
+}
+
+void
+RosegardenDocument::setLoopRangeIsActive(bool active)
+{
+    m_composition.setLoopRangeIsActive(active);
+    m_seqManager->resetLoopRange(active);
+    emit loopRangeActiveChanged();
+}
+
+// Wrapper as per Qt "best practices" documentation (signals should
+// only be emitted by class that defines them).
+void
+RosegardenDocument::emitLoopRangeActiveChanged()
+{
+    emit loopRangeActiveChanged();
+}
+
+void
+RosegardenDocument::toggleLoopRangeIsActive()
+{
+    setLoopRangeIsActive(!m_composition.loopRangeIsActive());
+}
+
+void RosegardenDocument::toggleLoopingMode()
+{
+    Composition::LoopingMode mode = m_composition.loopingMode();
+    bool isLooping = false;
+
+    switch (mode) {
+    case Composition::LoopingMode::ONE_SHOT:
+        mode = Composition::LoopingMode::CONTINUOUS;
+        isLooping = true;
+        break;
+    case Composition::LoopingMode::CONTINUOUS:
+        mode = Composition::LoopingMode::ONE_SHOT;
+        break;
+    }
+
+    m_composition.setLoopingMode(mode);
+    m_seqManager->setLooping(isLooping);
+
+    emit loopingModeChanged(isLooping);
 }
 
 void
@@ -2680,34 +2733,34 @@ RosegardenDocument::stopRecordingAudio()
         //
         /*!!!
           No.  I don't like this.
-         
+
           The record latency doesn't always exist -- for example, if recording
           from a synth plugin there is no record latency, and we have no way
           here to distinguish.
-         
+
           The record latency is a total latency figure that actually includes
           some play latency, and we compensate for that again on playback (see
           bug #1378766).
-         
+
           The timeT conversion of record latency is approximate in frames,
           giving potential phase error.
-         
+
           Cutting this out won't break any existing files, as the latency
           compensation there is already encoded into the file.
-         
+
             RealTime adjustedStartTime =
                 m_composition.getElapsedRealTime(recordSegment->getStartTime()) -
                 m_audioRecordLatency;
-         
+
             timeT shiftedStartTime =
                 m_composition.getElapsedTimeForRealTime(adjustedStartTime);
-         
+
             RG_DEBUG << "RosegardenDocument::stopRecordingAudio - "
                          << "shifted recorded audio segment by "
                          <<  recordSegment->getStartTime() - shiftedStartTime
                  << " clicks (from " << recordSegment->getStartTime()
                  << " to " << shiftedStartTime << ")";
-         
+
             recordSegment->setStartTime(shiftedStartTime);
         */
     }

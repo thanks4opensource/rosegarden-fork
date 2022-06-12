@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -75,7 +75,7 @@ class ConfigurationXmlSubHandler : public XmlSubHandler
 public:
     ConfigurationXmlSubHandler(const QString &elementName,
                    Rosegarden::Configuration *configuration);
-    
+
     bool startElement(const QString& namespaceURI,
                               const QString& localName,
                               const QString& qName,
@@ -141,11 +141,11 @@ bool ConfigurationXmlSubHandler::characters(const QString& chars)
 
         return true;
     }
-    
+
     if (m_propertyType == "RealTime") {
         Rosegarden::RealTime rt;
         int sepIdx = ch.indexOf(',');
-        
+
         rt.sec = ch.left(sepIdx).toInt();
         rt.nsec = ch.mid(sepIdx + 1).toInt();
 
@@ -158,11 +158,11 @@ bool ConfigurationXmlSubHandler::characters(const QString& chars)
 
     if (m_propertyType == "Bool") {
         QString chLc = ch.toLower();
-        
+
         bool b = (chLc == "true" ||
                   chLc == "1"    ||
                   chLc == "on");
-        
+
         //RG_DEBUG << "  setting (Bool) " << m_propertyName << "=" << b;
 
         m_configuration->set<Rosegarden::Bool>(qstrtostr(m_propertyName), b);
@@ -172,7 +172,7 @@ bool ConfigurationXmlSubHandler::characters(const QString& chars)
 
     if (m_propertyType.isEmpty() ||
     m_propertyType == "String") {
-        
+
         //RG_DEBUG << "  setting (String) " << m_propertyName << "=" << ch;
 
         m_configuration->set<Rosegarden::String>(qstrtostr(m_propertyName),
@@ -180,7 +180,7 @@ bool ConfigurationXmlSubHandler::characters(const QString& chars)
 
         return true;
     }
-    
+
 
     return true;
 }
@@ -672,6 +672,8 @@ RoseXmlHandler::startElement(const QString& namespaceURI,
             getComposition().setLoopEnd(loopEnd);
         }
 
+#if 0   // No longer applicable, new Composition::haveLoopRange(),
+        // loopRangeActived(), loopingMode(), etc.
         QString isLooping = atts.value("islooping").toString();
         if (isLooping.isEmpty()) {
             // old document - use start = end
@@ -682,6 +684,7 @@ RoseXmlHandler::startElement(const QString& namespaceURI,
             else
                 getComposition().setLooping(false);
         }
+#endif
 
         QString selectedTrackStr = atts.value("selected").toString();
 
@@ -850,12 +853,12 @@ RoseXmlHandler::startElement(const QString& namespaceURI,
         // track properties affecting newly created segments are initialized
         // to default values in the ctor, so they don't need to be initialized
         // here
-        
+
         QString presetLabelStr = atts.value("defaultLabel").toString();
         if (!presetLabelStr.isEmpty()) {
             track->setPresetLabel( qstrtostr(presetLabelStr) );
         }
-    
+
         QString clefStr = atts.value("defaultClef").toString();
         if (!clefStr.isEmpty()) {
             track->setClef(clefStr.toInt());
@@ -1062,7 +1065,7 @@ RoseXmlHandler::startElement(const QString& namespaceURI,
         QString triggerVelocityStr = atts.value("triggerbasevelocity").toString();
         QString triggerRetuneStr = atts.value("triggerretune").toString();
         QString triggerAdjustTimeStr = atts.value("triggeradjusttimes").toString();
-        
+
         QString linkerIdStr = atts.value("linkerid").toString();
 
         QString linkerChgKeyStr = atts.value("linkertransposechangekey").toString();
@@ -1091,9 +1094,9 @@ RoseXmlHandler::startElement(const QString& namespaceURI,
             m_currentSegment->setStartTimeDataMember(startTime);
         } else {
             if (!linkerIdStr.isEmpty()) {
-                SegmentLinker *linker = nullptr;                                  
+                SegmentLinker *linker = nullptr;
                 int linkId = linkerIdStr.toInt();
-                SegmentLinkerMap::iterator linkerItr = 
+                SegmentLinkerMap::iterator linkerItr =
                                                   m_segmentLinkers.find(linkId);
                 if (linkerItr == m_segmentLinkers.end()) {
                     //need to create a SegmentLinker with this id
@@ -1361,7 +1364,7 @@ RoseXmlHandler::startElement(const QString& namespaceURI,
             m_errorString = "No ID on Device tag";
             return false;
         }
-        
+
         //int id = idString.toInt();
 
         if (type == "midi") {
@@ -1375,8 +1378,8 @@ RoseXmlHandler::startElement(const QString& namespaceURI,
                     addMIDIDevice(nameStr, m_createDevices, "play"); // also sets m_device
                 }
             }
-            
-            
+
+
             if (direction == "record") {
                 if (m_device) {
                     if (!nameStr.isEmpty()) {
@@ -1460,7 +1463,7 @@ RoseXmlHandler::startElement(const QString& namespaceURI,
             m_percussion = (atts.value("percussion").toString().toLower() == "true");
             m_msb = (atts.value("msb")).toInt();
             m_lsb = (atts.value("lsb")).toInt();
-            
+
             // Must account for file format <1.6.0
             // which would return an empty string.
             //
@@ -2013,10 +2016,10 @@ RoseXmlHandler::startElement(const QString& namespaceURI,
             if (!q.isEmpty())
                 metronome.setBarPitch(atts.value("barpitch").toInt());
 
-            q = atts.value("beatpitch").toString();    
+            q = atts.value("beatpitch").toString();
             if (!q.isEmpty())
                 metronome.setBeatPitch(atts.value("beatpitch").toInt());
-            
+
             q = atts.value("subbeatpitch").toString();
             if (!q.isEmpty())
                 metronome.setSubBeatPitch(atts.value("subbeatpitch").toInt());
@@ -2178,7 +2181,7 @@ RoseXmlHandler::startElement(const QString& namespaceURI,
             QString alias = atts.value("value").toString();
             m_instrument->setAlias(alias.toStdString());
         }
-            
+
     } else if (lcName == "audioinput") {
 
         if (m_section != InInstrument) {
@@ -2377,11 +2380,11 @@ RoseXmlHandler::endElement(const QString& namespaceURI,
             m_currentSegment->setEndMarkerTime(*m_segmentEndMarkerTime);
 
             // If the segment is zero or negative duration
-            if (m_currentSegment->getEndMarkerTime() <= 
+            if (m_currentSegment->getEndMarkerTime() <=
                     m_currentSegment->getStartTime()) {
                 // Make it stick out so the user can take care of it.
                 m_currentSegment->setEndMarkerTime(
-                    m_currentSegment->getStartTime() + 
+                    m_currentSegment->getStartTime() +
                         Note(Note::Shortest).getDuration());
             }
 
@@ -2519,11 +2522,11 @@ RoseXmlHandler::addMIDIDevice(QString name, bool createAtSequencer, QString dir)
     *   bool createAtSequencer : normally true
     *   QString dir            : direction "play" or "record"
     **/
-    
+
     unsigned int deviceId = 0;
-    
+
     MidiDevice::DeviceDirection devDir;
-    
+
     if (dir == "play") {
         devDir = MidiDevice::Play;
     } else if (dir == "record") {

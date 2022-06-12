@@ -36,7 +36,7 @@
 #include <set>
 #include <map>
 
-namespace Rosegarden 
+namespace Rosegarden
 {
 // We store tempo in quarter-notes per minute * 10^5 (hundred
 // thousandths of a quarter-note per minute).  This means the maximum
@@ -56,7 +56,7 @@ class CompositionObserver;
 /**
  * It is a container for multiple Segment objects (m_segments), as well as
  * any associated non-Event data.
- * 
+ *
  * The Composition owns the Segment objects it holds, and deletes them on
  * destruction.  See deleteSegment() and detachSegment().
  */
@@ -64,7 +64,7 @@ class ROSEGARDENPRIVATE_EXPORT Composition : public XmlExportable
 {
     friend class Track; // to call notifyTrackChanged()
     friend class Segment; // to call notifySegmentRepeatChanged()
-    
+
 public:
     typedef SegmentMultiSet::iterator iterator;
     typedef SegmentMultiSet::const_iterator const_iterator;
@@ -106,6 +106,10 @@ public:
     timeT getDuration(bool withRepeats = false) const;
 
 
+    timeT getMaxSegmentEndTime() const { return getDuration(true); }
+    timeT getMinSegmentStartTime() const;
+
+
     //////
     //
     // START AND END MARKERS
@@ -129,11 +133,11 @@ public:
 
     /// Zero-based position on UI.
     Track* getTrackByPosition(int position) const;
- 
+
     int getTrackPositionById(TrackId track) const; // -1 if not found
 
     trackcontainer& getTracks() { return m_tracks; }
- 
+
     const trackcontainer& getTracks() const { return m_tracks; }
 
     // Reset id and position
@@ -177,7 +181,7 @@ public:
      * the track object.
      */
     void addTrack(Track *track);
- 
+
     /**
      * Delete a Track by index
      */
@@ -385,13 +389,13 @@ public:
      * Delete all trigger Segments.
      */
     void clearTriggerSegments();
-    
+
     /**
      * Return the TriggerSegmentId for the given Segment, or -1 if it is
      * not a trigger Segment.
      */
     int getTriggerSegmentId(Segment *);
-    
+
     /**
      * Return the Segment for a given TriggerSegmentId
      */
@@ -437,7 +441,7 @@ public:
      * Clear refresh statuses of SegmentLinker after file load.
      */
     void resetLinkedSegmentRefreshStatuses();
-    
+
     //////
     //
     //  BAR
@@ -460,7 +464,7 @@ public:
      */
     timeT getBarStart(int n) const {
         return getBarRange(n).first;
-    } 
+    }
 
     /**
      * Return the ending time of bar n
@@ -471,7 +475,7 @@ public:
 
     /**
      * Return the time range of bar n.
-     * 
+     *
      * Will happily return theoretical timings for bars before the
      * start or beyond the end of composition (i.e. there is no
      * requirement that 0 <= n < getNbBars()).
@@ -495,7 +499,7 @@ public:
     /**
      * Return the starting and ending times of the bar that contains
      * time t.
-     * 
+     *
      * Will happily return theoretical timings for bars before the
      * start or beyond the end of composition.
      *
@@ -541,7 +545,7 @@ public:
 
     /**
      * Return the index of the last time signature change before
-     * or at the given time, in a range suitable for passing to 
+     * or at the given time, in a range suitable for passing to
      * getTimeSignatureChange.  Return -1 if there has been no
      * time signature by this time.
      */
@@ -626,7 +630,7 @@ public:
     /**
      * Return whether the tempo change number n is a ramped tempo or
      * not, and if it is, return the target tempo for the ramp.
-     * 
+     *
      * If calculate is false, return a target tempo of 0 if the tempo
      * change is defined to ramp to the following tempo.  If calculate
      * is true, return a target tempo equal to the following tempo in
@@ -649,7 +653,7 @@ public:
     /**
      * Get the fastest assigned tempo in the composition.
      */
-    tempoT getMaxTempo() const { 
+    tempoT getMaxTempo() const {
         return ((m_maxTempo != 0) ? m_maxTempo : m_defaultTempo);
     }
 
@@ -753,21 +757,27 @@ public:
 
     //////
     //
-    // LOOP 
+    // LOOP
 
-    timeT getLoopStart() const { return m_loopStart; }
-    timeT getLoopEnd() const { return m_loopEnd;}
+    enum class LoopingMode {
+        ONE_SHOT,
+        CONTINUOUS
+    };
 
     void setLoopStart(const timeT &lS) { m_loopStart = lS; }
     void setLoopEnd(const timeT &lE) { m_loopEnd = lE; }
-    void setLooping(bool loop);
+    void setLoopRange(const timeT &lS, const timeT &lE) {
+            m_loopStart = lS; m_loopEnd = lE; }
+    void setLoopRangeIsActive(bool active) { m_loopRangeIsActive = active; }
+    void setLoopingMode(LoopingMode mode) { m_loopingMode = mode; }
 
-    // Determine if we're currently looping
-    //
-    bool isLooping() const { return m_isLooping; }
+    // Current looping state
+    timeT getLoopStart() const { return m_loopStart; }
+    timeT getLoopEnd() const { return m_loopEnd;}
+    bool loopRangeIsActive() const { return m_loopRangeIsActive; }
+    LoopingMode loopingMode() const { return m_loopingMode; }
 
 
-    
     //////
     //
     // OTHER STUFF
@@ -796,8 +806,8 @@ public:
     const Configuration &getMetadata() const {
         return m_metadata;
     }
-    
-    std::string getCopyrightNote() const { 
+
+    std::string getCopyrightNote() const {
         return m_metadata.get<String>(CompositionMetadataKeys::Copyright,
                                       "");
     }
@@ -860,7 +870,7 @@ public:
     unsigned int getNewRefreshStatusId() {
         return m_refreshStatusArray.getNewRefreshStatusId();
     }
-    
+
     RefreshStatus& getRefreshStatus(unsigned int id) {
         return m_refreshStatusArray.getRefreshStatus(id);
     }
@@ -930,10 +940,10 @@ public:
     //////
     // DEBUG FACILITIES
     void dump() const;
-    
+
 protected:
 
-    static const std::string TempoEventType; 
+    static const std::string TempoEventType;
     static const PropertyName TempoProperty;
     static const PropertyName TargetTempoProperty;
 
@@ -949,7 +959,7 @@ protected:
             return operator()(*e1, *e2);
         }
     };
-    
+
     struct BarNumberComparator
     {
         bool operator()(const Event &e1, const Event &e2) const {
@@ -960,14 +970,14 @@ protected:
             return operator()(*e1, *e2);
         }
     };
- 
+
     /**
      * Ensure the selected and record trackids still point to something valid
      * Must be called after deletion of detach of a track
      */
     void checkSelectedAndRecordTracks();
     TrackId getClosestValidTrackId(TrackId id) const;
-    
+
 
     //--------------- Data members ---------------------------------
     //
@@ -1011,7 +1021,7 @@ protected:
         const Event* operator[] (size_type n) const;
 
         timeT getDuration() const;
-        
+
         /// Inserts a single event, removing any existing one at that time
         iterator insertEvent(Event *e); // may throw Event::BadType
 
@@ -1119,11 +1129,11 @@ protected:
     timeT                             m_endMarker;
     bool                              m_autoExpand;
 
-    // Loop start and end positions.
+    // Looping state
     timeT                             m_loopStart;
     timeT                             m_loopEnd;
-    // we may have a loop (or range) set but not be in looping mode
-    bool                              m_isLooping;
+    bool                              m_loopRangeIsActive;
+    LoopingMode                       m_loopingMode;
 
     Configuration                     m_metadata;
 
@@ -1140,7 +1150,7 @@ protected:
     //
     triggersegmentcontainer           m_triggerSegments;
     TriggerSegmentId                  m_nextTriggerSegmentId;
-    
+
     ColourMap                         m_segmentColourMap;
     ColourMap                         m_generalColourMap;
 
@@ -1173,9 +1183,9 @@ class CompositionObserver
 {
 public:
     CompositionObserver() : m_compositionDeleted(false)  { }
-    
+
     virtual ~CompositionObserver()  { }
-    
+
     /// A segment has been added to the Composition.
     virtual void segmentAdded(const Composition *, Segment *) { }
 
@@ -1202,7 +1212,7 @@ public:
 
     /// The Segment's start time has changed.
     virtual void segmentStartChanged(const Composition *, Segment *,
-				     timeT /* newStartTime */) { }
+                                     timeT /* newStartTime */) { }
 
     /// The Segment's end marker time has changed
     virtual void segmentEndMarkerChanged(const Composition *, Segment *,
@@ -1239,12 +1249,12 @@ public:
 
     /// Some time signature has changed.
     virtual void timeSignatureChanged(const Composition *) { }
-    
+
     /// Metronome status has changed (on/off)
     virtual void metronomeChanged(const Composition *) { }
 
     virtual void tempoChanged(const Composition *) { }
-    
+
     /// Like trackChanged() but for the Track that is selected.
     /**
      * This avoids the need to check the TrackId with trackChanged().
@@ -1270,6 +1280,4 @@ protected:
 
 }
 
-
 #endif
-

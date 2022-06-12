@@ -429,8 +429,9 @@
       <Action name="extend_selection_forward" text="Cursor Forward and &amp;Select" icon="select-forward" shortcut="Shift+Right" />
       <Action name="extend_selection_backward_bar" text="Cursor Back &amp;Bar and Select" icon="select-backward-bar" shortcut="Ctrl+Shift+Left" />
       <Action name="extend_selection_forward_bar" text="Cursor For&amp;ward and Select" icon="select-forward-bar" shortcut="Ctrl+Shift+Right" />
-      <Action name="preview_selection" text="Set Loop &amp;to Selection" icon="selection-to-loop" shortcut="Ctrl+;" />
-      <Action name="clear_loop" text="Clear L&amp;oop" icon="clear-loop" shortcut="Ctrl+:" />
+      <Action name="toggle_loop_active" text="Toggle Loop &amp;Active" shortcut="Ctrl+;" />
+      <Action name="loop_from_selection" text="Set Loop &amp;to Selection" shortcut="Ctrl+:" />
+      <Action name="clear_loop" text="&amp;Clear Loop" />
     <Separator/>
       <Action name="cursor_up_staff" text="Next Staff &amp;Up" icon="up-staff" shortcut="Alt+Up" />
       <Action name="cursor_down_staff" text="Next Staff &amp;Down" icon="down-staff" shortcut="Alt+Down" />
@@ -438,7 +439,7 @@
       <Action name="cursor_next_segment" text="Ne&amp;xt Segment" shortcut="Alt+PgDown" />
     <Separator/>
       <!-- JAS need to know how to add Qt::KeypadModifier in Human Readable shortcut for Play 'KP_Enter'-->
-      <Action name="play" text="&amp;Play" icon="transport-play" />
+      <Action name="play" text="&amp;Play" icon="transport-play" checked="false" />
       <Action name="stop" text="&amp;Stop" icon="transport-stop" />
       <Action name="cursor_back" text="Step &amp;Back" icon="step-back" shortcut="Left" />
       <Action name="cursor_forward" text="Step &amp;Forward" icon="step-forward" shortcut="Right" />
@@ -446,6 +447,7 @@
       <Action name="playback_pointer_forward_bar" text="&amp;Fast Forward" icon="transport-ffwd" shortcut="Ctrl+Right" />
       <Action name="playback_pointer_start" text="Rewind to &amp;Beginning" icon="transport-rewind-end" />
       <Action name="playback_pointer_end" text="Fast Forward to &amp;End" icon="transport-ffwd-end" />
+      <Action name="toggle_loop" text="&amp;Loop" icon="transport-loop" checked="false" shortcut="@" />
       <Action name="jump_to_quick_marker" text="&amp;Jump to Quick Marker" shortcut="Ctrl+M" />
       <Action name="toggle_solo" text="S&amp;olo" tooltip="Solo the Active Track" icon="transport-solo" checked="false" />
       <Action name="toggle_tracking" text="Scro&amp;ll to Follow Playback" icon="transport-tracking" shortcut="Pause" checked="true" />
@@ -661,6 +663,7 @@
   <Action name="playback_pointer_forward_bar" />
   <Action name="playback_pointer_end" />
   <Action name="stop" />
+  <Action name="toggle_loop" />
   <Action name="toggle_solo" />
   <Action name="toggle_tracking" />
   <Action name="panic" />
@@ -836,7 +839,7 @@
   <enable>
     <Action name="cut_and_close"/>
     <Action name="debug_dump"/>
-    <Action name="preview_selection"/>
+    <Action name="loop_from_selection"/>
     <Action name="normalize_rests"/>
     <Action name="clear_selection"/>
     <Action name="filter_selection"/>

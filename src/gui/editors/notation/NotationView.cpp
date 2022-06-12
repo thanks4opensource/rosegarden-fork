@@ -130,7 +130,6 @@
 #include "gui/dialogs/TextEventDialog.h"
 #include "gui/dialogs/SimpleEventEditDialog.h"
 #include "gui/dialogs/ConfigureDialog.h"
-
 #include "gui/dialogs/CheckForParallelsDialog.h"
 
 #include "gui/general/EditTempoController.h"
@@ -141,6 +140,8 @@
 #include "gui/general/ThornStyle.h"
 #include "gui/rulers/ControlRulerWidget.h"
 #include "gui/widgets/TmpStatusMsg.h"
+
+#include "gui/seqmanager/SequenceManager.h"
 
 #include "gui/application/RosegardenMainWindow.h"
 #include "gui/application/RosegardenMainViewWidget.h"
@@ -384,6 +385,16 @@ NotationView::NotationView(RosegardenDocument *doc,
 
     connect(m_notationWidget, &NotationWidget::sceneNeedsRebuilding,
             this, &NotationView::slotRegenerateScene);
+
+    connect(RosegardenDocument::currentDocument,
+            &RosegardenDocument::loopingModeChanged,
+            this, &NotationView::slotSetLoopingMode);
+
+    // Set buttons to current state
+    slotSetLoopingMode(m_document->getComposition().loopingMode() ==
+                      Composition::LoopingMode::CONTINUOUS);
+    slotPlaying(m_document->getSequenceManager()->getTransportStatus() ==
+                TransportStatus::PLAYING);
 
     // Set the rewind and fast-forward buttons for auto-repeat.
     enableAutoRepeat("Transport Toolbar", "playback_pointer_back_bar");
@@ -933,7 +944,8 @@ NotationView::setupActions()
     //JAS "Move" subMenu
     createAction("extend_selection_backward", SLOT(slotExtendSelectionBackward()));
     createAction("extend_selection_forward", SLOT(slotExtendSelectionForward()));
-    createAction("preview_selection", SLOT(slotPreviewSelection()));
+    createAction("toggle_loop_active", SLOT(slotToggleLoopActive()));
+    createAction("loop_from_selection", SLOT(slotLoopFromSelection()));
     createAction("clear_loop", SLOT(slotClearLoop()));
 
     createAction("cursor_up_staff", SLOT(slotCurrentStaffUp()));
@@ -958,6 +970,7 @@ NotationView::setupActions()
     createAction("playback_pointer_forward_bar", SIGNAL(fastForwardPlayback()));
     createAction("playback_pointer_start", SIGNAL(rewindPlaybackToBeginning()));
     createAction("playback_pointer_end", SIGNAL(fastForwardPlaybackToEnd()));
+    createAction("toggle_loop", SLOT(slotLoopButtonClicked()));
     createAction("toggle_solo", SLOT(slotToggleSolo()));
     createAction("toggle_tracking", SLOT(slotToggleTracking()));
     createAction("panic", SIGNAL(panic()));
@@ -1966,13 +1979,18 @@ NotationView::slotEditGeneralPaste()
 }
 
 void
-NotationView::slotPreviewSelection()
+NotationView::slotToggleLoopActive()
 {
-    if (!getSelection())
-        return ;
+    m_document->toggleLoopRangeIsActive();
+}
 
-    RosegardenDocument::currentDocument->slotSetLoop(getSelection()->getStartTime(),
-                               getSelection()->getEndTime());
+void
+NotationView::slotLoopFromSelection()
+{
+    if (!getSelection()) return;
+    m_document->setLoopRange(getSelection()->getStartTime(),
+                             getSelection()->getEndTime());
+    m_document->setLoopRangeIsActive(true);
 }
 
 void
@@ -2156,7 +2174,20 @@ NotationView::slotPlaceControllers()
 void
 NotationView::slotClearLoop()
 {
-    RosegardenDocument::currentDocument->slotSetLoop(0, 0);
+    m_document->setLoopRange(0, 0);
+}
+
+void
+NotationView::slotLoopButtonClicked()
+{
+    m_document->toggleLoopingMode();
+}
+
+void
+NotationView::slotSetLoopingMode(bool continuous)
+{
+    QAction *action = findAction("toggle_loop");
+    action->setChecked(continuous);
 }
 
 void
@@ -3917,6 +3948,13 @@ NotationView::slotRegenerateScene()
 
     // and restore the current tool if any
     if (tool) m_notationWidget->slotSetTool(toolName);
+}
+
+void NotationView::slotPlaying(bool playing)
+{
+    QAction *action = findAction("play");
+    if (!action) return;
+    action->setChecked(playing);
 }
 
 void

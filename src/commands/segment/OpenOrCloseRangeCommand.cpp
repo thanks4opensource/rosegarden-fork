@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -51,12 +51,12 @@ OpenOrCloseRangeCommand::~OpenOrCloseRangeCommand()
     if (m_prepared) {
         // We own markers that we need to free.  Those are the markers
         // currently not in the composition.
-        
+
         // If we are currently executed, those markers are in "pre",
         // but if we are unexecuted, they are in "post".
         MarkerSelection &unused =
             m_hasExecuted ? m_markersPre : m_markersPost;
-            
+
         for (MarkerSelection::Container::const_iterator i =
                  unused.begin(); i != unused.end(); ++i) {
             delete *i;
@@ -129,7 +129,7 @@ OpenOrCloseRangeCommand::execute()
 
             m_markersPost.addCopyAtOffset(offset, *i);
         }
-        
+
         m_prepared = true;
     }
 
@@ -137,9 +137,9 @@ OpenOrCloseRangeCommand::execute()
     for (std::vector<Segment *>::iterator i = m_moving.begin();
             i != m_moving.end(); ++i) {
 
-// RG_DEBUG << "Moving segment on track " << (*i)->getTrack() << " from " << 
-//     (*i)->getStartTime() << " to " << ((*i)->getStartTime() + offset) << 
-//     " (current end time is " << (*i)->getEndTime() << ", end marker is " << 
+// RG_DEBUG << "Moving segment on track " << (*i)->getTrack() << " from " <<
+//     (*i)->getStartTime() << " to " << ((*i)->getStartTime() + offset) <<
+//     " (current end time is " << (*i)->getEndTime() << ", end marker is " <<
 //     (*i)->getEndMarkerTime() << ")" << endl;
 
         // Move the segment
@@ -165,12 +165,12 @@ OpenOrCloseRangeCommand::execute()
         // If the paste point is prior to the loop range
         if (m_beginTime <= m_loopBegin) {
             // Shift the loop range right.
-            doc->setLoop(m_loopBegin + offset, m_loopEnd + offset);
+            doc->setLoopRange(m_loopBegin + offset, m_loopEnd + offset);
         } else if (m_beginTime < m_loopEnd) {
             // The paste point is within the loop range
-            
+
             // Just shift the end point to expand the loop range
-            doc->setLoop(m_loopBegin, m_loopEnd + offset);
+            doc->setLoopRange(m_loopBegin, m_loopEnd + offset);
         } else {
             // The paste point is after the loop range, so leave it alone.
         }
@@ -200,11 +200,11 @@ OpenOrCloseRangeCommand::unexecute()
     m_temposPre.AddToComposition(m_composition);
     m_markersPost.RemoveFromComposition(m_composition);
     m_markersPre.AddToComposition(m_composition);
-    
+
     RosegardenDocument *doc = RosegardenDocument::currentDocument;
 
     // Put back the loop range
-    doc->setLoop(m_loopBegin, m_loopEnd);
+    doc->setLoopRange(m_loopBegin, m_loopEnd);
     m_hasExecuted = false;
 }
 

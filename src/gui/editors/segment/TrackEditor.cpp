@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -137,7 +137,7 @@ TrackEditor::init(RosegardenMainViewWidget *mainViewWidget)
     grid->setSpacing(0);
 
     // Top Rulers
-    
+
     m_chordNameRuler = new ChordNameRuler(m_rulerScale,
                                           m_doc,
                                           20,
@@ -254,7 +254,7 @@ TrackEditor::init(RosegardenMainViewWidget *mainViewWidget)
     // used to grab for some purpose.  Q(Abstract)ScrollArea has no usable
     // signals whatsoever.  I think this is why autoscrolling is still slightly
     // wonky in Thorn, but I don't reckon there's much to do about this one
-    // unless we write a custom widget or something.  
+    // unless we write a custom widget or something.
     //
     //connect(m_compositionView, SIGNAL(contentsMoving(int, int)),
     //        this, SLOT(slotCanvasScrolled(int, int)));
@@ -320,9 +320,6 @@ TrackEditor::init(RosegardenMainViewWidget *mainViewWidget)
             this, &TrackEditor::slotPointerDraggedToPosition);
     connect(m_bottomStandardRuler, &StandardRuler::dragPointerToPosition,
             this, &TrackEditor::slotPointerDraggedToPosition);
-
-    connect(m_doc, &RosegardenDocument::loopChanged,
-            this, &TrackEditor::slotSetLoop);
 }
 
 void TrackEditor::updateCanvasSize()
@@ -429,10 +426,10 @@ TrackEditor::slotCanvasScrolled(int x, int /*y*/)
     // update the pointer position if the user is dragging it from the loop ruler
     if ((m_topStandardRuler && m_topStandardRuler->getLoopRuler() &&
          m_topStandardRuler->getLoopRuler()->hasActiveMousePress() &&
-         !m_topStandardRuler->getLoopRuler()->getLoopingMode()) ||
+         !m_topStandardRuler->getLoopRuler()->inLoopSettingMode()) ||
         (m_bottomStandardRuler && m_bottomStandardRuler->getLoopRuler() &&
          m_bottomStandardRuler->getLoopRuler()->hasActiveMousePress() &&
-         !m_bottomStandardRuler->getLoopRuler()->getLoopingMode())) {
+         !m_bottomStandardRuler->getLoopRuler()->inLoopSettingMode())) {
 
         int mx = m_compositionView->viewport()->mapFromGlobal(QCursor::pos()).x();
         m_compositionView->setPointerPos(x + mx);
@@ -459,7 +456,7 @@ TrackEditor::slotSetPointerPosition(timeT pointerTime)
 
         if (m_doc  &&  m_doc->getSequenceManager()  &&
             m_doc->getSequenceManager()->getTransportStatus() != STOPPED) {
-            
+
             if (m_playTracking) {
                 m_compositionView->scrollHoriz(newPosition);
             }
@@ -515,13 +512,6 @@ TrackEditor::toggleTracking()
     Composition &comp = m_doc->getComposition();
     comp.setMainFollowPlayback(m_playTracking);
 
-}
-
-void
-TrackEditor::slotSetLoop(timeT start, timeT end)
-{
-    m_topStandardRuler->getLoopRuler()->slotSetLoopMarker(start, end);
-    m_bottomStandardRuler->getLoopRuler()->slotSetLoopMarker(start, end);
 }
 
 void
@@ -606,19 +596,6 @@ TrackEditor::turnLinkedSegmentsToRealCopies()
     }
 
     addCommandToHistory(macro);
-}
-
-bool TrackEditor::reinstateRange()
-{
-    bool topr = m_topStandardRuler->getLoopRuler()->reinstateRange();
-    bool bottomr = m_bottomStandardRuler->getLoopRuler()->reinstateRange();
-    return (topr || bottomr);
-}
-
-void TrackEditor::hideRange()
-{
-    m_topStandardRuler->getLoopRuler()->hideRange();
-    m_bottomStandardRuler->getLoopRuler()->hideRange();
 }
 
 void
@@ -819,7 +796,7 @@ void TrackEditor::dropEvent(QDropEvent *e)
         // We have a URI, and it didn't come from within RG
 
         RG_DEBUG << "dropEvent() first URI: " << uriList.first();
-        
+
         QStringList::const_iterator ci;
         for (ci = uriList.constBegin(); ci != uriList.constEnd(); ++ci) {
 
@@ -842,7 +819,7 @@ void TrackEditor::dropEvent(QDropEvent *e)
                 //
 
             } else {
-            
+
                 if (!track) return;
 
                 RG_DEBUG << "dropEvent() : dropping at track pos = " << trackPos
@@ -874,7 +851,7 @@ void TrackEditor::dropEvent(QDropEvent *e)
         // file manager
 
         RG_DEBUG << "dropEvent(): got text info";
-        
+
         QString tester = text.toLower();
 
         if (tester.endsWith(".rg") || tester.endsWith(".rgp") ||
@@ -916,11 +893,11 @@ void TrackEditor::dropEvent(QDropEvent *e)
             // setting internal, but no harm in leaving this check in
             QString sourceName = "nullptr";
             if (e->source()) sourceName = e->source()->objectName();
-            
+
             RG_DEBUG << "dropEvent() event source: " << sourceName;
-            
+
             if (sourceName == "AudioListView") { // only create something if this is data from the right client
-                
+
                 RG_DEBUG << "dropEvent() : dropping at track pos = " << trackPos
                          << ", time = " << time
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
@@ -938,7 +915,7 @@ void TrackEditor::dropEvent(QDropEvent *e)
                 t << startTime.nsec << "\n";
                 t << endTime.sec << "\n";
                 t << endTime.nsec << "\n";
-                
+
                 emit droppedAudio(audioText);
 
             } else {

@@ -82,7 +82,6 @@ public:
     // RosegardenTransport member accessors
     QPushButton* MetronomeButton()   { return ui->MetronomeButton; }
     QPushButton* SoloButton()        { return ui->SoloButton; }
-    QPushButton* LoopButton()        { return ui->LoopButton; }
     QPushButton* PlayButton()        { return ui->PlayButton; }
     QPushButton* StopButton()        { return ui->StopButton; }
     QPushButton* FfwdButton()        { return ui->FfwdButton; }
@@ -133,6 +132,7 @@ public slots:
     void slotChangeToEnd();
 
     void slotLoopButtonClicked();
+    void slotSetLoopingMode(bool contnuous);
 
     void slotPanelOpenButtonClicked();
     void slotPanelCloseButtonClicked();
@@ -144,9 +144,6 @@ public slots:
     void setBackgroundColor(QColor color);
     void slotResetBackground();
 
-    void slotSetStartLoopingPointAtMarkerPos();
-    void slotSetStopLoopingPointAtMarkerPos();
-
     // Connected to SequenceManager
     void slotTempoChanged(tempoT);
     void slotMidiInLabel(const MappedEvent *event); // show incoming MIDI events on the Transport
@@ -157,14 +154,6 @@ public slots:
 
 signals:
     void closed();
-
-    // Set and unset the loop at the RosegardenMainWindow
-    //
-    void setLoop();
-    void unsetLoop();
-    void setLoopStartTime();
-    void setLoopStopTime();
-
     void editTempo(QWidget *);
     void editTimeSignature(QWidget *);
     void editTransportTime(QWidget *);
@@ -237,7 +226,7 @@ private:
     std::map<std::string, TimeDisplayMode> m_modeMap;
 };
 
- 
+
 
 
 

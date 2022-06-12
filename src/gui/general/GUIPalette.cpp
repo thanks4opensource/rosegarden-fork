@@ -91,9 +91,12 @@ GUIPalette::GUIPalette()
     m_defaultsMap[MatrixPitchHighlight] = QColor(205, 205, 205);
     m_defaultsMap[MatrixTonicHighlight] = QColor(160, 160, 160);
 
-    m_defaultsMap[LoopRulerBackground] = QColor(120, 120, 120);
+    m_defaultsMap[LoopRulerBackground] = QColor(108, 108, 108);
     m_defaultsMap[LoopRulerForeground] = QColor(Qt::white);
-    m_defaultsMap[LoopHighlight] = QColor(Qt::white);
+    m_defaultsMap[LoopHighlight] = QColor(0, 139, 0);  // green4
+    m_defaultsMap[LoopBeforeAfterBackground] = QColor(Qt::black);
+    m_defaultsMap[LoopBefore] = QColor(205, 133, 63);  // peru
+    m_defaultsMap[LoopAfter] = QColor(0, 191, 255);  // DeepSkyBlue
 
     m_defaultsMap[RulerForeground] = Qt::black;
     m_defaultsMap[RulerBackground] = QColor(0xEE, 0xEE, 0xEE);
@@ -239,6 +242,9 @@ const char* const GUIPalette::MatrixTonicHighlight = "matrixtonichighlight";
 const char* const GUIPalette::LoopRulerBackground = "looprulerbackground";
 const char* const GUIPalette::LoopRulerForeground = "looprulerforeground";
 const char* const GUIPalette::LoopHighlight = "loophighlight";
+const char* const GUIPalette::LoopBeforeAfterBackground = "loopBeforeAfterBackground";
+const char* const GUIPalette::LoopBefore = "loopBefore";
+const char* const GUIPalette::LoopAfter = "loopAfter";
 
 const char* const GUIPalette::RulerForeground = "rulerforeground";
 const char* const GUIPalette::RulerBackground = "rulerbackground";

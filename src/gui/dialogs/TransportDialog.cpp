@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -21,8 +21,10 @@
 #include "base/Composition.h"
 #include "base/NotationTypes.h"
 #include "base/RealTime.h"
+#include "document/RosegardenDocument.h"
 #include "misc/Debug.h"
 #include "misc/Strings.h"
+#include "gui/application/RosegardenMainWindow.h"
 #include "gui/general/ThornStyle.h"
 #include "sequencer/RosegardenSequencer.h"
 #include "gui/application/TransportStatus.h"
@@ -114,7 +116,7 @@ TransportDialog::TransportDialog(QWidget *parent):
     QFrame *frame = new QFrame(this);
 
     ui->setupUi(frame);
-	
+
     resetFonts();
 
     initModeMap();
@@ -192,8 +194,6 @@ TransportDialog::TransportDialog(QWidget *parent):
     p = ui->PanelCloseButton->pixmap();
     if (p) m_panelClosed = *p;
 */
-    connect(ui->SetStartLPButton, &QAbstractButton::clicked, this, &TransportDialog::slotSetStartLoopingPointAtMarkerPos);
-    connect(ui->SetStopLPButton, &QAbstractButton::clicked, this, &TransportDialog::slotSetStopLoopingPointAtMarkerPos);
 
     // clear labels
     //
@@ -324,7 +324,7 @@ TransportDialog::getCurrentModeAsString()
     }
 
     // we shouldn't get here unless the map is not well-configured
-    RG_DEBUG << "TransportDialog::getCurrentModeAsString: could not map current mode " 
+    RG_DEBUG << "TransportDialog::getCurrentModeAsString: could not map current mode "
              << m_currentMode << " to string.";
     throw Exception("could not map current mode to string.");
 }
@@ -478,7 +478,7 @@ void
 TransportDialog::setNewMode(const std::string& newModeAsString)
 {
     TimeDisplayMode newMode = RealMode; // default value if not found
-    
+
     std::map<std::string, TimeDisplayMode>::iterator iter =
         m_modeMap.find(newModeAsString);
 
@@ -496,9 +496,9 @@ void
 TransportDialog::setNewMode(const TimeDisplayMode& newMode)
 {
     computeSampleRate();
-    
+
     m_currentMode = newMode;
-    
+
     displayTime();
 }
 
@@ -507,9 +507,9 @@ void
 TransportDialog::slotChangeTimeDisplay()
 {
     computeSampleRate();
-    
+
     cycleThroughModes();
-    
+
     displayTime();
 }
 
@@ -1005,7 +1005,7 @@ TransportDialog::slotLoopButtonClicked()
     // disable if JACK transport has been set #1240039 - DMM
     //    QSettings settings;
     //    settings.beginGroup( SequencerOptionsConfigGroup );
-    // 
+    //
     //    if ( qStrToBool( settings.value("jacktransport", "false" ) ) )
     //    {
     //    //!!! - this will fail silently
@@ -1015,23 +1015,14 @@ TransportDialog::slotLoopButtonClicked()
     //    }
     //    settings.endGroup();
 
-    if (ui->LoopButton->isChecked()) {
-        emit setLoop();
-    } else {
-        emit unsetLoop();
-    }
-}
+    qDebug() << "TransportDialog::slotLoopButtonClicked()";
 
-void
-TransportDialog::slotSetStartLoopingPointAtMarkerPos()
-{
-    emit setLoopStartTime();
+    RosegardenDocument::currentDocument->toggleLoopingMode();
 }
-
 void
-TransportDialog::slotSetStopLoopingPointAtMarkerPos()
+TransportDialog::slotSetLoopingMode(bool continuous)
 {
-    emit setLoopStopTime();
+    ui->LoopButton->setChecked(continuous);
 }
 
 void TransportDialog::slotTempoChanged(tempoT tempo)

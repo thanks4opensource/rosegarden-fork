@@ -60,7 +60,7 @@ class AudioPluginManager;
 /**
   * The RosegardenDocument class provides a document object that can be
   * used in conjunction with the classes RosegardenMainWindow and
-  * RosegardenMainViewWidget to create a document-view model 
+  * RosegardenMainViewWidget to create a document-view model
   * based on QApplication and QMainWindow. Thereby, the
   * document object is created by the RosegardenMainWindow instance and
   * contains the document structure with related methods for
@@ -184,7 +184,7 @@ public:
 
     /**
      * clears the 'modified' status of the document (sets it back to false).
-     * 
+     *
      */
     void clearModifiedStatus();
 
@@ -228,7 +228,7 @@ public:
      * saves the document under filename and format.
      *
      * errMsg will be set to a user-readable error message if save fails
-     */ 
+     */
     bool saveDocument(const QString &filename, QString& errMsg,
                       bool autosave = false);
 
@@ -238,9 +238,9 @@ public:
     /**
      * exports all or part of the studio to a file.  If devices is
      * empty, exports all devices.
-     */ 
+     */
     bool exportStudio(const QString &filename,
-		      QString &errMsg,
+                      QString &errMsg,
                       std::vector<DeviceId> devices =
                       std::vector<DeviceId>());
 
@@ -276,7 +276,7 @@ public:
     bool isRegularDotRGFile() const;
 
     void setQuickMarker();
-    void jumpToQuickMarker();    
+    void jumpToQuickMarker();
     timeT getQuickMarkerTime() { return m_quickMarkerTime; }
 
     /**
@@ -319,7 +319,7 @@ public:
      */
     DocumentConfiguration& getConfiguration() { return m_config; }
 
-    const DocumentConfiguration& getConfiguration() const 
+    const DocumentConfiguration& getConfiguration() const
         { return m_config; }
 
     /**
@@ -362,10 +362,24 @@ public:
     void prepareAudio();
 
     /**
-     * Cause the loopChanged signal to be emitted and any
+     * Cause the loopRangeChanged signal to be emitted and any
      * associated internal work in the document to happen
      */
-    void setLoop(timeT, timeT);
+    void setLoopRange(timeT, timeT);
+
+    /**
+     * Cause the loopActiveChanged signal to be emitted and any
+     * associated internal work in the document to happen
+     */
+    void setLoopRangeIsActive(bool);
+    void emitLoopRangeActiveChanged();
+    void toggleLoopRangeIsActive();
+
+    /**
+     * Cause the loopingModeChanged signal to be emitted and any
+     * associated internal work in the document to happen
+     */
+    void toggleLoopingMode();
 
     /**
      * Cause the document to use the given time as the origin
@@ -387,7 +401,7 @@ public:
     /**
      * Audio play and record latencies direct from the sequencer
      */
-    
+
     RealTime getAudioPlayLatency();
     RealTime getAudioRecordLatency();
     void updateAudioRecordLatency();
@@ -398,14 +412,14 @@ public:
      * a preview is generated and that the sequencer also knows to add
      * the new file to its own hash table.  Flow of control is a bit
      * awkward around new audio files as timing is crucial - the gui can't
-     * access the file until lead-out information has been written by the 
+     * access the file until lead-out information has been written by the
      * sequencer.
      *
      * Note that the sequencer doesn't know the audio file id (yet),
      * only the instrument it was recorded to.  (It does know the
      * filename, but the instrument id is enough for us.)
      */
-    
+
     void finalizeAudioFile(InstrumentId instrument);
 
     /** Tell the document that an audio file has been orphaned.  An
@@ -437,7 +451,7 @@ public:
      */
     QSharedPointer<AudioPluginManager> getPluginManager()
         { return m_pluginManager; }
-    
+
     /**
      * Return the instrument that plays segment
      */
@@ -514,8 +528,6 @@ public slots:
 
     void slotSetPointerPosition(timeT);
 
-    void slotSetLoop(timeT s, timeT e) {setLoop(s,e);}
-
     void slotDocColoursChanged();
 
 signals:
@@ -561,7 +573,10 @@ signals:
     void audioFileFinalized(Segment*);
 
     void playPositionChanged(timeT);
-    void loopChanged(timeT, timeT);
+    void loopRangeStartEndChanged(timeT start, timeT end);
+    void loopRangeActiveChanged();
+    void loopingModeChanged(bool continuous);
+
     /**
      * We probably want to keep this notification as a special case.
      * The reason being that to detect a change to the color list will
@@ -603,7 +618,7 @@ private:
      * Set the "auto saved" status of the document
      * Doc. modification sets it to false, autosaving
      * sets it to true
-     */ 
+     */
     void setAutoSaved(bool s) { m_autoSaved = s; }
 
     /**
@@ -644,7 +659,7 @@ private:
     };
 
     /**
-     * A vector of NoteOnRec elements, necessary in multitrack MIDI 
+     * A vector of NoteOnRec elements, necessary in multitrack MIDI
      * recording for NoteOn calculations
      */
     typedef std::vector<NoteOnRec> NoteOnRecSet;
@@ -652,7 +667,7 @@ private:
     /**
      * Store a single NoteOnRec element in the m_noteOnEvents map
      */
-    void storeNoteOnEvent( Segment *s, Segment::iterator it, 
+    void storeNoteOnEvent( Segment *s, Segment::iterator it,
                            int device, int channel );
 
     /// Adjust the end time for a list of overlapping note events.
@@ -664,7 +679,7 @@ private:
      * resulting NoteOnRecSet
      */
     NoteOnRecSet* adjustEndTimes(NoteOnRecSet &rec_vec, timeT endTime);
-    
+
     /**
      * Insert a recorded event in one or several segments
      */
@@ -740,7 +755,7 @@ private:
 
     typedef std::map<InstrumentId, Segment *> RecordingSegmentMap;
 
-    /** 
+    /**
      * Segments onto which we can record MIDI events
      */
     //Segment *m_recordMIDISegment;
@@ -750,17 +765,17 @@ private:
      * Segments for recording audio (per instrument)
      */
     RecordingSegmentMap m_recordAudioSegments;
-    
+
     /**
      * a map[Pitch] of NoteOnRecSet elements, for NoteOn calculations
      */
     typedef std::map<int /*pitch*/, NoteOnRecSet> PitchMap;
-    
+
     /**
      * a map[Channel] of PitchMap
      */
     typedef std::map<int /*channel*/, PitchMap> ChanMap;
-    
+
     /**
      * a map[Port] of ChanMap
      */

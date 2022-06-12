@@ -4,13 +4,13 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     This file is Copyright 2009
         Immanuel Litzroth         <immanuel203@gmail.com>
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -57,7 +57,7 @@ TranzportClient::TranzportClient(RosegardenMainWindow* rgGUIApp) :
     m_composition(&m_rgDocument->getComposition())
 {
     m_descriptor = open("/dev/tranzport0",O_RDWR);
-    
+
     if (m_descriptor < 0) {
         throw Exception(qstrtostr(QObject::tr("Failed to open tranzport device /dev/tranzport0")));
     }
@@ -76,7 +76,7 @@ TranzportClient::TranzportClient(RosegardenMainWindow* rgGUIApp) :
 
     connect(m_socketReadNotifier, &QSocketNotifier::activated, this, &TranzportClient::readData);
     connect(m_socketWriteNotifier, &QSocketNotifier::activated, this, &TranzportClient::writeCommandQueue);
-        
+
     connect(this, &TranzportClient::play,
             m_rgGUIApp, &RosegardenMainWindow::slotPlay );
     connect(this, &TranzportClient::stop,
@@ -110,7 +110,7 @@ TranzportClient::TranzportClient(RosegardenMainWindow* rgGUIApp) :
     connect(m_rgDocument, &RosegardenDocument::pointerPositionChanged,
             this, &TranzportClient::pointerPositionChanged);
 
-    connect(m_rgDocument, &RosegardenDocument::loopChanged,
+    connect(m_rgDocument, &RosegardenDocument::loopingModeChanged,
             this, &TranzportClient::loopChanged);
 
     connect(this, &TranzportClient::undo,
@@ -158,11 +158,11 @@ TranzportClient::slotDocumentLoaded(RosegardenDocument *doc)
     m_composition->addObserver(this);
     connect(m_rgDocument, &RosegardenDocument::pointerPositionChanged,
             this, &TranzportClient::pointerPositionChanged);
-    connect(m_rgDocument, &RosegardenDocument::loopChanged,
+    connect(m_rgDocument, &RosegardenDocument::loopingModeChanged,
             this, &TranzportClient::loopChanged);
     connect(this, &TranzportClient::setPosition,
             m_rgDocument, &RosegardenDocument::slotSetPointerPosition);
-                
+
     while (not commands.empty()) {
         commands.pop();
     }
@@ -218,14 +218,14 @@ TranzportClient::trackChanged(const Composition *c,
                               Track* track)
 {
     RG_DEBUG << "TranzportClient, CompostionObserver::trackChanged";
-    
+
     if (device_online) {
         const Track* track2 = c->getTrackById(c->getSelectedTrack());
 
         // If the changed track is the selected track
         if (track == track2) {
             RG_DEBUG << "TranzportClient, CompostionObserver::trackChanged updateing";
-            
+
             if (track->isArmed()) {
                 LightOn(LightTrackrec);
             } else {
@@ -242,21 +242,16 @@ TranzportClient::trackChanged(const Composition *c,
         }
     }
 }
-    
-void
-TranzportClient::loopChanged(timeT t1,
-                             timeT t2)
-{
-    RG_DEBUG << "TranzportClient: loopChanged" << t1 << ", " << t2;
 
-    if (device_online) {
-        if (t1 == 0  and  t2 == 0) {
-            LightOff(LightLoop);
-        } else {
-            LightOn(LightLoop);
-        }
-    }
+
+void
+TranzportClient::loopChanged(bool continuousLooping)
+{
+    if (continuousLooping) LightOn(LightLoop);
+    else LightOff(LightLoop);
 }
+
+
 
 void
 TranzportClient::stateUpdate()
@@ -271,7 +266,8 @@ TranzportClient::stateUpdate()
             LightOff(LightAnysolo);
         //}
 
-        if (m_composition->isLooping()) {
+        if (m_composition->loopingMode() ==
+                Composition::LoopingMode::CONTINUOUS) {
             LightOn(LightLoop);
         } else {
             LightOff(LightLoop);
@@ -302,7 +298,7 @@ TranzportClient::stateUpdate()
         LCDWrite(ss.str(), Bottom, 10);
     }
 }
-    
+
 TranzportClient::~TranzportClient()
 {
     delete m_socketReadNotifier;
@@ -312,8 +308,8 @@ TranzportClient::~TranzportClient()
 
     RG_DEBUG << "TranzportClient::~TranzportClient: cleaned up ";
 }
-  
-    
+
+
 void TranzportClient::writeCommandQueue()
 {
     RG_DEBUG << "TranzportClient: writeCommandQueue";
@@ -334,7 +330,7 @@ void TranzportClient::writeCommandQueue()
         return;
     } else if (res != 8) {
         RG_DEBUG << "TranzportClient::writeCommandQueue: could not write full data to device";
-        
+
         commands.pop();
         m_socketWriteNotifier->setEnabled(true);
     }
@@ -345,7 +341,7 @@ void TranzportClient::writeCommandQueue()
         m_socketWriteNotifier->setEnabled(true);
     }
 }
-    
+
 void
 TranzportClient::write(uint64_t buf)
 {
@@ -355,7 +351,7 @@ TranzportClient::write(uint64_t buf)
         m_socketWriteNotifier->setEnabled(true);
     }
 }
-    
+
 void
 TranzportClient::LightOn(Light light)
 {
@@ -404,7 +400,7 @@ TranzportClient::LCDWrite(const std::string& text,
 
     uint8_t cmd[8];
     uint8_t cell = row == Top ? 0 : 5;
-    
+
     for (int i = 0; i < LCDLength;) {
         cmd[0] = 0x00;
         cmd[1] = 0x01;
@@ -417,7 +413,7 @@ TranzportClient::LCDWrite(const std::string& text,
         write(*(uint64_t*)cmd);
     }
 }
-    
+
 void
 TranzportClient::readData()
 {
@@ -509,7 +505,7 @@ TranzportClient::readData()
                 timeT currentTime = m_composition->getPosition();
                 Composition::markercontainer& mc = m_composition->getMarkers();
                 timeT closestNext = std::numeric_limits<long>::max();
-                
+
                 for (Composition::markerconstiterator it = mc.begin();
                      it != mc.end();
                      ++it) {
@@ -575,7 +571,7 @@ TranzportClient::readData()
             if (current_buttons & Shift) {
             } else {
                 if (loop_start_time == loop_end_time) {
-                    m_rgDocument->setLoop(0,0);
+                    m_rgDocument->setLoopRange(0,0);
                 }
 
                 loop_start_time = 0;
@@ -638,7 +634,7 @@ TranzportClient::readData()
                 if (current_buttons & Loop) {
                     loop_end_time += datawheel *
                         m_composition->getDurationForMusicalTime(loop_end_time, 0,1,0,0);
-                    m_rgDocument->setLoop(loop_start_time, loop_end_time);
+                    m_rgDocument->setLoopRange(loop_start_time, loop_end_time);
                 } else if(current_buttons & Shift) {
                     timeT here = m_composition->getPosition();
                     here += datawheel * m_composition->getDurationForMusicalTime(here,0,0,1,0);
@@ -657,7 +653,7 @@ TranzportClient::readData()
                 if (current_buttons & Loop) {
                     loop_end_time -= (1 + (0xFF - datawheel)) *
                         RosegardenDocument::currentDocument->getComposition().getDurationForMusicalTime(loop_end_time, 0,1,0,0);
-                    m_rgDocument->setLoop(loop_start_time, loop_end_time);
+                    m_rgDocument->setLoopRange(loop_start_time, loop_end_time);
                 }
 
                 if (current_buttons & Shift) {

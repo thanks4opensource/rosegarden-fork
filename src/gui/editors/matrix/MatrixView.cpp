@@ -29,10 +29,12 @@
 
 #include "misc/Debug.h"
 #include "misc/Strings.h"
-
 #include "misc/ConfigGroups.h"
+
 #include "document/RosegardenDocument.h"
 #include "document/CommandHistory.h"
+
+#include "gui/application/RosegardenMainWindow.h"
 
 #include "gui/dialogs/AboutDialog.h"
 #include "gui/dialogs/QuantizeDialog.h"
@@ -40,6 +42,8 @@
 #include "gui/dialogs/TriggerSegmentDialog.h"
 #include "gui/dialogs/PitchBendSequenceDialog.h"
 #include "gui/dialogs/KeySignatureDialog.h"
+
+#include "gui/seqmanager/SequenceManager.h"
 
 #include "commands/edit/ChangeVelocityCommand.h"
 #include "commands/edit/ClearTriggersCommand.h"
@@ -264,6 +268,17 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     connect(this, &MatrixView::noteInsertedFromKeyboard,
             m_matrixWidget, &MatrixWidget::slotPlayPreviewNote);
 
+    connect(RosegardenDocument::currentDocument,
+            &RosegardenDocument::loopingModeChanged,
+            this, &MatrixView::slotSetLoopingMode);
+
+    // Set buttons to current state
+    slotSetLoopingMode(m_document->getComposition().loopingMode() ==
+                      Composition::LoopingMode::CONTINUOUS);
+    slotPlaying(m_document->getSequenceManager()->getTransportStatus() ==
+                TransportStatus::PLAYING);
+
+
     // Set the rewind and fast-forward buttons for auto-repeat.
     enableAutoRepeat("Transport Toolbar", "playback_pointer_back_bar");
     enableAutoRepeat("Transport Toolbar", "playback_pointer_forward_bar");
@@ -341,6 +356,13 @@ MatrixView::slotSceneDeleted()
     close();
 }
 
+void MatrixView::slotPlaying(bool playing)
+{
+    QAction *action = findAction("play");
+    if (!action) return;
+    action->setChecked(playing);
+}
+
 void
 MatrixView::slotUpdateWindowTitle(bool)
 {
@@ -399,10 +421,12 @@ MatrixView::setupActions()
     createAction("playback_pointer_end", SIGNAL(fastForwardPlaybackToEnd()));
     createAction("cursor_prior_segment", SLOT(slotCurrentSegmentPrior()));
     createAction("cursor_next_segment", SLOT(slotCurrentSegmentNext()));
+    createAction("toggle_loop", SLOT(slotLoopButtonClicked()));
     createAction("toggle_solo", SLOT(slotToggleSolo()));
     createAction("toggle_tracking", SLOT(slotToggleTracking()));
     createAction("panic", SIGNAL(panic()));
-    createAction("preview_selection", SLOT(slotPreviewSelection()));
+    createAction("toggle_loop_active", SLOT(slotToggleLoopActive()));
+    createAction("loop_from_selection", SLOT(slotLoopFromSelection()));
     createAction("clear_loop", SLOT(slotClearLoop()));
     createAction("clear_selection", SLOT(slotClearSelection()));
     createAction("reset_selection", SLOT(slotEscapePressed()));
@@ -1191,20 +1215,37 @@ MatrixView::slotCurrentSegmentNext()
 }
 
 void
-MatrixView::slotPreviewSelection()
+MatrixView::slotToggleLoopActive()
 {
-    if (!getSelection()) {
-        return;
-    }
+    m_document->toggleLoopRangeIsActive();
+}
 
-    m_document->slotSetLoop(getSelection()->getStartTime(),
-                            getSelection()->getEndTime());
+void
+MatrixView::slotLoopFromSelection()
+{
+    if (!getSelection()) return;
+    m_document->setLoopRange(getSelection()->getStartTime(),
+                             getSelection()->getEndTime());
+    m_document->setLoopRangeIsActive(true);
 }
 
 void
 MatrixView::slotClearLoop()
 {
-    m_document->slotSetLoop(0, 0);
+    m_document->setLoopRange(0, 0);
+}
+
+void
+MatrixView::slotLoopButtonClicked()
+{
+    m_document->toggleLoopingMode();
+}
+
+void
+MatrixView::slotSetLoopingMode(bool continuous)
+{
+    QAction *action = findAction("toggle_loop");
+    action->setChecked(continuous);
 }
 
 void

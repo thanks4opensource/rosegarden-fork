@@ -32,7 +32,7 @@ class QSocketNotifier;
 
 namespace Rosegarden
 {
-  
+
 class RosegardenMainWindow;
 class RosegardenDocument;
 
@@ -48,22 +48,22 @@ class TranzportClient : public QObject, public CompositionObserver
     Q_OBJECT
 public:
     TranzportClient(RosegardenMainWindow *rgGUIApp);
-      
+
     ~TranzportClient() override;
 
 public slots:
     void readData();
-      
+
     void slotDocumentLoaded(RosegardenDocument *doc);
-      
+
     void writeCommandQueue();
 
     void pointerPositionChanged(timeT time);
-      
-    void loopChanged(timeT t1, timeT t2);
+
+    void loopChanged(bool continuousLooping);
 
 signals:
-    
+
     void play();
     void stop();
     void record();
@@ -79,13 +79,13 @@ signals:
     void solo(bool);
     void undo();
     void redo();
-      
+
     void setPosition(timeT);
-      
+
 public:
 
     void stateUpdate();
-      
+
 public:
     enum ButtonMasks
     {
@@ -137,25 +137,25 @@ public:
     };
 
     void LightOn(Light l);
-      
+
     void LightOff(Light l);
-      
+
     enum Row
     {
         Top,
         Bottom,
     };
-    
+
     void LCDWrite(const std::string& text,
                   Row row = Top,
                   uint8_t offset = 0);
-      
+
     void write(uint64_t buf);
-      
-        
+
+
 private:
     int m_descriptor;
-      
+
     QSocketNotifier *m_socketReadNotifier;
     QSocketNotifier *m_socketWriteNotifier;
 
@@ -174,10 +174,10 @@ private:
 
     static const uint8_t LCDLength = 20;
     TranzportClient(const TranzportClient&);
-      
+
     typedef uint64_t CommandType;
     std::queue<CommandType> commands;
-      
+
     // CompositionObserver overrides
     void trackChanged(const Composition *c, Track *t) override;
     // tracksAdded() need not be overridden as adding a track will not change
@@ -186,7 +186,7 @@ private:
     // the TranzPort when the selected track is deleted.
 
 };
-  
+
 }
 
 #endif // RG_TRANZPORTCLIENT_H

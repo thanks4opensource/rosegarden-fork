@@ -181,14 +181,15 @@
       <Action name="extend_selection_forward" text="Cursor Forward and &amp;Select" icon="select-forward" shortcut="Shift+Right" />
       <Action name="extend_selection_backward_bar" text="Cursor Back &amp;Bar and Select" icon="select-backward-bar" shortcut="Ctrl+Shift+Left" />
       <Action name="extend_selection_forward_bar" text="Cursor For&amp;ward and Select" icon="select-forward-bar" shortcut="Ctrl+Shift+Right" />
-      <Action name="preview_selection" text="Set Loop &amp;to Selection" shortcut="Ctrl+;" />
-      <Action name="clear_loop" text="Clear L&amp;oop" shortcut="Ctrl+:" />
+      <Action name="toggle_loop_active" text="Toggle Loop &amp;Active" shortcut="Ctrl+;" />
+      <Action name="loop_from_selection" text="Set Loop &amp;to Selection" shortcut="Ctrl+:" />
+      <Action name="clear_loop" text="&amp;Clear Loop" />
     <Separator/>
       <Action name="cursor_prior_segment" text="Pre&amp;vious Segment" shortcut="Alt+PgUp" />
       <Action name="cursor_next_segment" text="Ne&amp;xt Segment" shortcut="Alt+PgDown" />
     <Separator/>
       <!-- JAS need to know how to add Qt::KeypadModifier in Human Readable shortcut for Play 'KP_Enter'-->
-      <Action name="play" text="&amp;Play" icon="transport-play" />
+      <Action name="play" text="&amp;Play" icon="transport-play" checked="false" />
       <Action name="stop" text="&amp;Stop" icon="transport-stop" />
       <!-- JAS action called "rewind" in rosegardenui.rc.  Is this the same call? -->
       <Action name="cursor_back" text="Step &amp;Back" icon="step-back" shortcut="Left" />
@@ -200,7 +201,8 @@
       <Action name="playback_pointer_start" text="Rewind to &amp;Beginning" icon="transport-rewind-end" />
       <!-- JAS action called "fastforwardtoend" in rosegardenui.rc.  Is this a different call? -->
       <Action name="playback_pointer_end" text="Fast Forward to &amp;End" icon="transport-ffwd-end" />
-      <Action name="toggle_solo" text="S&amp;olo" icon="transport-solo" checked="false" />
+      <Action name="toggle_loop" text="&amp;Loop" icon="transport-loop" checked="false" shortcut="@" />
+      <Action name="toggle_solo" text="S&amp;olo" icon="transport-solo" checked="false" shortcut="Ctrl+1" />
       <Action name="toggle_tracking" text="Scro&amp;ll to Follow Playback" icon="transport-tracking" shortcut="Pause" checked="true" />
       <Action name="panic" text="P&amp;anic" icon="transport-panic" shortcut="Alt+Ctrl+P" />
   </Menu>
@@ -358,6 +360,7 @@
   <Action name="playback_pointer_forward_bar" />
   <Action name="playback_pointer_end" />
   <Action name="stop" />
+  <Action name="toggle_loop" />
   <Action name="toggle_solo" />
   <Action name="toggle_tracking" />
   <Action name="panic" />
@@ -401,7 +404,7 @@
     <Action name="invert"/>
     <Action name="retrograde"/>
     <Action name="retrograde_invert"/>
-    <Action name="preview_selection"/>
+    <Action name="loop_from_selection"/>
     <Action name="clear_selection"/>
     <Action name="filter_selection"/>
     <Action name="pitch_bend_sequence"/>

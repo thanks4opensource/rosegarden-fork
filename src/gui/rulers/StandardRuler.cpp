@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -86,19 +86,18 @@ StandardRuler::StandardRuler(RosegardenDocument *doc,
     if (RosegardenMainWindow::self()) {
         QObject::connect
                 (m_markerRuler, &MarkerRuler::editMarkers,
-                 RosegardenMainWindow::self(), &RosegardenMainWindow::slotEditMarkers);
+                 RosegardenMainWindow::self(),
+                 &RosegardenMainWindow::slotEditMarkers);
 
         QObject::connect
                 (m_markerRuler, &MarkerRuler::addMarker,
-                 RosegardenMainWindow::self(), &RosegardenMainWindow::slotAddMarker);
+                 RosegardenMainWindow::self(),
+                 &RosegardenMainWindow::slotAddMarker);
 
         QObject::connect
                 (m_markerRuler, &MarkerRuler::deleteMarker,
-                 RosegardenMainWindow::self(), &RosegardenMainWindow::slotDeleteMarker);
-
-        QObject::connect
-                (m_loopRuler, &LoopRuler::setPlayPosition,
-                 RosegardenMainWindow::self(), &RosegardenMainWindow::slotSetPlayPosition);
+                 RosegardenMainWindow::self(),
+                 &RosegardenMainWindow::slotDeleteMarker);
     }
 }
 
@@ -131,21 +130,18 @@ void StandardRuler::connectRulerToDocPointer(RosegardenDocument *doc)
      this, &StandardRuler::dragPointerToPosition);
 
     QObject::connect
-    (m_loopRuler, &LoopRuler::dragLoopToPosition,
-     this, &StandardRuler::dragLoopToPosition);
+    (doc, &RosegardenDocument::loopRangeStartEndChanged,
+     m_loopRuler, &LoopRuler::slotSetLoopMarkerStartEnd);
 
     QObject::connect
-    (m_markerRuler, &MarkerRuler::setLoop,
-     doc, &RosegardenDocument::slotSetLoop);
+    (doc, &RosegardenDocument::loopRangeActiveChanged,
+     m_loopRuler, &LoopRuler::slotSetLoopMarkerActive);
 
+    // See comment at LoopRuler::slotDocumentModified() implementation
     QObject::connect
-    (m_loopRuler, &LoopRuler::setLoopRange,
-     doc, &RosegardenDocument::slotSetLoop);
+    (doc, &RosegardenDocument::documentModified,
+     m_loopRuler, &LoopRuler::slotDocumentModified);
 
-    QObject::connect
-    (doc, &RosegardenDocument::loopChanged,
-     m_loopRuler,
-     &LoopRuler::slotSetLoopMarker);
 
 //    m_loopRuler->setBackgroundColor(GUIPalette::getColour(GUIPalette::PointerRuler));
 }

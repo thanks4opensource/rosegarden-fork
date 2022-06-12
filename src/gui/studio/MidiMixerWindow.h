@@ -59,7 +59,7 @@ public:
      */
     void setupTabs();
 
-    /* 
+    /*
      * Update the VU meters
      */
     void updateMeters();
@@ -78,6 +78,8 @@ public slots:
     void slotCurrentTabChanged(int);
     void slotHelpRequested();
     void slotHelpAbout();
+
+    void slotPlaying(bool playing);  // synchrize play button with others
 
 signals:
     void play();

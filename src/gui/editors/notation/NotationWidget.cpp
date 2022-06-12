@@ -136,7 +136,7 @@ NotationWidget::NotationWidget() :
     m_resizeTimer->setSingleShot(true);
     connect(m_resizeTimer, &QTimer::timeout,
             this, &NotationWidget::slotResizeTimerDone);
-    
+
     m_layout = new QGridLayout;
     setLayout(m_layout);
 
@@ -450,7 +450,7 @@ NotationWidget::setSegments(RosegardenDocument *document,
 
     m_hpanner->setScene(m_scene);
     m_hpanner->fitInView(m_scene->sceneRect(), Qt::KeepAspectRatio);
-    
+
     connect(m_view, &Panned::mouseLeaves,
             m_scene, &NotationScene::slotMouseLeavesView);
 
@@ -534,6 +534,13 @@ NotationWidget::setSegments(RosegardenDocument *document,
     m_layout->addWidget(m_chordNameRuler, CHORDNAMERULER_ROW, MAIN_COL, 1, 1);
     m_layout->addWidget(m_rawNoteRuler, RAWNOTERULER_ROW, MAIN_COL, 1, 1);
 
+    m_topStandardRuler->getLoopRuler()->slotSetLoopMarkerStartEnd(
+        document->getComposition().getLoopStart(),
+        document->getComposition().getLoopEnd());
+    m_bottomStandardRuler->getLoopRuler()->slotSetLoopMarkerStartEnd(
+        document->getComposition().getLoopStart(),
+        document->getComposition().getLoopEnd());
+
     connect(m_topStandardRuler, &StandardRuler::dragPointerToPosition,
             this, &NotationWidget::slotStandardRulerDrag);
     connect(m_bottomStandardRuler, &StandardRuler::dragPointerToPosition,
@@ -587,7 +594,7 @@ NotationWidget::setSegments(RosegardenDocument *document,
             this, &NotationWidget::slotUpdateSegmentChangerBackground);
 
     hideOrShowRulers();
-    
+
     // If setSegments() is called on an already existing NotationWidget,
     // NotationScene and Rulers need the same zoom factor and horizontal
     // position.
@@ -635,7 +642,7 @@ void
 NotationWidget::slotGenerateHeaders()
 {
     if (!linearMode()) return;  // Staff headers don't exist out of linear mode
-    
+
     m_headersNeedRegeneration = false;
 
     if (m_headersGroup) disconnect(m_headersGroup, &HeadersGroup::headersResized,
@@ -964,7 +971,7 @@ NotationWidget::slotPointerPositionChanged(timeT t)
     updatePointer(t);
 
     if (m_playTracking && !m_noScroll)
-        m_view->ensurePositionPointerInView(true);  // page  
+        m_view->ensurePositionPointerInView(true);  // page
 }
 
 void
@@ -1791,7 +1798,7 @@ NotationWidget::slotUpdateSegmentChangerBackground()
     QString trackLabel = QString::fromStdString(track->getLabel());
     if (trackLabel == "")
         trackLabel = tr("<untitled>");
-    
+
     // set up some tooltips...  I don't like this much, and it wants some kind
     // of dedicated float thing eventually, but let's not go nuts on a
     // last-minute feature
@@ -1807,7 +1814,7 @@ NotationWidget::slotUpdateSegmentChangerBackground()
         arg(track->getPosition() + 1).
         arg(trackLabel).
         arg(QString::fromStdString(segment->getLabel()));
-    
+
     m_segmentLabel->setText(segmentText);
 
     // Segment label colors

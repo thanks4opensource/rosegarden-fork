@@ -339,10 +339,10 @@ bool ChannelManager::makeReady(
         // We already tried to get one and failed; don't keep trying.
         if (m_triedToGetChannel)
             return false;
-        
+
         // Try to get a channel.  This sets m_triedToGetChannel.
         allocateChannelInterval(false);
-        
+
         // If we still don't have one, give up.
         if (!m_channelInterval.validChannel())
             return false;
@@ -364,8 +364,9 @@ bool ChannelManager::makeReady(
         bool looping = false;
         RosegardenMainWindow *mainWindow = RosegardenMainWindow::self();
         if (mainWindow) {
-            looping = RosegardenDocument::currentDocument->
-                getComposition().isLooping();
+            looping = (RosegardenDocument::currentDocument->
+                getComposition().loopingMode() ==
+                Composition::LoopingMode::CONTINUOUS);
         }
 
         // This is for those who use looping as a compositional tool along
@@ -499,7 +500,7 @@ ChannelManager::setAllocationMode(Instrument *instrument)
         if (m_usingAllocator != wasUsingAllocator)
             m_channelInterval.clearChannelId();
     }
-}    
+}
 
 void
 ChannelManager::allocateChannelInterval(bool changedInstrument)

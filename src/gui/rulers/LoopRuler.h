@@ -36,6 +36,7 @@ namespace Rosegarden
 
 class RulerScale;
 class RosegardenDocument;
+class Composition;
 
 
 /**
@@ -64,38 +65,20 @@ public:
 
     void scrollHoriz(int x);
 
-    void setMinimumWidth(int width) { m_width = width; }
-
-    bool hasActiveMousePress() { return m_activeMousePress; }
-
-    bool getLoopingMode() { return m_loopingMode; }
-
-    bool reinstateRange();
-    void hideRange();
-    
 signals:
     /// Set the pointer position on mouse single click
     void setPointerPosition(timeT);
 
     /// Set the pointer position on mouse drag
     void dragPointerToPosition(timeT);
-
-    /// Set pointer position and start playing on double click
-    void setPlayPosition(timeT);
-
-    /// Set a playing loop
-    void setLoopRange(timeT, timeT);
-
-    /// Set the loop end position on mouse drag
-    void dragLoopToPosition(timeT);
-
     void startMouseMove(int directionConstraint);
     void stopMouseMove();
     void mouseMove();
 
 public slots:
-    void slotSetLoopMarker(timeT startLoop,
-                           timeT endLoop);
+    void slotSetLoopMarkerStartEnd(timeT startLoop, timeT endLoop);
+    void slotSetLoopMarkerActive();
+    void slotDocumentModified();
 
 protected:
     // QWidget overrides
@@ -106,10 +89,16 @@ protected:
     void paintEvent(QPaintEvent *) override;
 
 private:
+    void setCursorSnap(bool controlKeyPressed);
+    void setCorrectToolTip();
     double mouseEventToSceneX(QMouseEvent *mouseEvent);
 
     void drawBarSections(QPainter*);
-    void drawLoopMarker(QPainter*);  // between loop positions
+    void drawLoopMarker(QPainter*, unsigned);  // before/loop/after sections
+    void doubleClickTimerTimeout();
+    void doSingleClick();
+
+    bool limitRangeToSegments();
 
     //--------------- Data members ---------------------------------
     int  m_height;
@@ -117,31 +106,31 @@ private:
     bool m_isForMainWindow;
     int  m_currentXOffset;
     int  m_width;
-    bool m_activeMousePress;
+    bool m_mouseButtonIsDown;
+    bool m_mouseMoved;
+    double m_mouseXAtClick;
     // Remember the mouse x pos in mousePressEvent and in mouseMoveEvent so
     // that we can emit it in mouseReleaseEvent to update the pointer position
     // in other views
     double m_lastMouseXPos;
 
     RosegardenDocument *m_doc;
+    Composition &m_comp;
     RulerScale *m_rulerScale;
     SnapGrid   m_defaultGrid;
     SnapGrid   *m_loopGrid;
     const SnapGrid   *m_grid;
+    bool m_isMatrixEditor;
     QPen        m_quickMarkerPen;
 
-    bool m_loopingMode;
+    bool m_loopRangeSettingMode;
     timeT m_startLoop;
     timeT m_endLoop;
 
-    // ??? I suspect that if we upgrade Composition::m_isLooping to be an
-    //     enum with three values: LoopMode_Off, LoopMode_On, LoopMode_All,
-    //     we can use Composition to store the loop and then we can remove
-    //     these three.  This should allow simplification of the code in a
-    //     number of places.
-    timeT m_storedLoopStart;
-    timeT m_storedLoopEnd;
-    bool m_loopSet;
+    QTimer *m_doubleClickTimer;
+    QMouseEvent *m_mouseEvent;
+    bool m_waitingForDoubleClick;
+    bool m_didDoubleClick;
 };
 
 

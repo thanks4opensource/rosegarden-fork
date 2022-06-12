@@ -1,4 +1,4 @@
-﻿/* -*- c-basic-offset: 4 indent-tabs-mode: nil -*- vi:set ts=8 sts=4 sw=4: */
+/* -*- c-basic-offset: 4 indent-tabs-mode: nil -*- vi:set ts=8 sts=4 sw=4: */
 
 /*
     Rosegarden
@@ -33,7 +33,7 @@
 #include <deque>
 
 
-namespace Rosegarden { 
+namespace Rosegarden {
 
 class MappedInstrument;
 class SoundDriver;
@@ -64,7 +64,7 @@ public:
 
     /// Close the sequencer.
     void quit();
-    
+
     /// Play from a given time with given parameters.
     /**
      *  Based on RealTime timestamps.
@@ -83,10 +83,11 @@ public:
     /// Set a loop on the sequencer.
     void setLoop(const RealTime &loopStart,
                  const RealTime &loopEnd);
+    void setLooping(bool active);
 
     /// Set the sequencer to a given time.
     void jumpTo(const RealTime &rt);
- 
+
     /// Return the Sound system status (audio/MIDI)
     unsigned getSoundDriverStatus();
 
@@ -293,7 +294,7 @@ public:
 
     /// Connect two objects
     void connectMappedObjects(int id1, int id2);
-    
+
     /// Disconnect two objects
     void disconnectMappedObjects(int id1, int id2);
 
@@ -359,7 +360,7 @@ public:
     void setStatus(TransportStatus status)
             { m_transportStatus = status; }
     TransportStatus getStatus() { return m_transportStatus; }
-   
+
     /// Process the first chunk of Sequencer events
     /**
      * How does this differ from play() and record()?
@@ -416,9 +417,6 @@ public:
      * Used by processAsynchronousEvents() and processRecordedMidi().
      */
     void routeEvents(MappedEventList *mC, bool recording);
-
-    /// Are we looping?
-    bool isLooping() const { return !(m_loopStart == m_loopEnd); }
 
     /// Check for new external clients (ALSA sequencer or whatever).
     /**
@@ -496,8 +494,14 @@ private:
     RealTime m_audioWrite;
     int m_smallFileSize;
 
+    enum class LoopingMode {
+        ONE_SHOT,
+        CONTINUOUS
+    };
+
     RealTime m_loopStart;
     RealTime m_loopEnd;
+    LoopingMode m_loopingMode;
 
     std::vector<MappedInstrument*> m_instruments;
 
@@ -510,7 +514,7 @@ private:
     MappedStudio *m_studio;
 
     // mmap segments
-    // 
+    //
     MappedBufMetaIterator m_metaIterator;
     RealTime m_lastStartTime;
 
@@ -536,7 +540,7 @@ private:
      * not have worked as it was commented out everywhere it was used.
      */
     bool m_isEndOfCompReached;
-    
+
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     QRecursiveMutex m_mutex;
 #else
@@ -547,5 +551,5 @@ private:
 };
 
 }
- 
+
 #endif // RG_ROSEGARDENSEQUENCER_H

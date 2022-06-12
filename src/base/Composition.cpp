@@ -257,7 +257,8 @@ Composition::Composition() :
     m_autoExpand(false),
     m_loopStart(0),
     m_loopEnd(0),
-    m_isLooping(false),
+    m_loopRangeIsActive(false),
+    m_loopingMode(LoopingMode::ONE_SHOT),
     m_playMetronome(false),
     m_recordMetronome(true),
     m_nextTriggerSegmentId(0),
@@ -661,6 +662,8 @@ Composition::updateTriggerSegmentReferences()
 }
 
 
+// This should be replaced with a m_maxSegEndTime member, updated
+// as segements are added/deleted/modified.
 timeT
 Composition::getDuration(bool withRepeats) const
 {
@@ -680,6 +683,19 @@ Composition::getDuration(bool withRepeats) const
     }
 
     return maxDuration;
+}
+
+// This should be replaced with a m_minSegStartTime member, updated
+// as segements are added/deleted/modified.
+timeT
+Composition::getMinSegmentStartTime() const
+{
+    if (m_segments.empty()) return 0;
+    timeT lowest = std::numeric_limits<timeT>::max();
+    for (const auto segment : m_segments)
+        if (segment->getClippedStartTime() < lowest)
+            lowest = segment->getClippedStartTime();
+    return lowest;
 }
 
 void
@@ -719,7 +735,8 @@ Composition::clear()
     m_maxTempo = 0;
     m_loopStart = 0;
     m_loopEnd = 0;
-    m_isLooping = false;
+    m_loopRangeIsActive = false;
+    m_loopingMode = LoopingMode::ONE_SHOT;
     m_position = 0;
     m_startMarker = 0;
     m_endMarker = getBarRange(defaultNumberOfBars).first;
@@ -1865,13 +1882,6 @@ Composition::setPosition(timeT position)
     m_position = position;
 }
 
-void
-Composition::setLooping(bool loop)
-{
-    RG_DEBUG << "setLooping" << loop;
-    m_isLooping = loop;
-}
-
 void Composition::setPlayMetronome(bool value)
 {
     m_playMetronome = value;
@@ -2197,13 +2207,16 @@ std::string Composition::toXmlString() const
     composition << "\" compositionDefaultTempo=\"";
     composition << m_defaultTempo;
 
-    if (m_loopStart != m_loopEnd)
+    // Save loop range if has been set.
+    if (m_loopEnd > m_loopStart)
     {
         composition << "\" loopstart=\"" << m_loopStart;
         composition << "\" loopend=\"" << m_loopEnd;
     }
 
+#if 0   // No longer applicable, new haveLoopRange(), loopRangeActived(),
     composition << "\" islooping=\"" << m_isLooping;
+#endif
 
     composition << "\" startMarker=\"" << m_startMarker;
     composition << "\" endMarker=\"" << m_endMarker;
