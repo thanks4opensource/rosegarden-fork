@@ -403,6 +403,8 @@ protected slots:
     // the checked options on the toolbar
     void slotInterpretActivate();
 
+    void slotRulerSelectionUpdate();
+
 private:
     friend class ::TestNotationViewSelection;
     /**

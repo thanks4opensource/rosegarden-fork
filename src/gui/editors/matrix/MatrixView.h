@@ -172,6 +172,7 @@ protected slots:
     void slotToggleTracking();
 
     void slotUpdateMenuStates();
+    void slotRulerSelectionUpdate();
 
     void slotEditCut() override;
     void slotEditCopy() override;
