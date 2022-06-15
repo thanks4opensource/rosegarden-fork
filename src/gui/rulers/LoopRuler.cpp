@@ -64,9 +64,9 @@ LoopRuler::LoopRuler(RosegardenDocument *doc,
     m_doc(doc),
     m_comp(doc->getComposition()),
     m_rulerScale(rulerScale),
-    m_defaultGrid(rulerScale),
-    m_loopGrid(new SnapGrid(rulerScale)),
-    m_grid(&m_defaultGrid),
+    m_noneSnapGrid(rulerScale),
+    m_beatSnapGrid(rulerScale),
+    m_gridSnapGrid(&m_noneSnapGrid),
     m_isMatrixEditor(false),
     m_quickMarkerPen(QPen(GUIPalette::getColour(GUIPalette::QuickMarker), 4)),
     m_loopRangeSettingMode(false),
@@ -80,8 +80,8 @@ LoopRuler::LoopRuler(RosegardenDocument *doc,
     // Always snap loop extents to beats.
     // Apply no snap to pointer position unless Ctrl key, except
     //   backwards of that for matrix editor.
-    m_defaultGrid.setSnapTime(SnapGrid::NoSnap);
-    m_loopGrid->setSnapTime(SnapGrid::SnapToBeat);
+    m_noneSnapGrid.setSnapTime(SnapGrid::NoSnap);
+    m_beatSnapGrid.setSnapTime(SnapGrid::SnapToBeat);
 
     setCorrectToolTip();
 
@@ -92,7 +92,6 @@ LoopRuler::LoopRuler(RosegardenDocument *doc,
 
 LoopRuler::~LoopRuler()
 {
-    delete m_loopGrid;
     delete m_doubleClickTimer;
     delete m_mouseEvent;
 }
@@ -100,27 +99,11 @@ LoopRuler::~LoopRuler()
 void
 LoopRuler::setSnapGrid(const SnapGrid *grid)
 {
-    delete m_loopGrid;
-    if (grid == nullptr) {
-        m_grid = &m_defaultGrid;
-        m_loopGrid = new SnapGrid(m_defaultGrid);
-    } else {
-        m_grid = grid;
-        m_loopGrid = new SnapGrid(*grid);
+    if (grid) {
+        m_gridSnapGrid = grid;
+        m_isMatrixEditor = true;
     }
-    m_loopGrid->setSnapTime(SnapGrid::SnapToBeat);
-    m_isMatrixEditor = (m_grid != &m_defaultGrid);
     setCorrectToolTip();
-}
-
-void LoopRuler::setCursorSnap(bool controlKeyPressed)
-{
-    if (m_isMatrixEditor) controlKeyPressed = !controlKeyPressed;
-
-    if (controlKeyPressed)
-        m_defaultGrid.setSnapTime(SnapGrid::SnapToBeat);
-    else
-        m_defaultGrid.setSnapTime(SnapGrid::NoSnap);
 }
 
 void
@@ -132,7 +115,7 @@ LoopRuler::setCorrectToolTip()
                               "segment limits for looping or editing."
                       "</p><p>Right-click to toggle the range."
                       "</p><p>Ctrl-click and drag to move the playback pointer "
-                             "without snap to beat."
+                             "without snap to grid."
                       "</p><p>Double-click to start playback."
                       "</p></qt>"));
     else
@@ -396,7 +379,7 @@ LoopRuler::doSingleClick()
     // Check for quick press and release (without any mouse motion)
     if (!m_mouseButtonIsDown && !m_mouseMoved) {
         // Yes, so all that's needed is to accept it.
-        emit setPointerPosition(m_rulerScale->getTimeForX(x));
+        emit setPointerPosition(snapX(x, control, CursorLoop::CURSOR));
         return;
     }
 
@@ -404,11 +387,10 @@ LoopRuler::doSingleClick()
     // composition with no segments (doesn't make sense, and causes problems
     // later in mouseReleaseEvent() when checking loop range against
     // start/end times of segments).
-    if (((shift && leftButton) || rightButton) &&
-            m_comp.getNbSegments() != 0) {
+    if (((shift && leftButton) || rightButton) && m_comp.getNbSegments() != 0) {
         // Start loop range definition
         m_loopRangeSettingMode = true;
-        m_startLoop = m_loopGrid->snapX(x);
+        m_startLoop = snapX(x, control, CursorLoop::LOOP);
         m_endLoop = m_startLoop;
         emit startMouseMove(FOLLOW_HORIZONTAL);
         return;
@@ -416,8 +398,6 @@ LoopRuler::doSingleClick()
 
     // Left button pointer drag
     if (leftButton) {
-        setCursorSnap(control);
-
         // ??? This signal is never emitted with any other argument.
         //     Remove the parameter.  This gets a little tricky because
         //     some clients need this and share slots with other signal
@@ -428,7 +408,7 @@ LoopRuler::doSingleClick()
         // it back to  where it was before double-click timeout.
         if (!m_mouseMoved) {
             m_lastMouseXPos = x;
-            emit setPointerPosition(m_grid->snapX(x));
+            emit setPointerPosition(snapX(x, control, CursorLoop::CURSOR));
         }
         emit startMouseMove(FOLLOW_HORIZONTAL);
     }
@@ -504,8 +484,10 @@ LoopRuler::mouseReleaseEvent(QMouseEvent *mouseEvent)
         // the button after dragging the pointer, the pointer's position
         // is updated again in the other views (typically, in the seg.
         // canvas while the user has dragged the pointer in an edit view)
-        emit setPointerPosition(m_grid->snapX(m_lastMouseXPos));
-
+        emit setPointerPosition(snapX(m_lastMouseXPos,
+                                      (mouseEvent->modifiers() &
+                                            Qt::ControlModifier) != 0,
+                                       CursorLoop::CURSOR));
         emit stopMouseMove();
     }
 }
@@ -526,7 +508,7 @@ LoopRuler::mouseDoubleClickEvent(QMouseEvent *mouseEvent)
 void
 LoopRuler::mouseMoveEvent(QMouseEvent *mE)
 {
-    setCursorSnap((mE->modifiers() & Qt::ControlModifier) != 0);
+    const bool control = (mE->modifiers() & Qt::ControlModifier) != 0;
 
     double x = mouseEventToSceneX(mE);
     if (x < 0) x = 0;
@@ -543,17 +525,51 @@ LoopRuler::mouseMoveEvent(QMouseEvent *mE)
     m_mouseMoved = true;
 
     if (m_loopRangeSettingMode) {
-        if (m_loopGrid->snapX(x) != m_endLoop) {
-            m_endLoop = m_loopGrid->snapX(x);
+        timeT snapped = snapX(x, control, CursorLoop::LOOP);
+        if (snapped != m_endLoop) {
+            m_endLoop = snapped;
             update();
         }
-        emit mouseMove();
     }
     // Double check that isn't loop range definition aborted because no segments
     else if (mE->buttons() & Qt::LeftButton) {
-        emit dragPointerToPosition(m_defaultGrid.snapX(x));
+        emit dragPointerToPosition(snapX(x, control, CursorLoop::CURSOR));
         m_lastMouseXPos = x;
-        emit mouseMove();
+    }
+
+    emit mouseMove();
+}
+
+// Snap to:
+//                  normal      control
+// matrix
+//      pointer     grid        none
+//      loop        grid        beat
+// other
+//      pointer     none        beat
+//      loop        beat        beat
+// Snap cursor appropriately for matrix editor vs all others
+timeT LoopRuler::snapX(
+const double x,
+const bool controlKey,
+const CursorLoop cursorLoop)
+{
+    switch (cursorLoop) {
+    case CursorLoop::CURSOR:
+    default:  // supress compiler warning
+        if (controlKey) {
+            if (m_isMatrixEditor) return m_noneSnapGrid.snapX(x);
+            else                  return m_beatSnapGrid.snapX(x);
+        }
+        else {
+            if (m_isMatrixEditor) return m_gridSnapGrid->snapX(x);
+            else                  return m_noneSnapGrid. snapX(x);
+        }
+    case CursorLoop::LOOP:
+        if (m_isMatrixEditor && !controlKey)
+            return m_gridSnapGrid->snapX(x);
+        else
+            return m_beatSnapGrid.snapX(x);
     }
 }
 
@@ -596,7 +612,7 @@ void LoopRuler::slotSetLoopMarkerStartEnd(timeT startLoop, timeT endLoop)
     update();
 }
 
-// Another window or editor's ruler or a /dialog/menu has changed loop active.
+// Another window or editor's ruler or a dialog/menu has changed loop active.
 void LoopRuler::slotSetLoopMarkerActive()
 {
     update();

@@ -89,7 +89,11 @@ protected:
     void paintEvent(QPaintEvent *) override;
 
 private:
-    void setCursorSnap(bool controlKeyPressed);
+    enum class CursorLoop {
+        CURSOR = 0,
+        LOOP,
+    };
+
     void setCorrectToolTip();
     double mouseEventToSceneX(QMouseEvent *mouseEvent);
 
@@ -98,6 +102,7 @@ private:
     void doubleClickTimerTimeout();
     void doSingleClick();
 
+    timeT snapX(const double x, const bool, const CursorLoop);
     bool limitRangeToSegments();
 
     //--------------- Data members ---------------------------------
@@ -116,12 +121,14 @@ private:
 
     RosegardenDocument *m_doc;
     Composition &m_comp;
+
     RulerScale *m_rulerScale;
-    SnapGrid   m_defaultGrid;
-    SnapGrid   *m_loopGrid;
-    const SnapGrid   *m_grid;
+    SnapGrid m_noneSnapGrid;
+    SnapGrid m_beatSnapGrid;
+    const SnapGrid *m_gridSnapGrid;
+
     bool m_isMatrixEditor;
-    QPen        m_quickMarkerPen;
+    QPen m_quickMarkerPen;
 
     bool m_loopRangeSettingMode;
     timeT m_startLoop;
