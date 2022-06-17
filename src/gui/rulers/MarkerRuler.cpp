@@ -417,6 +417,10 @@ MarkerRuler::mousePressEvent(QMouseEvent *e)
 
     if (shiftPressed) { // set loop
 
+        // We don't set loop ranges unless there are segments (because
+        // loop ranges are clipped to segment begin/end times).
+        if (comp.getNbSegments() < 1) return;
+
         timeT t = m_rulerScale->getTimeForX
             (e->pos().x() - m_currentXOffset);
 
@@ -429,14 +433,17 @@ MarkerRuler::mousePressEvent(QMouseEvent *e)
 
             if (cur >= t) {
                 m_doc->setLoopRange(prev, cur);
+                m_doc->setLoopRangeIsActive(true);
                 return ;
             }
 
             prev = cur;
         }
 
-        if (prev > 0)
+        if (prev > 0) {
             m_doc->setLoopRange(prev, comp.getEndMarker());
+            m_doc->setLoopRangeIsActive(true);
+        }
 
     } else { // set pointer to clicked marker
 

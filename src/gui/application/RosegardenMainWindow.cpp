@@ -6183,11 +6183,14 @@ RosegardenMainWindow::slotZoomOut()
 void
 RosegardenMainWindow::slotAddMarker(timeT time)
 {
+    Composition &comp(RosegardenDocument::currentDocument->getComposition());
+    const QString musicalTime(comp.getMusicalTimeStringForAbsoluteTime(time));
+
     AddMarkerCommand *command =
-        new AddMarkerCommand(&RosegardenDocument::currentDocument->getComposition(),
+        new AddMarkerCommand(&comp,
                              time,
-                            qStrToStrUtf8(tr("new marker")),
-                            qStrToStrUtf8(tr("no description")) );
+                             qStrToStrUtf8(musicalTime),
+                             qStrToStrUtf8(tr("no description")) );
 
     CommandHistory::getInstance()->addCommand(command);
 }

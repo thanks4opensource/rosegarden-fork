@@ -1863,6 +1863,43 @@ Composition::getAbsoluteTimeForMusicalTime(int bar, int beat,
     return t;
 }
 
+QString
+Composition::getMusicalTimeStringForAbsoluteTime(timeT absoluteTime)
+{
+    int bar, beat, fraction, remainder;
+    getMusicalTimeForAbsoluteTime(absoluteTime, bar, beat, fraction, remainder);
+
+    if (fraction == 0 && remainder == 0)
+        return QString("%1:%2").arg(bar + 1).arg(beat);
+
+    static const int MIDI_TICKS_PER_MEASURE = 3840;
+
+    struct Gcd {
+        Gcd(int n, int d) : num(n), den(d) {};
+
+        QString operator()() {
+            int gcd  = num,
+                den2 = den;
+
+            while (den2 != 0) {
+                int tmp = den2;
+                den2 = gcd % den2;
+                gcd = tmp;
+            }
+            return QString("%1/%2").arg(num / gcd).arg(den / gcd);
+        }
+
+        int num, den;
+    };
+
+    int shortestNote = Note(Note::Shortest).getDuration();
+    int subBeats = fraction * shortestNote + remainder;
+
+    return QString("%1:%2+%3").arg(bar + 1)
+                              .arg(beat)
+                              .arg(Gcd(subBeats, MIDI_TICKS_PER_MEASURE)());
+}
+
 timeT
 Composition::getDurationForMusicalTime(timeT absTime,
                                        int bars, int beats,
@@ -2712,6 +2749,11 @@ void
 Composition::addMarker(Rosegarden::Marker *marker)
 {
     m_markers.push_back(marker);
+    std::sort(m_markers.begin(),
+              m_markers.end(),
+              [](const Marker *left, const Marker *right) {
+                return left->getTime() < right->getTime();
+              });
     updateRefreshStatuses();
 }
 

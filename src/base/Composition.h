@@ -725,6 +725,19 @@ public:
                                    int &bars, int &beats,
                                    int &fractions, int &remainder);
 
+
+    /**
+     * Return QString composed of getMusicalTimeForAbsoluteTime values
+     * of form measure:beat or measure:beat+numerator/denominator, the
+     * former if exactly on beat, latter otherwise.
+     * Example: 37:4+3/16 for three 1/16th note time past beat 4 of
+     * measure 37.
+     * Numerator/denominator is reduced to lowest form, e.g. "1/8",
+     * not "2/16", "4/32", etc. but is exact, modulo MIDI's 3840
+     * ticks per measure, so can be unusual value e.g. "571/3840".
+     */
+    QString getMusicalTimeStringForAbsoluteTime(timeT absoluteTime);
+
     /**
      * Return the absolute time corresponding to a given bar number
      * and beat/division values.
