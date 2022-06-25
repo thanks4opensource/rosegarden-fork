@@ -98,6 +98,7 @@
 #include <QProcess>
 #include <QTemporaryFile>
 #include <QByteArray>
+#include <QCheckBox>
 #include <QDataStream>
 #include <QDialog>
 #include <QDir>
@@ -2429,6 +2430,8 @@ RosegardenDocument::stopRecordingMidi()
         CommandHistory::getInstance()->addCommand(command);
     }
 
+    getComposition().updateMinMaxSegmentStartEndTimes();
+
     emit stoppedMIDIRecording();
 
     slotUpdateAllViews(nullptr);
@@ -2466,33 +2469,150 @@ RosegardenDocument::slotSetPointerPosition(timeT t)
 }
 
 void
-RosegardenDocument::setLoopRange(timeT t0, timeT t1)
+RosegardenDocument::setLoopRange(timeT start, timeT end)
 {
-    bool changed = (t0 != m_composition.getLoopStart() ||
-                    t1 != m_composition.getLoopEnd());
+    timeT prevStart = m_composition.getLoopStart();
+    timeT prevEnd   = m_composition.getLoopEnd();
 
-    m_composition.setLoopRange(t0, t1);
+    if (start > end) std::swap(start, end);
 
-    if (t0 == t1)
-        setLoopRangeIsActive(false);
-    else
-        m_seqManager->setLoop(t0, t1);
+    if (start == prevStart && end == prevEnd) return;
 
-    if (changed) {
+    if (m_composition.getNbSegments() == 0) {
+        QMessageBox::warning(0,
+                             tr("Rosegarden"),
+                             tr("Can't set loop range if no "
+                                "segments in composition"));
+        return;
+    }
+
+    bool outside;
+    bool rangeChanged = m_composition.limitRangeToSegments(start, end, &outside);
+
+    if (rangeChanged || outside) {
+        if (outside)
+            m_composition.setLoopRange(prevStart, prevEnd);
+        else
+            m_composition.setLoopRange(start, end);
+
+        loopRangeChanged(rangeChanged,
+                         outside,
+                         false);  // segments didn't change
+    }
+}
+
+void
+RosegardenDocument::loopRangeChanged(bool rangeWasFixed,
+                                     bool wasOutsideSegments,
+                                     bool segmentsChanged)
+{
+    timeT loopStart = m_composition.getLoopStart();
+    timeT loopEnd   = m_composition.getLoopEnd();
+
+    // Set loop range active if is valid, and not being called when
+    // adjusting loop range in Composition::updateMinMaxSegmentStartEndTimes(),
+    // i.e. when segments are added/removed/modified
+    // Intent is to automatically activate/display loopo rangewhen user
+    // has changed it by some means other than drag-defining in a loop ruler,
+    // e.g "set loop range" from selection" or "set loop range between markers")
+    //
+    // Don't use this->setLoopRangeIsActive(() because that
+    // emits loopRangeActiveChanged() which would cause a
+    // preliminary, redundant update() in any/all LoopRulers.
+    bool isActive = !(loopStart == loopEnd);
+    m_composition.setLoopRangeIsActive(isActive);
+    RosegardenMainWindow::self()->setHaveRange(isActive);
+
+    if (rangeWasFixed) {
+        if (m_seqManager) m_seqManager->setLoop(loopStart, loopEnd);
         setModified();  // no notification/signal
-        emit loopRangeStartEndChanged(t0, t1);
+    }
+
+    // Always do this, if for no other reason than to clear
+    // rejected click-drag loop range currently being displayed.
+    emit loopRangeStartEndChanged(loopStart, loopEnd);
+
+    static bool dontShow = false;
+    if ((m_composition.getLoopStart() == m_composition.getLoopEnd() ||
+            wasOutsideSegments) &&
+        !dontShow)
+    {
+        QMessageBox messageBox;
+        QCheckBox *checkBox = new QCheckBox(tr("Don't show this warning"));
+
+        QString message;
+
+        if (segmentsChanged)
+            message = tr("Segments changed. Invalid loop range\n"
+                         "(outside segment limits) deleted.\n\n");
+        else
+            message = tr("Invalid loop range (outside segment limits).\n\n");
+
+        if (m_composition.getLoopStart() == m_composition.getLoopEnd())
+            message += tr("Valid range can be defined by:\n"
+                          "  1. Right-click-drag in a loop ruler, or\n"
+                          "  2. Shift-click in marker ruler, or\n"
+                          "  3. Move -> Set loop to selection\n"
+                          "       in Notation or Matrix editor.\n");
+        else
+            message += tr("Previous valid range restored.\n");
+
+        messageBox.setText(message);
+        messageBox.addButton(QMessageBox::Ok);
+        messageBox.setCheckBox(checkBox);
+
+        QObject::connect(checkBox,
+                         &QCheckBox::stateChanged,
+                         [](int state) {
+                            if (static_cast<Qt::CheckState>(state) ==
+                                Qt::CheckState::Checked) dontShow = true;
+                         });
+
+        messageBox.exec();
     }
 }
 
 void
 RosegardenDocument::setLoopRangeIsActive(bool active)
 {
-    m_composition.setLoopRangeIsActive(active);
-    m_seqManager->resetLoopRange(active);
-    emit loopRangeActiveChanged();
+    static bool dontShow = false;
+
+    if (active && m_composition.getLoopStart() == m_composition.getLoopEnd()) {
+        if (dontShow) return;
+
+        QMessageBox messageBox;
+        QCheckBox *checkBox = new QCheckBox(tr("Don't show this warning"));
+
+        messageBox.setText(tr("No loop range to activate.\n\n"
+                              "Define one by:\n"
+                              "  1. Right-click-drag in a loop ruler, or\n"
+                              "  2. Shift-click in marker ruler, or\n"
+                              "  3. Move -> Set loop to selection\n"
+                              "       in Notation or Matrix editor.\n"));
+        messageBox.addButton(QMessageBox::Ok);
+        messageBox.setCheckBox(checkBox);
+
+        QObject::connect(checkBox,
+                         &QCheckBox::stateChanged,
+                         [](int state) {
+                            if (static_cast<Qt::CheckState>(state) ==
+                                Qt::CheckState::Checked) dontShow = true;
+                         });
+
+        messageBox.exec();
+
+        return;
+    }
+
+    if (active != m_composition.loopRangeIsActive()) {
+        m_composition.setLoopRangeIsActive(active);
+        m_seqManager->resetLoopRange(active);
+        emit loopRangeActiveChanged();
+        RosegardenMainWindow::self()->setHaveRange(active);
+    }
 }
 
-// Wrapper as per Qt "best practices" documentation (signals should
+// Wrappers as per Qt "best practices" documentation (signals should
 // only be emitted by class that defines them).
 void
 RosegardenDocument::emitLoopRangeActiveChanged()
@@ -2764,6 +2884,9 @@ RosegardenDocument::stopRecordingAudio()
             recordSegment->setStartTime(shiftedStartTime);
         */
     }
+
+    getComposition().updateMinMaxSegmentStartEndTimes();
+
     emit stoppedAudioRecording();
 
     emit pointerPositionChanged(m_composition.getPosition());

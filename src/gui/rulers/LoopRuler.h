@@ -78,7 +78,6 @@ signals:
 public slots:
     void slotSetLoopMarkerStartEnd(timeT startLoop, timeT endLoop);
     void slotSetLoopMarkerActive();
-    void slotDocumentModified();
 
 protected:
     // QWidget overrides
@@ -89,6 +88,10 @@ protected:
     void paintEvent(QPaintEvent *) override;
 
 private:
+    // Allow slight movement during double click, and select of start/end
+    // to resize instead of start new range definition.
+    static const unsigned CLOSE_PIXELS = 10;
+
     enum class CursorLoop {
         CURSOR = 0,
         LOOP,
@@ -103,7 +106,6 @@ private:
     void doSingleClick();
 
     timeT snapX(const double x, const bool, const CursorLoop);
-    bool limitRangeToSegments();
 
     //--------------- Data members ---------------------------------
     int  m_height;
@@ -133,6 +135,7 @@ private:
     bool m_loopRangeSettingMode;
     timeT m_startLoop;
     timeT m_endLoop;
+    timeT *m_startOrEnd;
 
     QTimer *m_doubleClickTimer;
     QMouseEvent *m_mouseEvent;

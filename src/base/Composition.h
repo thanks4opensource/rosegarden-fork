@@ -106,9 +106,20 @@ public:
     timeT getDuration(bool withRepeats = false) const;
 
 
-    timeT getMaxSegmentEndTime() const { return getDuration(true); }
-    timeT getMinSegmentStartTime() const;
+    /**
+     * Dynamically updated union of all segments' times.
+     * Debatable doing this vs iterating through segments whenever
+     * min/max time requested, but always mainting loop range clipped
+     * to min/max requires doing that when segments change, therefor
+     * requiring this choice between the two schemes.
+     */
+    timeT getMinSegmentStartTime() const { return m_minSegmentStart; }
+    timeT getMaxSegmentEndTime()   const { return m_maxSegmentEnd; }
 
+    void updateMinMaxSegmentStartEndTimes();
+
+    void setFromFileInProgress(bool inProg) { m_fromFileInProgress = inProg; }
+    bool fromFileInProgress() const { return m_fromFileInProgress; }
 
     //////
     //
@@ -315,6 +326,11 @@ public:
      * has been detached from the Composition in this way.
      */
     bool detachSegment(Segment*);
+
+    /**
+     * For detachAllSegments()
+     */
+    bool detachSegmentNoUpdateMinMax(Segment*);
 
     /**
      * Add a new Segment which has been "weakly detached"
@@ -771,6 +787,10 @@ public:
     void setLoopRangeIsActive(bool active) { m_loopRangeIsActive = active; }
     void setLoopingMode(LoopingMode mode) { m_loopingMode = mode; }
 
+    // Returns true if changed start or end argment, false if not
+    // Sets badRange true if start->end was completely outside segments' limits
+    bool limitRangeToSegments(timeT &start, timeT &end, bool *badRange=nullptr);
+
     // Current looping state
     timeT getLoopStart() const { return m_loopStart; }
     timeT getLoopEnd() const { return m_loopEnd;}
@@ -1134,6 +1154,12 @@ protected:
     timeT                             m_loopEnd;
     bool                              m_loopRangeIsActive;
     LoopingMode                       m_loopingMode;
+
+    // For clipping loop range to segments (and any other purpose)
+    timeT                             m_minSegmentStart;
+    timeT                             m_maxSegmentEnd;
+
+    bool                              m_fromFileInProgress;
 
     Configuration                     m_metadata;
 

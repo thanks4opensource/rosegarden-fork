@@ -141,6 +141,7 @@ public:
     void record(bool countIn);
 
     void jumpTo(const RealTime &time);
+    void jumpTo(timeT time);
 
     void setLoop(const timeT &lhs, const timeT &rhs);
     void setLooping(bool active);

@@ -28,17 +28,18 @@
 #include "gui/general/RosegardenScrollView.h"
 #include "document/RosegardenDocument.h"
 
-#include <QApplication>
-#include <QPainter>
-#include <QRect>
-#include <QSize>
-#include <QWidget>
-#include <QToolTip>
 #include <QAction>
+#include <QApplication>
+#include <QBrush>
+#include <QMessageBox>
+#include <QMouseEvent>
+#include <QPainter>
 #include <QPainter>
 #include <QPaintEvent>
-#include <QMouseEvent>
-#include <QBrush>
+#include <QRect>
+#include <QSize>
+#include <QToolTip>
+#include <QWidget>
 
 #include <utility>  // std::swap()
 
@@ -72,6 +73,7 @@ LoopRuler::LoopRuler(RosegardenDocument *doc,
     m_loopRangeSettingMode(false),
     m_startLoop(0),
     m_endLoop(0),
+    m_startOrEnd(&m_endLoop),
     m_doubleClickTimer(nullptr),
     m_mouseEvent(nullptr),
     m_waitingForDoubleClick(false),
@@ -387,11 +389,45 @@ LoopRuler::doSingleClick()
     // composition with no segments (doesn't make sense, and causes problems
     // later in mouseReleaseEvent() when checking loop range against
     // start/end times of segments).
-    if (((shift && leftButton) || rightButton) && m_comp.getNbSegments() != 0) {
+    if (((shift && leftButton) || rightButton)) {
+        if (m_comp.getNbSegments() == 0) {
+            QMessageBox::warning(this,
+                                 tr("Loop Ruler"),
+                                 tr("Can't define loop range without segments"));
+            return;
+        }
+
         // Start loop range definition
+        bool adjustExisting = false;
+
+        // New loop range or adjust start/end of current one?
+        if ( m_comp.loopRangeIsActive() &&
+            (m_comp.getLoopStart() != m_comp.getLoopEnd())) {
+
+            // Have an existing loop range that is currently displayed.
+            double xStart = m_rulerScale->getXForTime(m_comp.getLoopStart());
+            double xEnd   = m_rulerScale->getXForTime(m_comp.getLoopEnd());
+
+            if (fabs(x - xEnd) < static_cast<double>(CLOSE_PIXELS)) {
+                adjustExisting = true;
+                m_startOrEnd = &m_endLoop;
+            } else if (fabs(x - xStart) < static_cast<double>(CLOSE_PIXELS)) {
+                adjustExisting = true;
+                m_startOrEnd = &m_startLoop;
+            }
+            *m_startOrEnd = snapX(x, control, CursorLoop::LOOP);
+        }
+
+        if (adjustExisting) {
+            m_startLoop = m_comp.getLoopStart();
+            m_endLoop   = m_comp.getLoopEnd();
+        } else {
+            // start new loop range definition
+            m_startLoop = m_endLoop = snapX(x, control, CursorLoop::LOOP);
+            m_startOrEnd = &m_endLoop;
+        }
+
         m_loopRangeSettingMode = true;
-        m_startLoop = snapX(x, control, CursorLoop::LOOP);
-        m_endLoop = m_startLoop;
         emit startMouseMove(FOLLOW_HORIZONTAL);
         return;
     }
@@ -436,47 +472,21 @@ LoopRuler::mouseReleaseEvent(QMouseEvent *mouseEvent)
         return;
     }
 
+    emit stopMouseMove();
+
     // If we were setting loop range
     if (m_loopRangeSettingMode) {
         m_loopRangeSettingMode = false;
 
         // If there was no drag, toggle the loop range active/inactive
         // instead of defining new range.
-        if (m_endLoop == m_startLoop) {
-            if (m_comp.loopRangeIsActive()) {
-                m_comp.setLoopRangeIsActive(false);
-            } else {
-                m_startLoop = m_comp.getLoopStart();
-                m_endLoop = m_comp.getLoopEnd();
-                if (m_startLoop != m_endLoop) {
-                    limitRangeToSegments();
-                    m_comp.setLoopRangeIsActive(true);
-                }
-            }
-        } else {
-            // There was drag, so define new loop range.
-            m_comp.setLoopRangeIsActive(true);
-
+        if (m_endLoop == m_startLoop)
+            m_doc->toggleLoopRangeIsActive();
+        else {
             // Make sure start < end
             if (m_endLoop < m_startLoop) std::swap(m_startLoop, m_endLoop);
-
-            limitRangeToSegments();
+            m_doc->setLoopRange(m_startLoop, m_endLoop);
         }
-
-        emit stopMouseMove();
-
-        if (m_comp.loopRangeIsActive()) {
-            // Only set new loop range if has changed
-            if (m_startLoop != m_comp.getLoopStart() ||
-                m_endLoop   != m_comp.getLoopEnd())
-                m_doc->setLoopRange(m_startLoop, m_endLoop);
-            else
-                // Was toggled from inactive to active.
-                m_doc->emitLoopRangeActiveChanged();
-        }
-        else
-            // Was toggled from active to inactive.
-            m_doc->emitLoopRangeActiveChanged();
     }
 
     if (mouseEvent->button() == Qt::LeftButton) {
@@ -488,7 +498,6 @@ LoopRuler::mouseReleaseEvent(QMouseEvent *mouseEvent)
                                       (mouseEvent->modifiers() &
                                             Qt::ControlModifier) != 0,
                                        CursorLoop::CURSOR));
-        emit stopMouseMove();
     }
 }
 
@@ -518,16 +527,16 @@ LoopRuler::mouseMoveEvent(QMouseEvent *mE)
     // was first clicked when it gets triggered by double-click timer
     // timout.
     // But wait for significant mouse movement to ignore inadvertent
-    // movement during double-click timer.
-    if (!m_mouseMoved && fabs(x - m_mouseXAtClick) < 5.0) {  // 5 pixels
+    // movement during double-click timeout.
+    if (!m_mouseMoved && fabs(x - m_mouseXAtClick) < CLOSE_PIXELS) {
         return;
     }
     m_mouseMoved = true;
 
     if (m_loopRangeSettingMode) {
         timeT snapped = snapX(x, control, CursorLoop::LOOP);
-        if (snapped != m_endLoop) {
-            m_endLoop = snapped;
+        if (snapped != *m_startOrEnd) {
+            *m_startOrEnd = snapped;
             update();
         }
     }
@@ -573,38 +582,7 @@ const CursorLoop cursorLoop)
     }
 }
 
-// Make sure loop is within time range spanned by union of segments
-// Returns true if needed to adjust to make so.
-bool LoopRuler::limitRangeToSegments()
-{
-    bool changed = false;
-    timeT loopDuration = m_endLoop - m_startLoop;
-    timeT minSegBeg = m_comp.getMinSegmentStartTime();
-    timeT maxSegEnd = m_comp.getMaxSegmentEndTime();
-
-    if (m_startLoop < minSegBeg) {
-        m_startLoop = minSegBeg;
-        m_endLoop = minSegBeg + loopDuration;
-        changed = true;
-    }
-    if (m_endLoop > maxSegEnd) {
-        m_endLoop = maxSegEnd;
-        m_startLoop = maxSegEnd - loopDuration;
-        changed = true;
-    }
-    if (m_startLoop < minSegBeg) {
-        m_startLoop = minSegBeg;
-        changed = true;
-    }
-    if (m_endLoop > maxSegEnd) {
-        m_endLoop = maxSegEnd;
-        changed = true;
-    }
-
-    return changed;
-}
-
-// Another window or editor's ruler or a /dialog/menu has changed the loop range.
+// Another window or editor's ruler or a dialog/menu has changed the loop range.
 void LoopRuler::slotSetLoopMarkerStartEnd(timeT startLoop, timeT endLoop)
 {
     m_startLoop = startLoop;
@@ -615,33 +593,9 @@ void LoopRuler::slotSetLoopMarkerStartEnd(timeT startLoop, timeT endLoop)
 // Another window or editor's ruler or a dialog/menu has changed loop active.
 void LoopRuler::slotSetLoopMarkerActive()
 {
+    m_startLoop = m_comp.getLoopStart();
+    m_endLoop = m_comp.getLoopEnd();
     update();
-}
-
-void LoopRuler::slotDocumentModified()
-{
-    // Really only want to be called when segment(s) are added/removed/changed
-    // in the composition, but such things are handle by the CompositionObserver
-    // notification mechanism, not signals and slots, and no way to capture
-    // those here because only interesting case is in RosegardenMainWindow
-    // and that isn't a CompositionObserver. So until all of this is sorted
-    // out (along with the granularity of what is being  notified/signalled)
-    // will have to be hit with this when 99% of the time it won't be
-    // applicable here.
-
-    // If no segments makes no sense to have loop range, so remove it.
-    if (m_comp.getNbSegments() == 0 && m_comp.loopRangeIsActive()) {
-        m_comp.setLoopRangeIsActive(false);
-        update();
-    }
-    // Otherwise, make sure loop range is within segments start/end
-    else {
-        m_startLoop = m_comp.getLoopStart();
-        m_endLoop   = m_comp.getLoopEnd();
-        if (limitRangeToSegments()) {
-            m_comp.setLoopRange(m_startLoop, m_endLoop);
-        }
-    }
 }
 
 }  // namespace Rosegarden

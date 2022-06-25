@@ -393,10 +393,14 @@ NotationView::NotationView(RosegardenDocument *doc,
             this, &NotationView::slotSetLoopingMode);
 
     // Set buttons to current state
+    //
     slotSetLoopingMode(m_document->getComposition().loopingMode() ==
                       Composition::LoopingMode::CONTINUOUS);
-    slotPlaying(m_document->getSequenceManager()->getTransportStatus() ==
-                TransportStatus::PLAYING);
+    // Sequence manager may not exist yet -- happens in
+    // test/test/test_notationview_selection.cpp unittest
+    if (m_document->getSequenceManager())
+        slotPlaying(m_document->getSequenceManager()->getTransportStatus() ==
+                    TransportStatus::PLAYING);
 
     // Set the rewind and fast-forward buttons for auto-repeat.
     enableAutoRepeat("Transport Toolbar", "playback_pointer_back_bar");
@@ -2014,7 +2018,6 @@ NotationView::slotLoopFromSelection()
     if (!getSelection()) return;
     m_document->setLoopRange(getSelection()->getStartTime(),
                              getSelection()->getEndTime());
-    m_document->setLoopRangeIsActive(true);
 }
 
 void

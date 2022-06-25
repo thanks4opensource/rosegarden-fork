@@ -354,6 +354,13 @@ SequenceManager::jumpTo(const RealTime &time)
 }
 
 void
+SequenceManager::jumpTo(timeT time)
+{
+    RosegardenSequencer::getInstance()->jumpTo(
+        m_doc->getComposition().getElapsedRealTime(time));
+}
+
+void
 SequenceManager::record(bool toggled)
 {
     if (!m_doc) return;
@@ -1033,14 +1040,10 @@ SequenceManager::fastForwardToEnd()
 {
     RG_DEBUG << "fastForwardToEnd()";
     Composition &comp = m_doc->getComposition();
-#if 0  // Not applicable, and possibly buggy, with new looping interface
     if (Preferences::getStopAtEnd())
         m_doc->slotSetPointerPosition(comp.getDuration(true));
     else
         m_doc->slotSetPointerPosition(comp.getEndMarker());
-#else
-    m_doc->slotSetPointerPosition(comp.getDuration(true));
-#endif
 }
 
 void

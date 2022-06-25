@@ -253,6 +253,9 @@ public:
 
     void openWindow(ExternalController::Window window);
 
+    void setHaveRange(bool haveRange);
+
+
 protected:
 
     /// Handle activation change.
@@ -281,7 +284,8 @@ protected:
      */
     void customEvent(QEvent *event) override;
 
-    RosegardenDocument *newDocument(bool skipAutoload = false);
+    RosegardenDocument *newDocument(bool skipAutoload = false,
+                                    bool clearHistory= true);
 
     /**** File handling code that we don't want the outside world to use ****/
     /**/
