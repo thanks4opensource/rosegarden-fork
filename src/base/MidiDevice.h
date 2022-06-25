@@ -72,7 +72,7 @@ public:
     void setMetronome(const MidiMetronome &);
     const MidiMetronome* getMetronome() const { return m_metronome; }
 
-    void addProgram(const MidiProgram &program);
+    void addProgram(const MidiProgram &prog);
     void addBank(const MidiBank &bank);
     void addKeyMapping(const MidiKeyMapping &mapping); // I own the result!
 
@@ -83,10 +83,10 @@ public:
 
     const BankList &getBanks() const { return m_bankList; }
     BankList getBanks(bool percussion) const;
-    BankList getBanksByMSB(bool percussion, MidiByte msb) const; 
+    BankList getBanksByMSB(bool percussion, MidiByte msb) const;
     BankList getBanksByLSB(bool percussion, MidiByte lsb) const;
     const MidiBank *getBankByName(const std::string &) const;
-    
+
     MidiByteList getDistinctMSBs(bool percussion, int lsb = -1) const;
     MidiByteList getDistinctLSBs(bool percussion, int msb = -1) const;
 
@@ -103,13 +103,13 @@ public:
     std::string getBankName(const MidiBank &bank) const;
     std::string getProgramName(const MidiProgram &program) const;
 
-    void replaceBankList(const BankList &bank);
-    void replaceProgramList(const ProgramList &program);
-    void replaceKeyMappingList(const KeyMappingList &mappings);
+    void replaceBankList(const BankList &bankList);
+    void replaceProgramList(const ProgramList &programList);
+    void replaceKeyMappingList(const KeyMappingList &keyMappingList);
 
-    void mergeBankList(const BankList &bank);
-    void mergeProgramList(const ProgramList &program);
-    void mergeKeyMappingList(const KeyMappingList &mappings);
+    void mergeBankList(const BankList &bankList);
+    void mergeProgramList(const ProgramList &programList);
+    void mergeKeyMappingList(const KeyMappingList &keyMappingList);
 
     InstrumentList getAllInstruments() const override;
     InstrumentList getPresentationInstruments() const override;
@@ -158,10 +158,11 @@ public:
 
     // Access ControlParameters (read/write)
     //
-    virtual ControlParameter *getControlParameter(int index);
-    const ControlParameter *getControlParameter(int index) const override;
-    virtual ControlParameter *getControlParameter(const std::string &type, MidiByte controllerNumber);
-    const ControlParameter *getControlParameter(const std::string &type, MidiByte controllerNumber) const override;
+    ControlParameter *getControlParameter(int index);
+    ControlParameter *getControlParameter(
+            const std::string &type, MidiByte controllerNumber);
+    const ControlParameter *getControlParameterConst(
+            const std::string &type, MidiByte controllerNumber) const override;
 
     // Modify ControlParameters
     //
@@ -179,10 +180,11 @@ public:
     // our ControlParameter list.
     //
     bool isUniqueControlParameter(const ControlParameter &con) const;
-    
+
     const ControlParameter *
-        findControlParameter(std::string type, MidiByte conNumber) const;
-    
+        findControlParameter(const std::string& type,
+                             MidiByte controllerNumber) const;
+
     /// The CC or other controller has a knob on the MIPP.
     /**
      * ??? Only CCs can have knobs.  It's misleading to allow a complete
@@ -190,7 +192,7 @@ public:
      *     move it to private as it is only called internally (like most
      *     of the routines in this class).
      */
-    bool isVisibleControlParameter(const ControlParameter &con) const;
+    static bool isVisibleControlParameter(const ControlParameter &con);
     /// The CC has a knob on the MIPP.
     bool isVisibleControlParameter(MidiByte controlNumber) const;
 
@@ -204,12 +206,12 @@ public:
     { return channel == 9; }
 
     /// See m_userConnection.
-    void setUserConnection(std::string connection)
+    void setUserConnection(const std::string& connection)
             { m_userConnection = connection; }
     std::string getUserConnection() const
             { return m_userConnection; }
     /// See m_currentConnection.
-    void setCurrentConnection(std::string connection)
+    void setCurrentConnection(const std::string& connection)
             { m_currentConnection = connection; }
 
 protected:
@@ -222,14 +224,14 @@ protected:
     // Push the default IPB controllers to the device's Instruments.
     //
     void deviceToInstrControllerPush();
-    
+
     // Add a new control to all of the device's Instruments.
     //
-    void addControlToInstrument(const ControlParameter &con);
+    void addControlToInstrument(const ControlParameter &con) const;
 
     // Remove a control from all of the device's Instruments.
     //
-    void removeControlFromInstrument(const ControlParameter &con);
+    void removeControlFromInstrument(const ControlParameter &controlParameter) const;
 
     /// The connection the user has asked for.
     /**
@@ -253,14 +255,14 @@ protected:
     // ??? This should be easy to change to an object which would simplify
     //     copying of MidiDevice.
     MidiMetronome *m_metronome;
-    
+
     // used when we're presenting the instruments
     InstrumentList  m_presentationInstrumentList;
 
     // Is this device Play or Record?
     //
-    DeviceDirection m_direction; 
-    
+    DeviceDirection m_direction;
+
     // Should we present LSB or MSB of bank info as a Variation number?
     //
     VariationType m_variationType;
@@ -274,7 +276,8 @@ protected:
     AllocateChannels  *m_allocator;
 
 private:
-    //MidiDevice &operator=(const MidiDevice &);
+    // not used
+    MidiDevice &operator=(const MidiDevice &);
 };
 
 }

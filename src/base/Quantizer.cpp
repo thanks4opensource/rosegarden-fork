@@ -30,15 +30,15 @@
 namespace Rosegarden {
 
 
-Quantizer::Quantizer(std::string source,
-                     std::string target) :
+Quantizer::Quantizer(const std::string& source,
+                     const std::string& target) :
     m_source(source), m_target(target)
 {
     makePropertyNames();
 }
 
 
-Quantizer::Quantizer(std::string target) :
+Quantizer::Quantizer(const std::string& target) :
     m_target(target)
 {
     if (target == RawEventData) {
@@ -157,7 +157,7 @@ Quantizer::fixQuantizedValues(Segment *s,
         s->erase(from);
         m_toInsert.push_back(e);
     }
-    
+
     insertNewEvents(s);
 }
 
@@ -223,7 +223,7 @@ Quantizer::quantizeRange(Segment *s,
         quantizeSingle(s, from);
     }
 }
-    
+
 void
 Quantizer::unquantize(Segment *s,
                       Segment::iterator from,
@@ -247,7 +247,7 @@ Quantizer::unquantize(Segment *s,
             removeTargetProperties(*from);
         }
     }
-    
+
     insertNewEvents(s);
 }
 
@@ -259,38 +259,37 @@ Quantizer::unquantize(EventSelection *selection) const
 
     Segment *segment = &selection->getSegment();
 
-    for (EventContainer::iterator eventIter =
+    for (EventContainer::iterator selectionEventIter =
              selection->getSegmentEvents().begin();
-         eventIter != selection->getSegmentEvents().end();
+         selectionEventIter != selection->getSegmentEvents().end();
          /* Increment Before Use. */) {
-        EventContainer::iterator eventIterNext = eventIter;
+        EventContainer::iterator eventIterNext = selectionEventIter;
         // Increment Before Use.
         ++eventIterNext;
 
         if (m_target == RawEventData || m_target == NotationPrefix) {
 
-            // ??? But from and to are exactly the same!!!
-            Segment::iterator from = segment->findSingle(*eventIter);
-            if (from == segment->end())
-                continue;
-            Segment::iterator to = segment->findSingle(*eventIter);
-            if (to == segment->end())
+            Segment::iterator segmentEventIter =
+                    segment->findSingle(*selectionEventIter);
+            if (segmentEventIter == segment->end())
                 continue;
 
-            const timeT absoluteTime = getFromSource(*from, AbsoluteTimeValue);
-            const timeT duration = getFromSource(*to, DurationValue);
+            const timeT absoluteTime =
+                    getFromSource(*segmentEventIter, AbsoluteTimeValue);
+            const timeT duration =
+                    getFromSource(*segmentEventIter, DurationValue);
 
             // Important: This can delete an Event from the Segment.  That
-            //            will delete an Event from the selection which will
+            //            will delete the Event from the selection which will
             //            invalidate eventIter.  Increment Before Use must be
             //            used to prevent crashes.
-            setToTarget(segment, from, absoluteTime, duration);
+            setToTarget(segment, segmentEventIter, absoluteTime, duration);
 
         } else {
-            removeTargetProperties(*eventIter);
+            removeTargetProperties(*selectionEventIter);
         }
 
-        eventIter = eventIterNext;
+        selectionEventIter = eventIterNext;
     }
 
     insertNewEvents(&selection->getSegment());
@@ -379,6 +378,7 @@ Quantizer::setToTarget(Segment *segment, Segment::iterator segmentIter,
     }
 
     Event *newEvent;
+
     if (m_target == RawEventData) {
         newEvent = new Event(**segmentIter, absTime, duration);
     } else if (m_target == NotationPrefix) {
@@ -412,12 +412,12 @@ Quantizer::setToTarget(Segment *segment, Segment::iterator segmentIter,
         m_normalizeRegion =
                 std::pair<timeT, timeT>(normalizeStart, normalizeEnd);
     }
-    
+
     if (haveSourceTime)
         newEvent->setMaybe<Int>(m_sourceProperties[AbsoluteTimeValue], sourceTime);
     if (haveSourceDuration)
         newEvent->setMaybe<Int>(m_sourceProperties[DurationValue], sourceDuration);
-    
+
     if (m_target != RawEventData && m_target != NotationPrefix) {
         newEvent->setMaybe<Int>(m_targetProperties[AbsoluteTimeValue], absTime);
         newEvent->setMaybe<Int>(m_targetProperties[DurationValue], duration);

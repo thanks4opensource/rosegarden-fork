@@ -95,13 +95,13 @@ typedef std::vector<PluginPortInstance*>::iterator PortInstanceIterator;
 class AudioPluginInstance : public XmlExportable
 {
 public:
-    AudioPluginInstance(unsigned int position);
+    explicit AudioPluginInstance(unsigned int position);
 
     AudioPluginInstance(std::string identifier,
                         unsigned int position);
 
     /// E.g. "dssi:/usr/lib/dssi/hexter.so:hexter"
-    void setIdentifier(std::string identifier) { m_identifier = identifier; }
+    void setIdentifier(const std::string& identifier) { m_identifier = identifier; }
     /// E.g. "dssi:/usr/lib/dssi/hexter.so:hexter"
     std::string getIdentifier() const { return m_identifier; }
 
@@ -139,7 +139,7 @@ public:
 
     typedef std::map<std::string, std::string> ConfigMap;
     void clearConfiguration() { m_config.clear(); }
-    const ConfigMap &getConfiguration() { return m_config; }
+    const ConfigMap &getConfiguration() const { return m_config; }
     std::string getConfigurationValue(std::string k) const;
     void setConfigurationValue(std::string k, std::string v);
 
@@ -158,7 +158,7 @@ protected:
     // Is the plugin actually assigned i.e. should we create
     // a matching instance at the sequencer?
     //
-    bool                               m_assigned; 
+    bool                               m_assigned;
     bool                               m_bypass;
 
     std::string                        m_program;

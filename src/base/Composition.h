@@ -36,7 +36,7 @@
 #include <set>
 #include <map>
 
-namespace Rosegarden 
+namespace Rosegarden
 {
 // We store tempo in quarter-notes per minute * 10^5 (hundred
 // thousandths of a quarter-note per minute).  This means the maximum
@@ -56,7 +56,7 @@ class CompositionObserver;
 /**
  * It is a container for multiple Segment objects (m_segments), as well as
  * any associated non-Event data.
- * 
+ *
  * The Composition owns the Segment objects it holds, and deletes them on
  * destruction.  See deleteSegment() and detachSegment().
  */
@@ -64,7 +64,7 @@ class ROSEGARDENPRIVATE_EXPORT Composition : public XmlExportable
 {
     friend class Track; // to call notifyTrackChanged()
     friend class Segment; // to call notifySegmentRepeatChanged()
-    
+
 public:
     typedef SegmentMultiSet::iterator iterator;
     typedef SegmentMultiSet::const_iterator const_iterator;
@@ -112,10 +112,10 @@ public:
 
     timeT getStartMarker() const { return m_startMarker; }
     timeT getEndMarker() const { return m_endMarker; }
-    bool autoExpandEnabled() { return m_autoExpand; }
+    bool autoExpandEnabled() const { return m_autoExpand; }
 
     void setStartMarker(const timeT &sM);
-    void setEndMarker(const timeT &eM);
+    void setEndMarker(const timeT &endMarker);
     void setAutoExpand(bool autoExpand) { m_autoExpand = autoExpand; }
 
 
@@ -129,11 +129,11 @@ public:
 
     /// Zero-based position on UI.
     Track* getTrackByPosition(int position) const;
- 
-    int getTrackPositionById(TrackId track) const; // -1 if not found
+
+    int getTrackPositionById(TrackId id) const; // -1 if not found
 
     trackcontainer& getTracks() { return m_tracks; }
- 
+
     const trackcontainer& getTracks() const { return m_tracks; }
 
     // Reset id and position
@@ -144,7 +144,7 @@ public:
     TrackId getMaxTrackId() const;
 
     const recordtrackcontainer &getRecordTracks() const { return m_recordTracks; }
-    void setTrackRecording(TrackId track, bool recording);
+    void setTrackRecording(TrackId trackId, bool recording);
     bool isTrackRecording(TrackId track) const;
     bool isInstrumentRecording(InstrumentId instrumentID) const;
 
@@ -177,7 +177,7 @@ public:
      * the track object.
      */
     void addTrack(Track *track);
- 
+
     /**
      * Delete a Track by index
      */
@@ -250,7 +250,7 @@ public:
     SegmentMultiSet& getSegments() { return m_segments; }
     const SegmentMultiSet& getSegments() const { return m_segments; }
 
-    Segment* getSegmentByMarking(const QString& Marking) const;
+    Segment* getSegmentByMarking(const QString& marking) const;
 
     unsigned int getNbSegments() const { return m_segments.size(); }
 
@@ -385,13 +385,13 @@ public:
      * Delete all trigger Segments.
      */
     void clearTriggerSegments();
-    
+
     /**
      * Return the TriggerSegmentId for the given Segment, or -1 if it is
      * not a trigger Segment.
      */
     int getTriggerSegmentId(Segment *);
-    
+
     /**
      * Return the Segment for a given TriggerSegmentId
      */
@@ -413,7 +413,7 @@ public:
      * This is intended for use from file load or from undo/redo.
      */
     TriggerSegmentRec *addTriggerSegment(Segment *, TriggerSegmentId,
-                                         int basePitch = -1, int baseVelocity = -1);
+                                         int pitch = -1, int velocity = -1);
 
     /**
      * Get the ID of the next trigger segment that will be inserted.
@@ -437,7 +437,7 @@ public:
      * Clear refresh statuses of SegmentLinker after file load.
      */
     void resetLinkedSegmentRefreshStatuses();
-    
+
     //////
     //
     //  BAR
@@ -460,7 +460,7 @@ public:
      */
     timeT getBarStart(int n) const {
         return getBarRange(n).first;
-    } 
+    }
 
     /**
      * Return the ending time of bar n
@@ -471,7 +471,7 @@ public:
 
     /**
      * Return the time range of bar n.
-     * 
+     *
      * Will happily return theoretical timings for bars before the
      * start or beyond the end of composition (i.e. there is no
      * requirement that 0 <= n < getNbBars()).
@@ -495,7 +495,7 @@ public:
     /**
      * Return the starting and ending times of the bar that contains
      * time t.
-     * 
+     *
      * Will happily return theoretical timings for bars before the
      * start or beyond the end of composition.
      *
@@ -531,7 +531,7 @@ public:
      * isNew to true if the time signature is a new one that did
      * not appear in the previous bar.
      */
-    TimeSignature getTimeSignatureInBar(int n, bool &isNew) const;
+    TimeSignature getTimeSignatureInBar(int barNo, bool &isNew) const;
 
     /**
      * Return the total number of time signature changes in the
@@ -541,11 +541,11 @@ public:
 
     /**
      * Return the index of the last time signature change before
-     * or at the given time, in a range suitable for passing to 
+     * or at the given time, in a range suitable for passing to
      * getTimeSignatureChange.  Return -1 if there has been no
      * time signature by this time.
      */
-    int getTimeSignatureNumberAt(timeT time) const;
+    int getTimeSignatureNumberAt(timeT t) const;
 
     /**
      * Return the absolute time of and time signature introduced
@@ -614,7 +614,7 @@ public:
      * time, in a range suitable for passing to getTempoChange.
      * Return -1 if the default tempo is in effect at this time.
      */
-    int getTempoChangeNumberAt(timeT time) const;
+    int getTempoChangeNumberAt(timeT t) const;
 
     /**
      * Return the absolute time of and tempo introduced by tempo
@@ -626,7 +626,7 @@ public:
     /**
      * Return whether the tempo change number n is a ramped tempo or
      * not, and if it is, return the target tempo for the ramp.
-     * 
+     *
      * If calculate is false, return a target tempo of 0 if the tempo
      * change is defined to ramp to the following tempo.  If calculate
      * is true, return a target tempo equal to the following tempo in
@@ -649,7 +649,7 @@ public:
     /**
      * Get the fastest assigned tempo in the composition.
      */
-    tempoT getMaxTempo() const { 
+    tempoT getMaxTempo() const {
         return ((m_maxTempo != 0) ? m_maxTempo : m_defaultTempo);
     }
 
@@ -707,9 +707,9 @@ public:
      * Return (by reference) the bar number and beat/division values
      * corresponding to a given absolute time.
      */
-    void getMusicalTimeForAbsoluteTime(timeT absoluteTime,
+    void getMusicalTimeForAbsoluteTime(timeT absTime,
                                        int &bar, int &beat,
-                                       int &fraction, int &remainder);
+                                       int &fraction, int &remainder) const;
 
     /**
      * Return (by reference) the number of bars and beats/divisions
@@ -717,16 +717,16 @@ public:
      * the duration starts is also required, so as to know the correct
      * time signature.
      */
-    void getMusicalTimeForDuration(timeT absoluteTime, timeT duration,
+    void getMusicalTimeForDuration(timeT absTime, timeT duration,
                                    int &bars, int &beats,
-                                   int &fractions, int &remainder);
+                                   int &fractions, int &remainder) const;
 
     /**
      * Return the absolute time corresponding to a given bar number
      * and beat/division values.
      */
     timeT getAbsoluteTimeForMusicalTime(int bar, int beat,
-                                        int fraction, int remainder);
+                                        int fraction, int remainder) const;
 
     /**
      * Return the duration corresponding to a given number of bars and
@@ -734,9 +734,9 @@ public:
      * starts is also required, so as to know the correct time
      * signature.
      */
-    timeT getDurationForMusicalTime(timeT absoluteTime,
+    timeT getDurationForMusicalTime(timeT absTime,
                                     int bars, int beats,
-                                    int fractions, int remainder);
+                                    int fractions, int remainder) const;
 
 
     /**
@@ -753,7 +753,7 @@ public:
 
     //////
     //
-    // LOOP 
+    // LOOP
 
     timeT getLoopStart() const { return m_loopStart; }
     timeT getLoopEnd() const { return m_loopEnd;}
@@ -767,7 +767,7 @@ public:
     bool isLooping() const { return m_isLooping; }
 
 
-    
+
     //////
     //
     // OTHER STUFF
@@ -796,8 +796,8 @@ public:
     const Configuration &getMetadata() const {
         return m_metadata;
     }
-    
-    std::string getCopyrightNote() const { 
+
+    std::string getCopyrightNote() const {
         return m_metadata.get<String>(CompositionMetadataKeys::Copyright,
                                       "");
     }
@@ -860,7 +860,7 @@ public:
     unsigned int getNewRefreshStatusId() {
         return m_refreshStatusArray.getNewRefreshStatusId();
     }
-    
+
     RefreshStatus& getRefreshStatus(unsigned int id) {
         return m_refreshStatusArray.getRefreshStatus(id);
     }
@@ -930,10 +930,10 @@ public:
     //////
     // DEBUG FACILITIES
     void dump() const;
-    
+
 protected:
 
-    static const std::string TempoEventType; 
+    static const std::string TempoEventType;
     static const PropertyName TempoProperty;
     static const PropertyName TargetTempoProperty;
 
@@ -949,7 +949,7 @@ protected:
             return operator()(*e1, *e2);
         }
     };
-    
+
     struct BarNumberComparator
     {
         bool operator()(const Event &e1, const Event &e2) const {
@@ -960,14 +960,14 @@ protected:
             return operator()(*e1, *e2);
         }
     };
- 
+
     /**
      * Ensure the selected and record trackids still point to something valid
      * Must be called after deletion of detach of a track
      */
     void checkSelectedAndRecordTracks();
     TrackId getClosestValidTrackId(TrackId id) const;
-    
+
 
     //--------------- Data members ---------------------------------
     //
@@ -990,7 +990,7 @@ protected:
     class ReferenceSegment
     {
     public:
-        ReferenceSegment(std::string eventType);
+        explicit ReferenceSegment(const std::string& eventType);
         ~ReferenceSegment();
 
         typedef std::vector<Event*>::size_type size_type;
@@ -1011,7 +1011,7 @@ protected:
         const Event* operator[] (size_type n) const;
 
         timeT getDuration() const;
-        
+
         /// Inserts a single event, removing any existing one at that time
         iterator insertEvent(Event *e); // may throw Event::BadType
 
@@ -1063,18 +1063,18 @@ protected:
     /// affects m_tempoSegment
     void calculateTempoTimestamps() const;
     mutable bool m_tempoTimestampsNeedCalculating;
-    RealTime time2RealTime(timeT time, tempoT tempo) const;
-    RealTime time2RealTime(timeT time, tempoT tempo,
-                           timeT targetTempoTime, tempoT targetTempo) const;
-    timeT realTime2Time(RealTime rtime, tempoT tempo) const;
-    timeT realTime2Time(RealTime rtime, tempoT tempo,
-                        timeT targetTempoTime, tempoT targetTempo) const;
+    static RealTime time2RealTime(timeT t, tempoT tempo);
+    static RealTime time2RealTime(timeT time, tempoT tempo,
+                                  timeT targetTime, tempoT targetTempo);
+    static timeT realTime2Time(RealTime rt, tempoT tempo);
+    static timeT realTime2Time(RealTime rt, tempoT tempo,
+                               timeT targetTime, tempoT targetTempo);
     bool getTempoTarget(ReferenceSegment::const_iterator i,
                         tempoT &target,
                         timeT &targetTime) const;
 
     static RealTime getTempoTimestamp(const Event *e);
-    static void setTempoTimestamp(Event *e, RealTime r);
+    static void setTempoTimestamp(Event *e, RealTime t);
 
     /// No more than one armed track per instrument.
     void enforceArmRule(const Track *track);
@@ -1140,7 +1140,7 @@ protected:
     //
     triggersegmentcontainer           m_triggerSegments;
     TriggerSegmentId                  m_nextTriggerSegmentId;
-    
+
     ColourMap                         m_segmentColourMap;
     ColourMap                         m_generalColourMap;
 
@@ -1173,9 +1173,9 @@ class CompositionObserver
 {
 public:
     CompositionObserver() : m_compositionDeleted(false)  { }
-    
+
     virtual ~CompositionObserver()  { }
-    
+
     /// A segment has been added to the Composition.
     virtual void segmentAdded(const Composition *, Segment *) { }
 
@@ -1239,12 +1239,12 @@ public:
 
     /// Some time signature has changed.
     virtual void timeSignatureChanged(const Composition *) { }
-    
+
     /// Metronome status has changed (on/off)
     virtual void metronomeChanged(const Composition *) { }
 
     virtual void tempoChanged(const Composition *) { }
-    
+
     /// Like trackChanged() but for the Track that is selected.
     /**
      * This avoids the need to check the TrackId with trackChanged().
@@ -1262,7 +1262,7 @@ public:
         m_compositionDeleted = true;
     }
 
-    bool isCompositionDeleted()  { return m_compositionDeleted; }
+    bool isCompositionDeleted() const { return m_compositionDeleted; }
 
 protected:
     bool m_compositionDeleted;
@@ -1272,4 +1272,3 @@ protected:
 
 
 #endif
-

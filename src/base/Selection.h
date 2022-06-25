@@ -24,16 +24,16 @@
 
 namespace Rosegarden {
 
-class EventSelection;	
-	
+class EventSelection;
+
 class EventSelectionObserver {
 public:
     virtual ~EventSelectionObserver();
     virtual void eventSelected(EventSelection *e,Event *)=0;
-    virtual void eventDeselected(EventSelection *e,Event *)=0; 
+    virtual void eventDeselected(EventSelection *e,Event *)=0;
     virtual void eventSelectionDestroyed(EventSelection *e)=0;
 };
-	
+
 /**
  * EventSelection records a (possibly non-contiguous) selection of the Events
  * that are contained in a single Segment, used for cut'n paste operations.  It
@@ -46,11 +46,11 @@ public:
     /**
      * Construct an empty EventSelection based on the given Segment.
      */
-    EventSelection(Segment &);
+    explicit EventSelection(Segment &);
 
     /**
      * Construct an EventSelection selecting all the events in the
-     * given range of the given Segment.  Set overlap if you want 
+     * given range of the given Segment.  Set overlap if you want
      * to include Events overlapping the selection edges.
      */
     EventSelection(Segment &, timeT beginTime, timeT endTime, bool overlap = false);
@@ -103,7 +103,7 @@ public:
      * Return true if there are any events of the given type in
      * this selection.  Slow.
      */
-    bool contains(const std::string &eventType) const;
+    bool contains(const std::string &type) const;
 
     /**
      * Return the time at which the first Event in the selection
@@ -170,28 +170,28 @@ public:
     void eventRemoved(const Segment *, Event *) override;
     void endMarkerTimeChanged(const Segment *, bool) override { }
     void segmentDeleted(const Segment *) override;
-    
+
     // Debug
     void dump() const;
 
 private:
     EventSelection &operator=(const EventSelection &);
-  
+
     /**
      * Function Pointer to allow insertion or erasure of Event from Selection..
      */
     typedef void (EventSelection::*EventFuncPtr)(Event *e);
-    
+
     /**
      * Inserts the Event into the selection set and calls the observers.
      */
     void insertThisEvent(Event *e);
-    
+
     /**
      * Erases the Event from the selection container and calls the observers.
      */
-    void eraseThisEvent(Event *e);
-        
+    void eraseThisEvent(Event *event);
+
     /**
      * This method encapsulates all of the logic needed to add and remove events
      * from the selection set.
@@ -201,10 +201,10 @@ private:
      */
     int addRemoveEvent(Event *e, EventFuncPtr insertEraseFn,
                        bool ties, bool forward);
-        
+
     typedef std::list<EventSelectionObserver *> ObserverSet;
     ObserverSet m_observers;
-    
+
 protected:
     //--------------- Data members ---------------------------------
 
@@ -253,15 +253,15 @@ public:
         timeT t = ElementInfo::getTime(element);
         addRaw(ElementInfo::copyAtTime(t + offset, element));
     }
-    
+
     const Container &getContents() const { return m_contents; }
     typename Container::const_iterator begin() const
         { return m_contents.begin(); }
     typename Container::const_iterator end() const
         { return m_contents.end(); }
     bool empty() const { return m_contents.empty(); }
-    void RemoveFromComposition(Composition *composition);
-    void AddToComposition(Composition *composition);
+    void RemoveFromComposition(Composition *composition) const;
+    void AddToComposition(Composition *composition) const;
 
 protected:
     Container m_contents;
@@ -302,20 +302,20 @@ public:
      * Add a time signature to the selection.
      */
     void addTimeSignature(timeT t, TimeSignature timeSig);
-    
+
     typedef std::multimap<timeT, TimeSignature> timesigcontainer;
 
     const timesigcontainer &getTimeSignatures() const { return m_timeSignatures; }
     timesigcontainer::const_iterator begin() const { return m_timeSignatures.begin(); }
     timesigcontainer::const_iterator end() const { return m_timeSignatures.end(); }
     bool empty() const { return begin() == end(); }
-    void RemoveFromComposition(Composition *composition);
-    void AddToComposition(Composition *composition);
+    void RemoveFromComposition(Composition *composition) const;
+    void AddToComposition(Composition *composition) const;
 
 protected:
     timesigcontainer m_timeSignatures;
 };
- 
+
 
 /**
  * A selection that includes (only) tempo changes.
@@ -356,8 +356,8 @@ public:
     tempocontainer::const_iterator begin() const { return m_tempos.begin(); }
     tempocontainer::const_iterator end() const { return m_tempos.end(); }
     bool empty() const { return begin() == end(); }
-    void RemoveFromComposition(Composition *composition);
-    void AddToComposition(Composition *composition);
+    void RemoveFromComposition(Composition *composition) const;
+    void AddToComposition(Composition *composition) const;
 
 protected:
     tempocontainer m_tempos;
@@ -372,7 +372,7 @@ class MarkerElementInfo
 {
     friend class TimewiseSelection<MarkerElementInfo>;
     typedef Marker* value_type;
-    
+
     static void RemoveFromComposition(Composition *composition,
                                       const value_type& element);
     static void AddToComposition(Composition *composition,
@@ -382,7 +382,7 @@ class MarkerElementInfo
     static timeT getTime(const value_type& element)
     { return element->getTime(); }
 };
-    
+
 // The marker selection class itself
 class MarkerSelection : public TimewiseSelection<MarkerElementInfo>
 {
