@@ -427,18 +427,19 @@ public:
      */
     iterator findSingle(Event*);
 
-    const_iterator findSingle(Event *e) const {
-        return const_iterator(((Segment *)this)->findSingle(e));
-    }
-
     /**
      * Returns an iterator pointing to the first element starting at
      * or beyond the given absolute time
      */
-    iterator findTime(timeT time);
+    iterator findTime(timeT time)
+    {
+        Event temp("temp", time, 0, MIN_SUBORDERING);
+        return lower_bound(&temp);
+    }
 
-    const_iterator findTime(timeT time) const {
-        return const_iterator(((Segment *)this)->findTime(time));
+    const_iterator findTimeConst(timeT time) const {
+        Event temp("temp", time, 0, MIN_SUBORDERING);
+        return lower_bound(&temp);
     }
 
     /**
@@ -447,10 +448,6 @@ public:
      * time precedes the first event, not if it follows the last one)
      */
     iterator findNearestTime(timeT time);
-
-    const_iterator findNearestTime(timeT time) const {
-        return const_iterator(((Segment *)this)->findNearestTime(time));
-    }
 
 
     //////
@@ -1111,7 +1108,7 @@ public:
 class ROSEGARDENPRIVATE_EXPORT SegmentHelper
 {
 protected:
-    SegmentHelper(Segment &t) : m_segment(t) { }
+    explicit SegmentHelper(Segment &t) : m_segment(t) { }
     virtual ~SegmentHelper();
 
     typedef Segment::iterator iterator;

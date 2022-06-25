@@ -39,10 +39,11 @@ namespace Rosegarden
 
     /*** ControllerSearch ***/
 ControllerSearch::
-ControllerSearch(const std::string eventType,
+ControllerSearch(const std::string& eventType,
                  int controllerId) :
     m_eventType(eventType),
-    m_controllerId(controllerId)
+    m_controllerId(controllerId),
+    m_instrument(0)
 {}
 
 // Return the last value of controller before noLaterThan in segment s.
@@ -56,7 +57,7 @@ searchSegment(const Segment *s, timeT noEarlierThan, timeT noLaterThan) const
         { return Maybe(false, ControllerSearchValue(0,0)); }
 
     // Get the latest relevant event before or at noEarlierThan.
-    Segment::reverse_iterator latest(s->findTime(noLaterThan));
+    Segment::reverse_iterator latest(s->findTimeConst(noLaterThan));
 
     // Search backwards for a match.
     for (Segment::reverse_iterator j = latest; j != s->rend(); ++j) {
@@ -108,7 +109,7 @@ bool
 ControllerSearch::
 matches(Event *e) const
 {
-    return 
+    return
         e->isa(m_eventType) &&
         ((m_eventType != Controller::EventType) ||
          (e->has(Controller::NUMBER) &&
@@ -120,8 +121,8 @@ matches(Event *e) const
 int
 ControllerContextMap::
 getStaticValue(Instrument *instrument,
-               const std::string eventType,
-               int controllerId) 
+               const std::string& eventType,
+               int controllerId)
 {
     if (eventType == Controller::EventType)
         { return instrument->getControllerValue(controllerId); }
@@ -134,8 +135,8 @@ getStaticValue(Instrument *instrument,
 // @author Tom Breton (Tehom)
 int
 ControllerContextMap::
-getControllerValue(Instrument *instrument, Segment *a, Segment *b, 
-                   timeT searchTime, const std::string eventType,
+getControllerValue(Instrument *instrument, Segment *a, Segment *b,
+                   timeT searchTime, const std::string& eventType,
                    int controllerId)
 {
     Profiler profiler("ControllerContextMap::getControllerValue", false);
@@ -145,7 +146,7 @@ getControllerValue(Instrument *instrument, Segment *a, Segment *b,
                (eventType == PitchBend::EventType),
                "getControllerValue",
                "got an unexpected event type");
-    
+
     // We have cached the latest value of all controllers we've
     // inserted.  Find the relevant cache.
 
@@ -171,7 +172,7 @@ getControllerValue(Instrument *instrument, Segment *a, Segment *b,
     // time we really should look at; mutate searchTime accordingly.
     // Segment A governs timing and repitition.
     bool firstRepeat;
-    // 
+    //
     if (a->isRepeating()) {
         timeT segmentStartTime = a->getStartTime();
         timeT segmentEndTime   = a->getEndMarkerTime();
@@ -204,7 +205,7 @@ getControllerValue(Instrument *instrument, Segment *a, Segment *b,
 
     // Found it so we're done.
     if (foundInEvents.first)
-        { return foundInEvents.second.value(); } 
+        { return foundInEvents.second.value(); }
 
     // If this is a repeat, we've wrapped around, so the value is the
     // last value from a previous repeat, which is the same as cached
@@ -222,24 +223,24 @@ getControllerValue(Instrument *instrument, Segment *a, Segment *b,
 const ControlParameter *
 ControllerContextMap::
 getControlParameter(Instrument *instrument,
-                    const std::string eventType,
+                    const std::string& eventType,
                     const int controllerId)
 {
     Device * device = instrument->getDevice();
     const Controllable *c = device->getControllable();
     Q_CHECK_PTR(c);
-    return c->getControlParameter(eventType, controllerId);
+    return c->getControlParameterConst(eventType, controllerId);
 }
 
 // Clip a controller value to appropriate limits
 // @author Tom Breton (Tehom)
 int
 ControllerContextMap::
-makeAbsolute(const ControlParameter * controlParameter, int value) const
+makeAbsolute(const ControlParameter * controlParameter, int value)
 {
     int max = controlParameter->getMax();
     int min = controlParameter->getMin();
-    value -= controlParameter->getDefault(); 
+    value -= controlParameter->getDefault();
 
     if (value > max) { value = max; }
     if (value < min) { value = min; }
@@ -318,7 +319,7 @@ storeLatestValue(Event *e)
                    "got an unexpected event type");
         // Set it.
         m_PitchBendLatestValue = Maybe(true, toCache);
-    } 
+    }
 }
 
 // Clear the cache.
@@ -333,4 +334,3 @@ clear()
 
 
 } // End namespace Rosegarden
-

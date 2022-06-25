@@ -548,7 +548,7 @@ Segment::iterator
 Segment::getEndMarker() const
 {
     if (m_endMarkerTime) {
-        return findTime(*m_endMarkerTime);
+        return findTimeConst(*m_endMarkerTime);
     } else {
         return end();
     }
@@ -755,14 +755,6 @@ Segment::findSingle(Event* e)
         }
     }
     return res;
-}
-
-
-Segment::iterator
-Segment::findTime(timeT t)
-{
-    Event dummy("dummy", t, 0, MIN_SUBORDERING);
-    return lower_bound(&dummy);
 }
 
 
@@ -1073,8 +1065,6 @@ Segment::normalizeRests(timeT startTime, timeT endTime)
                        (lastNoteEnds, endTime - lastNoteEnds));
     }
 
-    timeT duration;
-
     // For each gap, fill it in with rests.
     for (size_t gi = 0; gi < gaps.size(); ++gi) {
 
@@ -1083,7 +1073,7 @@ Segment::normalizeRests(timeT startTime, timeT endTime)
 #endif
 
         startTime = gaps[gi].first;
-        duration = gaps[gi].second;
+        timeT duration = gaps[gi].second;
 
         if (duration >= Note(Note::Shortest).getDuration()) {
             fillWithRests(startTime, startTime + duration);

@@ -41,13 +41,14 @@ class MidiBank
 {
 public:
     MidiBank();
-    MidiBank(bool percussion, MidiByte msb, MidiByte lsb, std::string name = "");
+    MidiBank(bool percussion, MidiByte msb, MidiByte lsb,
+             const std::string& name = "");
 
     bool                isPercussion() const;
     MidiByte            getMSB() const;
     MidiByte            getLSB() const;
 
-    void                setName(std::string name);
+    void                setName(const std::string& name);
     std::string         getName() const;
 
     /// A full comparison of all fields.
@@ -76,8 +77,9 @@ class MidiProgram
 {
 public:
     MidiProgram();
-    MidiProgram(const MidiBank &bank, MidiByte program, std::string name = "",
-                std::string keyMapping = "");
+    MidiProgram(const MidiBank &bank, MidiByte program,
+                const std::string& name = "",
+                const std::string& keyMapping = "");
 
     const MidiBank&     getBank() const;
     MidiByte            getProgram() const;
@@ -85,7 +87,7 @@ public:
     const std::string  &getKeyMapping() const;
 
     void                setName(const std::string &name);
-    void                setKeyMapping(const std::string &name);
+    void                setKeyMapping(const std::string &keyMapping);
 
     // Only compares m_bank and m_program.  Does not compare m_name or
     // m_keyMapping.
@@ -124,7 +126,7 @@ public:
     typedef std::map<MidiByte, std::string> KeyNameMap;
 
     MidiKeyMapping();
-    MidiKeyMapping(const std::string &name);
+    explicit MidiKeyMapping(const std::string &name);
     MidiKeyMapping(const std::string &name, const KeyNameMap &map);
 
     bool operator==(const MidiKeyMapping &m) const;
@@ -136,7 +138,7 @@ public:
     KeyNameMap          &getMap() { return m_map; }
     std::string          getMapForKeyName(MidiByte pitch) const;
     void                 setMap(const KeyNameMap &map) { m_map = map; }
-    
+
     /**
      * Return 0 if the supplied argument is the lowest pitch in the
      * mapping, 1 if it is the second-lowest, etc.  Return -1 if it
@@ -161,6 +163,7 @@ public:
      * Add blank pitches to the key mapping to have it extends from at most
      * minpitch to maxpitch.
      */
+    // cppcheck-suppress functionConst
     void                 extend(int minPitch = 0, int maxpitch = 127);
 
 
@@ -181,4 +184,3 @@ typedef unsigned int MidiFilter;
 }
 
 #endif
-
