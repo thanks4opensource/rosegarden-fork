@@ -1203,7 +1203,6 @@ RosegardenMainWindow::setDocument(RosegardenDocument *newDocument)
     //     m_audioManagerDialog = 0;
 
     RosegardenDocument *oldDoc = RosegardenDocument::currentDocument;
-
     RosegardenDocument::currentDocument = newDocument;
 
     updateTitle();
@@ -1587,12 +1586,8 @@ RosegardenMainWindow::createDocumentFromRGFile(
     }
 
     // Create a new blank document
-    RosegardenDocument *newDoc =
-            new RosegardenDocument(this,
-                    m_pluginManager,
-                    true,  // skipAutoload
-                    clearHistory,  // clearCommandHistory
-                    m_useSequencer);  // enableSound
+    RosegardenDocument *newDoc = newDocument(true, clearHistory);
+    newDoc->beginReadFromFile();
 
     // Read the document from the file.
     bool readOk = newDoc->openDocument(
@@ -1617,6 +1612,7 @@ RosegardenMainWindow::createDocumentFromRGFile(
         newDoc->setTitle(fileInfo.fileName());
     }
 
+    newDoc->endReadFromFile();
     return newDoc;
 }
 
@@ -2281,9 +2277,7 @@ RosegardenMainWindow::slotFileClose()
 
     TmpStatusMsg msg(tr("Closing file..."), this);
 
-    if (saveIfModified()) {
-        setDocument(newDocument());
-    }
+    if (saveIfModified()) setDocument(newDocument());
 
     // Don't close the whole view (i.e. Quit), just close the doc.
     //    close();
@@ -4115,6 +4109,7 @@ RosegardenMainWindow::createDocumentFromMIDIFile(QString file)
     // Create new document (autoload is inherent)
     //
     RosegardenDocument *newDoc = newDocument();
+    newDoc->beginReadFromFile();
 
     MidiFile midiFile;
 
@@ -4255,6 +4250,7 @@ RosegardenMainWindow::createDocumentFromMIDIFile(QString file)
         comp->addTimeSignature(0, timeSig);
     }
 
+    newDoc->endReadFromFile();
     return newDoc;
 }
 
@@ -4333,6 +4329,7 @@ RosegardenMainWindow::createDocumentFromRG21File(QString file)
     // Inherent autoload
     //
     RosegardenDocument *newDoc = newDocument();
+    newDoc->beginReadFromFile();
 
     RG21Loader rg21Loader(&newDoc->getStudio());
 
@@ -4351,6 +4348,8 @@ RosegardenMainWindow::createDocumentFromRG21File(QString file)
     //
     newDoc->setTitle(QFileInfo(file).fileName());
     newDoc->setAbsFilePath(QFileInfo(file).absoluteFilePath());
+
+    newDoc->endReadFromFile();
 
     return newDoc;
 }
@@ -4430,7 +4429,7 @@ RosegardenMainWindow::createDocumentFromHydrogenFile(QString file)
     // Inherent autoload
     //
     RosegardenDocument *newDoc = newDocument();
-
+    newDoc->beginReadFromFile();
     HydrogenLoader hydrogenLoader(&newDoc->getStudio());
 
     if (!hydrogenLoader.load(file, newDoc->getComposition())) {
@@ -4448,6 +4447,8 @@ RosegardenMainWindow::createDocumentFromHydrogenFile(QString file)
     //
     newDoc->setTitle(QFileInfo(file).fileName());
     newDoc->setAbsFilePath(QFileInfo(file).absoluteFilePath());
+
+    newDoc->endReadFromFile();
 
     return newDoc;
 }
@@ -4528,6 +4529,7 @@ RosegardenMainWindow::createDocumentFromMusicXMLFile(QString file)
     // Inherent autoload
     //
     RosegardenDocument *newDoc = newDocument();
+    newDoc->beginReadFromFile();
 
     MusicXMLLoader musicxmlLoader(&newDoc->getStudio());
 
@@ -4547,6 +4549,8 @@ RosegardenMainWindow::createDocumentFromMusicXMLFile(QString file)
     //
     newDoc->setTitle(QFileInfo(file).fileName());
     newDoc->setAbsFilePath(QFileInfo(file).absoluteFilePath());
+
+    newDoc->endReadFromFile();
 
     return newDoc;
 
@@ -4826,31 +4830,22 @@ RosegardenMainWindow::slotUpdateMonitoring()
 void
 RosegardenMainWindow::slotSetPointerPosition(timeT t)
 {
-    Composition &comp = RosegardenDocument::currentDocument->getComposition();
-#if 0  // Not applicable, and possibly buggy, with new looping interface
+    RosegardenDocument *doc = RosegardenDocument::currentDocument;
+    Composition &comp = doc->getComposition();
     bool stopAtEnd = Preferences::getStopAtEnd();
-#endif
 
-    timeT startTime,
-          stopTime;
+    timeT startTime = 0;  // avoid compiler warning, "maybe-unitialized"
+    timeT stopTime  = 0;  //   "      "        "   , "  "  -     "     "
     if (comp.loopRangeIsActive()) {
         startTime = comp.getLoopStart();
         stopTime = comp.getLoopEnd();
-    }
-#if 0  // Not applicable, and possibly buggy, with new looping interface
-    else if (stopAtEnd) {
+    } else if (stopAtEnd) {
         startTime = comp.getMinSegmentStartTime();
         stopTime = comp.getMaxSegmentEndTime();
     } else {
         startTime = comp.getStartMarker();
         stopTime = comp.getEndMarker();
     }
-#else
-    else {
-        startTime = comp.getMinSegmentStartTime();
-        stopTime = comp.getMaxSegmentEndTime();
-    }
-#endif
 
     if (m_seqManager) {
         // If we're playing and we're past the end...
@@ -5726,10 +5721,12 @@ RosegardenMainWindow::slotPlay()
             if (composition.loopRangeIsActive()) {
                 minTime = composition.getLoopStart();
                 maxTime = composition.getLoopEnd();
-            }
-            else {
+            } else if (Preferences::getStopAtEnd()) {
                 minTime = composition.getMinSegmentStartTime();
                 maxTime = composition.getMaxSegmentEndTime();
+            } else {
+                minTime = composition.getStartMarker();
+                maxTime = composition.getEndMarker();
             }
 
             m_seqManager->setLoop(minTime, maxTime);
@@ -6316,6 +6313,14 @@ RosegardenMainWindow::leaveActionState(QString stateName)
    ActionFileClient::leaveActionState(stateName);
 }
 
+void
+RosegardenMainWindow::setHaveRange(bool haveRange)
+{
+    if (haveRange) enterActionState("have_range");
+    else           leaveActionState("have_range");
+
+    updateActions();
+}
 
 void
 RosegardenMainWindow::slotTestClipboard()
@@ -7986,7 +7991,7 @@ RosegardenMainWindow::slotImportStudioFromFile(const QString &file)
     // We're only using this document temporarily, so we don't want to let it
     // obliterate the command history!
     bool clearCommandHistory = false, skipAutoload = true;
-    RosegardenDocument *doc = new RosegardenDocument(this, {}, skipAutoload, clearCommandHistory, m_useSequencer);
+    RosegardenDocument *doc = newDocument(skipAutoload, clearCommandHistory);
 
     Studio &oldStudio = RosegardenDocument::currentDocument->getStudio();
     Studio &newStudio = doc->getStudio();
@@ -8538,11 +8543,15 @@ RosegardenMainWindow::uiUpdateKludge()
                 RosegardenDocument::currentDocument->getComposition().getSelectedTrack());
 }
 
-RosegardenDocument *RosegardenMainWindow::newDocument(bool skipAutoload)
+RosegardenDocument *RosegardenMainWindow::newDocument(bool skipAutoload,
+                                                      bool clearHistory)
 {
-    return new RosegardenDocument(this, m_pluginManager, skipAutoload,
-                                  true, /*clear command history*/
-                                  m_useSequencer);
+    auto newDoc = new RosegardenDocument(this,
+                                         m_pluginManager,
+                                         skipAutoload,
+                                         clearHistory,
+                                         m_useSequencer);
+    return newDoc;
 }
 
 void

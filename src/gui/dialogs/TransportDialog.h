@@ -144,6 +144,9 @@ public slots:
     void setBackgroundColor(QColor color);
     void slotResetBackground();
 
+    void slotSetStartLoopingPointAtMarkerPos();
+    void slotSetStopLoopingPointAtMarkerPos();
+
     // Connected to SequenceManager
     void slotTempoChanged(tempoT);
     void slotMidiInLabel(const MappedEvent *event); // show incoming MIDI events on the Transport
@@ -222,6 +225,12 @@ private:
     bool m_isBackgroundSet;
 
     int m_sampleRate;
+
+    // Must maintain these local copies to prevent Composition
+    // from using its values when one has been defined here before
+    // the other, or when these are m_loopEnd <= m_loopStart
+    timeT m_loopStart;
+    timeT m_loopEnd;
 
     std::map<std::string, TimeDisplayMode> m_modeMap;
 };

@@ -203,6 +203,18 @@ public:
      */
     unsigned int getAutoSavePeriod() const;
 
+
+    void setFromFileInProgress(bool inProg) {
+        m_composition.setFromFileInProgress(inProg); }
+    bool fromFileInProgress() const {
+        return m_composition.fromFileInProgress(); }
+
+    void beginReadFromFile() { setFromFileInProgress(true); }
+    void endReadFromFile() {
+        setFromFileInProgress(false);
+        m_composition.updateMinMaxSegmentStartEndTimes();
+    }
+
     /**
      * Load the document by filename and format and emit the
      * updateViews() signal.  The "permanent" argument should be true
@@ -365,7 +377,10 @@ public:
      * Cause the loopRangeChanged signal to be emitted and any
      * associated internal work in the document to happen
      */
-    void setLoopRange(timeT, timeT);
+    void setLoopRange(timeT start, timeT end);
+    void loopRangeChanged(bool rangeWasFixed,
+                          bool wasOutsideSegments,
+                          bool segmentsChanged);
 
     /**
      * Cause the loopActiveChanged signal to be emitted and any
@@ -838,8 +853,8 @@ private:
     /// Enable/disable playing sounds
     bool m_soundEnabled;
 
-    /// Allow file lock to be released.
-    bool m_release;
+    /// Inhibit calls to Composition::updateMinMaxSegmentStartEndTimes()
+    bool m_fromFileInProgress;
 
     QPointer<QProgressDialog> m_progressDialog;
 };

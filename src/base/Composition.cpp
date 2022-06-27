@@ -23,6 +23,9 @@
 #include "base/SegmentLinker.h"
 #include "base/BaseProperties.h"
 #include "base/Profiler.h"
+
+#include "document/RosegardenDocument.h"
+
 #include "BasicQuantizer.h"
 #include "NotationQuantizer.h"
 #include "base/AudioLevel.h"
@@ -70,7 +73,7 @@ Composition::ReferenceSegmentEventCmp::operator()(const Event &e1,
     }
 }
 
-Composition::ReferenceSegment::ReferenceSegment(std::string eventType) :
+Composition::ReferenceSegment::ReferenceSegment(const std::string& eventType) :
     m_eventType(eventType)
 {
     // nothing
@@ -259,6 +262,9 @@ Composition::Composition() :
     m_loopEnd(0),
     m_loopRangeIsActive(false),
     m_loopingMode(LoopingMode::ONE_SHOT),
+    m_minSegmentStart(std::numeric_limits<timeT>::max()),
+    m_maxSegmentEnd(std::numeric_limits<timeT>::min()),
+    m_fromFileInProgress(false),
     m_playMetronome(false),
     m_recordMetronome(true),
     m_nextTriggerSegmentId(0),
@@ -288,6 +294,9 @@ Composition::addSegment(Segment *segment)
 {
     iterator res = weakAddSegment(segment);
 
+    if (!m_fromFileInProgress)
+        updateMinMaxSegmentStartEndTimes();
+
     if (res != end()) {
         updateRefreshStatuses();
         distributeVerses();
@@ -305,7 +314,6 @@ Composition::weakAddSegment(Segment *segment)
 
     iterator res = m_segments.insert(segment);
     segment->setComposition(this);
-
     return res;
 }
 
@@ -341,6 +349,22 @@ Composition::deleteSegment(Segment *segment)
 
 bool
 Composition::detachSegment(Segment *segment)
+{
+    bool res = weakDetachSegment(segment);
+
+    if (!m_fromFileInProgress)
+        updateMinMaxSegmentStartEndTimes();
+
+    if (res) {
+        distributeVerses();
+        notifySegmentRemoved(segment);
+        updateRefreshStatuses();
+    }
+
+    return res;
+}
+bool
+Composition::detachSegmentNoUpdateMinMax(Segment *segment)
 {
     bool res = weakDetachSegment(segment);
 
@@ -394,7 +418,7 @@ Composition::detachAllSegments(SegmentMultiSet segments)
     for (SegmentMultiSet::iterator i = segments.begin();
          i != segments.end();
          ++i)
-        { detachSegment(*i); }
+        { detachSegmentNoUpdateMinMax(*i); }
 }
 
 void
@@ -403,7 +427,7 @@ Composition::detachAllSegments(SegmentVec segments)
     for (SegmentVec::iterator i = segments.begin();
          i != segments.end();
          ++i)
-        { detachSegment(*i); }
+        { detachSegmentNoUpdateMinMax(*i); }
 }
 
 bool
@@ -685,17 +709,91 @@ Composition::getDuration(bool withRepeats) const
     return maxDuration;
 }
 
-// This should be replaced with a m_minSegStartTime member, updated
-// as segements are added/deleted/modified.
-timeT
-Composition::getMinSegmentStartTime() const
+// See declaration in Composition.h
+bool Composition::limitRangeToSegments(timeT &start, timeT &end,
+                                       bool *badRange)
 {
-    if (m_segments.empty()) return 0;
-    timeT lowest = std::numeric_limits<timeT>::max();
-    for (const auto segment : m_segments)
-        if (segment->getClippedStartTime() < lowest)
-            lowest = segment->getClippedStartTime();
-    return lowest;
+    timeT prevStart = m_loopStart;
+    timeT prevEnd   = m_loopEnd;
+
+    // Disable range if completely before or after segments
+    if (start >= m_maxSegmentEnd || end <= m_minSegmentStart) {
+        start = 0;
+        end = 0;
+        if (badRange) *badRange = true;
+        return (prevStart != 0 || prevEnd != 0);
+    }
+
+    // Otherwise clip start and end to segments ...
+
+    if (start < m_minSegmentStart) start = m_minSegmentStart;
+    if (end > m_maxSegmentEnd)     end   = m_maxSegmentEnd;
+
+    if (badRange) *badRange = false;
+    return (start != prevStart || end != prevEnd);
+}
+
+
+// Update m_minSegmentStart and m_maxSegmentEnd as segments are
+// added, removed, or have their start or end times modified.
+//
+// Should be only be called as necessary and sufficient, not e.g.
+// as a segment's end time is being continuously extended as
+// during recording or when a document is being loaded -- the latter
+// because segment end times are unfortunately not explicit in the
+// file format but instead dynamically extended as notes and rests
+// are parsed, similar to what happoens during recording.
+//
+// See also comments in Composition.h at getMinSegmentStartTime()
+void
+Composition::updateMinMaxSegmentStartEndTimes()
+{
+    const timeT crntStart = m_minSegmentStart;
+    const timeT crntEnd   = m_maxSegmentEnd;
+
+    // In all below, use of Segment::getEndMarkerTime() instead of
+    // Segment::getEndTime() because they differ in the case of
+    // recorded segments and the former is what editors display.
+
+    // If adding   first segment: has already been done so >= 0
+    // If deleting last     "   :  "     "     "    "   "  == 0
+    if (m_segments.size() == 0) {
+        m_minSegmentStart = 0;
+        m_maxSegmentEnd   = 0;
+    }
+
+    else if (m_segments.size() == 1) {
+        const Segment *firstSegment = *m_segments.begin();
+        m_minSegmentStart = firstSegment->getClippedStartTime();
+        m_maxSegmentEnd   = firstSegment->getEndMarkerTime();
+    }
+
+    else {
+        m_minSegmentStart = std::numeric_limits<timeT>::max();
+        m_maxSegmentEnd   = std::numeric_limits<timeT>::min();
+        for (const auto each : m_segments) {
+            if (each->getClippedStartTime() < m_minSegmentStart)
+                m_minSegmentStart = each->getClippedStartTime();
+            if (each->getEndMarkerTime() > m_maxSegmentEnd)
+                m_maxSegmentEnd = each->getEndMarkerTime();
+        }
+    }
+
+    // Check if span has shrunk
+    if (m_minSegmentStart != crntStart ||
+        m_maxSegmentEnd   != crntEnd   ||
+        m_minSegmentStart == m_maxSegmentEnd) {
+
+        // Update loop start/end
+        bool outside;
+        if (limitRangeToSegments(m_loopStart, m_loopEnd, &outside)) {
+            // Changed, so update views.
+            RosegardenDocument::currentDocument->
+                loopRangeChanged(true,      // range adjusted to fit segments
+                                 outside,
+                                 true);     // was because segments changed
+        }
+    }
 }
 
 void
@@ -1585,7 +1683,7 @@ static int DEBUG_silence_recursive_tempo_printout = 0;
 #endif
 
 RealTime
-Composition::time2RealTime(timeT t, tempoT tempo) const
+Composition::time2RealTime(timeT t, tempoT tempo)
 {
     static timeT cdur = Note(Note::Crotchet).getDuration();
 
@@ -1615,7 +1713,7 @@ Composition::time2RealTime(timeT t, tempoT tempo) const
 
 RealTime
 Composition::time2RealTime(timeT time, tempoT tempo,
-                           timeT targetTime, tempoT targetTempo) const
+                           timeT targetTime, tempoT targetTempo)
 {
     static timeT cdur = Note(Note::Crotchet).getDuration();
 
@@ -1665,7 +1763,7 @@ Composition::time2RealTime(timeT time, tempoT tempo,
 }
 
 timeT
-Composition::realTime2Time(RealTime rt, tempoT tempo) const
+Composition::realTime2Time(RealTime rt, tempoT tempo)
 {
     static timeT cdur = Note(Note::Crotchet).getDuration();
 
@@ -1694,7 +1792,7 @@ Composition::realTime2Time(RealTime rt, tempoT tempo) const
 
 timeT
 Composition::realTime2Time(RealTime rt, tempoT tempo,
-                           timeT targetTime, tempoT targetTempo) const
+                           timeT targetTime, tempoT targetTempo)
 {
     static timeT cdur = Note(Note::Crotchet).getDuration();
 
@@ -1819,7 +1917,7 @@ Composition::setTempoTimestamp(Event *e, RealTime t)
 void
 Composition::getMusicalTimeForAbsoluteTime(timeT absTime,
                                            int &bar, int &beat,
-                                           int &fraction, int &remainder)
+                                           int &fraction, int &remainder) const
 {
     bar = getBarNumber(absTime);
 
@@ -1837,7 +1935,7 @@ Composition::getMusicalTimeForAbsoluteTime(timeT absTime,
 void
 Composition::getMusicalTimeForDuration(timeT absTime, timeT duration,
                                        int &bars, int &beats,
-                                       int &fractions, int &remainder)
+                                       int &fractions, int &remainder) const
 {
     TimeSignature timeSig = getTimeSignatureAt(absTime);
     timeT barDuration = timeSig.getBarDuration();
@@ -1853,7 +1951,7 @@ Composition::getMusicalTimeForDuration(timeT absTime, timeT duration,
 
 timeT
 Composition::getAbsoluteTimeForMusicalTime(int bar, int beat,
-                                           int fraction, int remainder)
+                                           int fraction, int remainder) const
 {
     timeT t = getBarStart(bar - 1);
     TimeSignature timesig = getTimeSignatureAt(t);
@@ -1903,7 +2001,7 @@ Composition::getMusicalTimeStringForAbsoluteTime(timeT absoluteTime)
 timeT
 Composition::getDurationForMusicalTime(timeT absTime,
                                        int bars, int beats,
-                                       int fractions, int remainder)
+                                       int fractions, int remainder) const
 {
     TimeSignature timeSig = getTimeSignatureAt(absTime);
     timeT barDuration = timeSig.getBarDuration();

@@ -103,7 +103,9 @@ TransportDialog::TransportDialog(QWidget *parent):
     //m_panelClosed(),
     m_isExpanded(true),
     m_isBackgroundSet(false),
-    m_sampleRate(0)
+    m_sampleRate(0),
+    m_loopStart(0),
+    m_loopEnd(0)
     //m_modeMap()
 {
     // So we can identify it in RosegardenMainWindow::awaitDialogClearance().
@@ -194,6 +196,9 @@ TransportDialog::TransportDialog(QWidget *parent):
     p = ui->PanelCloseButton->pixmap();
     if (p) m_panelClosed = *p;
 */
+
+    connect(ui->SetStartLPButton, &QAbstractButton::clicked, this, &TransportDialog::slotSetStartLoopingPointAtMarkerPos);
+    connect(ui->SetStopLPButton, &QAbstractButton::clicked, this, &TransportDialog::slotSetStopLoopingPointAtMarkerPos);
 
     // clear labels
     //
@@ -1019,10 +1024,41 @@ TransportDialog::slotLoopButtonClicked()
 
     RosegardenDocument::currentDocument->toggleLoopingMode();
 }
+
 void
 TransportDialog::slotSetLoopingMode(bool continuous)
 {
     ui->LoopButton->setChecked(continuous);
+}
+
+void
+TransportDialog::slotSetStartLoopingPointAtMarkerPos()
+{
+    RosegardenDocument *doc = RosegardenDocument::currentDocument;
+    Composition &comp(doc->getComposition());
+    m_loopStart = comp.getPosition();
+
+    if (m_loopStart < m_loopEnd)
+        doc->setLoopRange(m_loopStart, m_loopEnd);
+    else if (m_loopStart < comp.getLoopEnd())
+        doc->setLoopRange(m_loopStart, m_loopEnd = comp.getLoopEnd());
+    else
+        doc->setLoopRangeIsActive(false);
+}
+
+void
+TransportDialog::slotSetStopLoopingPointAtMarkerPos()
+{
+    RosegardenDocument *doc = RosegardenDocument::currentDocument;
+    Composition &comp(doc->getComposition());
+    m_loopEnd = comp.getPosition();
+
+    if (m_loopEnd > m_loopStart)
+        doc->setLoopRange(m_loopStart, m_loopEnd);
+    else if (m_loopEnd > comp.getLoopStart())
+        doc->setLoopRange(m_loopStart = comp.getLoopStart(), m_loopEnd);
+    else
+        doc->setLoopRangeIsActive(false);
 }
 
 void TransportDialog::slotTempoChanged(tempoT tempo)

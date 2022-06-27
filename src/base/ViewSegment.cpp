@@ -23,7 +23,10 @@ namespace Rosegarden
 
 ViewSegment::ViewSegment(Segment &t) :
     m_segment(t),
-    m_viewElementList(nullptr)
+    m_viewElementList(nullptr),
+    m_modified(false),
+    m_modStart(0),
+    m_modEnd(0)
 {
     // empty
 }
@@ -123,7 +126,9 @@ ViewSegment::eventRemoved(const Segment *t, Event *e)
 
     ViewElementList::iterator i = findEvent(e);
     if (i != m_viewElementList->end()) {
+        // Let the velocity ruler know.
         notifyRemove(*i);
+        // Remove from the list.
         m_viewElementList->erase(i);
         return;
     }

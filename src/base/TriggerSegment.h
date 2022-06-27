@@ -30,7 +30,7 @@ class Event;
 class Segment;
 
 class TriggerSegmentRec
-{       
+{
 public:
     typedef std::set<int> SegmentRuntimeIdSet;
     ~TriggerSegmentRec();
@@ -51,8 +51,8 @@ public:
     void setBaseVelocity(int baseVelocity) { m_baseVelocity = baseVelocity; }
 
     std::string getDefaultTimeAdjust() const { return m_defaultTimeAdjust; }
-    void setDefaultTimeAdjust(std::string a) { m_defaultTimeAdjust = a; }
-    
+    void setDefaultTimeAdjust(const std::string& a) { m_defaultTimeAdjust = a; }
+
     bool getDefaultRetune() const { return m_defaultRetune; }
     void setDefaultRetune(bool r) { m_defaultRetune = r; }
 
@@ -62,7 +62,7 @@ public:
     void updateReferences();
 
     // Return a new linked segment that corresponds in timing and
-    // pitch to this triggered segment as invoked by trigger.  
+    // pitch to this triggered segment as invoked by trigger.
     // Returns nullptr if it can't make a meaningful linked segment.
     Segment *makeLinkedSegment(Event *trigger, Segment *containing);
     Segment* makeExpansion(Event *trigger,
@@ -74,12 +74,13 @@ public:
                     ControllerContextParams *controllerContextParams) const;
     int getTranspose(const Event *trigger) const;
     int getVelocityDiff(const Event *trigger) const;
-    
+
 protected:
     friend class Composition;
     TriggerSegmentRec(TriggerSegmentId id, Segment *segment,
                       int basePitch = -1, int baseVelocity = -1,
-                      std::string defaultTimeAdjust = "", bool defaultRetune = true);
+                      const std::string& defaultTimeAdjust = "",
+                      bool defaultRetune = true);
 
     void setReferences(const SegmentRuntimeIdSet &s) { m_references = s; }
 
@@ -95,7 +96,7 @@ protected:
     bool                 m_defaultRetune;
     SegmentRuntimeIdSet  m_references;
 };
-  
+
 struct TriggerSegmentCmp
 {
     bool operator()(const TriggerSegmentRec &r1, const TriggerSegmentRec &r2) const {
@@ -107,5 +108,5 @@ struct TriggerSegmentCmp
 };
 
 }
-  
+
 #endif

@@ -21,7 +21,7 @@
 
 #include <cassert>
 
-namespace Rosegarden 
+namespace Rosegarden
 {
 
 class ViewSegmentObserver;
@@ -38,7 +38,7 @@ class ViewSegmentObserver;
  */
 class ViewSegment : public SegmentObserver
 {
-public: 
+public:
     ~ViewSegment() override;
 
     /**
@@ -48,12 +48,12 @@ public:
     ViewElementList *getViewElementList();
 
     /**
-     * Return the Segment wrapped by this object 
+     * Return the Segment wrapped by this object
      */
     Segment &getSegment() { return m_segment; }
 
     /**
-     * Return the Segment wrapped by this object 
+     * Return the Segment wrapped by this object
      */
     const Segment &getSegment() const { return m_segment; }
 
@@ -74,7 +74,7 @@ public:
      */
     void eventRemoved(const Segment *, Event *) override;
 
-    /** 
+    /**
      * SegmentObserver method - called after the segment's end marker
      * time has been changed
      */
@@ -85,13 +85,19 @@ public:
      */
     void segmentDeleted(const Segment *) override;
 
+    /// Connect for Add/Remove/Source Deletion notifications.
+    /**
+     * Only the PropertyControlRuler (Velocity Ruler) connects to this.
+     *
+     * "Source Deletion" == ViewSegment destroyed.
+     */
     void addObserver   (ViewSegmentObserver *obs) { m_observers.push_back(obs); }
     void removeObserver(ViewSegmentObserver *obs) { m_observers.remove(obs); }
 
 protected:
-    ViewSegment(Segment &);
+    explicit ViewSegment(Segment &);
     virtual ViewElement* makeViewElement(Event*) = 0;
-    
+
     /**
      * Return true if the event should be wrapped
      * Useful for piano roll where we only want to wrap notes
@@ -136,4 +142,3 @@ public:
 }
 
 #endif
-

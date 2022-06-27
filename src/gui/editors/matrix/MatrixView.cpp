@@ -1250,7 +1250,6 @@ MatrixView::slotLoopFromSelection()
     if (!getSelection()) return;
     m_document->setLoopRange(getSelection()->getStartTime(),
                              getSelection()->getEndTime());
-    m_document->setLoopRangeIsActive(true);
 }
 
 void

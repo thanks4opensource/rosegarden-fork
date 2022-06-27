@@ -137,12 +137,6 @@ void StandardRuler::connectRulerToDocPointer(RosegardenDocument *doc)
     (doc, &RosegardenDocument::loopRangeActiveChanged,
      m_loopRuler, &LoopRuler::slotSetLoopMarkerActive);
 
-    // See comment at LoopRuler::slotDocumentModified() implementation
-    QObject::connect
-    (doc, &RosegardenDocument::documentModified,
-     m_loopRuler, &LoopRuler::slotDocumentModified);
-
-
 //    m_loopRuler->setBackgroundColor(GUIPalette::getColour(GUIPalette::PointerRuler));
 }
 
