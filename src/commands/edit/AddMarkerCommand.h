@@ -32,7 +32,7 @@ namespace Rosegarden
 {
 
 class Marker;
-class Composition;
+class RosegardenDocument;
 
 
 class AddMarkerCommand : public NamedCommand
@@ -40,7 +40,7 @@ class AddMarkerCommand : public NamedCommand
     Q_DECLARE_TR_FUNCTIONS(Rosegarden::AddMarkerCommand)
 
 public:
-    AddMarkerCommand(Composition *comp,
+    AddMarkerCommand(RosegardenDocument *doc,
                      timeT time,
                      const std::string &name,
                      const std::string &description);
@@ -53,9 +53,9 @@ public:
 
 protected:
 
-    Composition     *m_composition;
-    Marker          *m_marker;
-    bool                         m_detached;
+    RosegardenDocument  *m_document;
+    Marker              *m_marker;
+    bool                 m_detached;
 
 };
 

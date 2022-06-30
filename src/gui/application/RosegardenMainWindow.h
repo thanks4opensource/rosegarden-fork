@@ -1251,11 +1251,7 @@ public slots:
     void slotZoomIn();
     void slotZoomOut();
 
-    /**
-     * Add marker
-     */
-    void slotAddMarker(timeT time);
-
+#if 0  // not used
     /**
      * Remove a marker
      */
@@ -1263,6 +1259,7 @@ public slots:
                           timeT time,
                           QString name,
                           QString description);
+#endif
 
     /**
      * Document modified

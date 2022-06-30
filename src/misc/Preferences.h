@@ -15,6 +15,9 @@
 
 #pragma once
 
+#include <QSettings>
+#include <QVariant>
+
 namespace Rosegarden
 {
 
@@ -37,6 +40,44 @@ namespace Rosegarden
  */
 namespace Preferences
 {
+    extern std::map<std::pair<const char*, const char*>, QVariant>
+                preferences;
+
+    template <typename T> T setPreference(const char *group,
+                                          const char *preference,
+                                          T value)
+    {
+        std::pair<const char*, const char*> grpPref{group, preference};
+        auto iter = preferences.find(grpPref);
+
+        if (iter == preferences.end() || iter->second != value) {
+            QSettings settings;
+            settings.beginGroup(group);
+            settings.setValue(preference, value);
+            preferences[grpPref] = value;
+        }
+        return value;
+    }
+
+    template <typename T> T getPreference(const char *group,
+                                          const char *preference,
+                                          T value)
+    {
+        QVariant qv = value;
+        std::pair<const char*, const char*> grpPref{group, preference};
+        auto iter = preferences.find(grpPref);
+
+        if (iter == preferences.end()) {
+            QSettings settings;
+            settings.beginGroup(group);
+            qv = settings.value(preference, value);
+            preferences[grpPref] = qv;
+        }
+        else
+            qv = iter->second;
+        return qv.value<T>();
+    }
+
     void setSendProgramChangesWhenLooping(bool value);
     bool getSendProgramChangesWhenLooping();
 

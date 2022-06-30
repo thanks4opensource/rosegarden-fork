@@ -79,26 +79,12 @@ StandardRuler::StandardRuler(RosegardenDocument *doc,
         layout->addWidget(m_markerRuler);
     }
 
-    connect(CommandHistory::getInstance(), &CommandHistory::commandExecuted,
-            this,
-            static_cast<void(StandardRuler::*)()>(&StandardRuler::update));
-
-    if (RosegardenMainWindow::self()) {
-        QObject::connect
-                (m_markerRuler, &MarkerRuler::editMarkers,
-                 RosegardenMainWindow::self(),
-                 &RosegardenMainWindow::slotEditMarkers);
-
-        QObject::connect
-                (m_markerRuler, &MarkerRuler::addMarker,
-                 RosegardenMainWindow::self(),
-                 &RosegardenMainWindow::slotAddMarker);
-
-        QObject::connect
-                (m_markerRuler, &MarkerRuler::deleteMarker,
-                 RosegardenMainWindow::self(),
-                 &RosegardenMainWindow::slotDeleteMarker);
-    }
+     connect(doc, &RosegardenDocument::markerAdded,
+             m_markerRuler, &MarkerRuler::slotMarkerAdded);
+     connect(doc, &RosegardenDocument::markerModified,
+             m_markerRuler, &MarkerRuler::slotMarkerModified);
+     connect(doc, &RosegardenDocument::markerDeleted,
+             m_markerRuler, &MarkerRuler::slotMarkerDeleted);
 }
 
 void StandardRuler::setSnapGrid(const SnapGrid *grid)
@@ -119,10 +105,6 @@ void StandardRuler::connectRulerToDocPointer(RosegardenDocument *doc)
     //
     QObject::connect
     (m_loopRuler, &LoopRuler::setPointerPosition,
-     doc, &RosegardenDocument::slotSetPointerPosition);
-
-    QObject::connect
-    (m_markerRuler, &MarkerRuler::setPointerPosition,
      doc, &RosegardenDocument::slotSetPointerPosition);
 
     QObject::connect

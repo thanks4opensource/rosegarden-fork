@@ -42,6 +42,8 @@
 class QLockFile;
 class QWidget;
 class QTextStream;
+
+class Marker;
 class NoteOnRecSet;
 
 namespace Rosegarden
@@ -290,6 +292,10 @@ public:
     void setQuickMarker();
     void jumpToQuickMarker();
     timeT getQuickMarkerTime() { return m_quickMarkerTime; }
+
+    void    addMarker(Marker*);
+    void modifyMarker(Marker*);
+    void deleteMarker(Marker*);
 
     /**
      * returns the composition (the principal constituent of the document)
@@ -591,6 +597,10 @@ signals:
     void loopRangeStartEndChanged(timeT start, timeT end);
     void loopRangeActiveChanged();
     void loopingModeChanged(bool continuous);
+
+    void markerAdded   (Marker*);
+    void markerDeleted (Marker*);
+    void markerModified(Marker*);
 
     /**
      * We probably want to keep this notification as a special case.

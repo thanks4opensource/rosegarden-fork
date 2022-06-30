@@ -241,8 +241,9 @@ public:
     const markercontainer& getMarkers() const { return m_markers; }
 
     /**
-     * Add a new Marker.  The Composition takes ownership of the
+     * Add a new Marker. The Composition takes ownership of the
      * marker object.
+     * NO IT DOESN"T! See RemoveMarkerCommand::~RemoveMarkerCommand()
      */
     void addMarker(Marker *marker);
 

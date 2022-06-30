@@ -459,8 +459,9 @@ TranzportClient::readData()
             current_buttons & Add) {
             if (current_buttons & Shift) {
             } else {
-                AddMarkerCommand* cmd = new AddMarkerCommand(m_composition,
-                                                             m_composition->getPosition(),
+                AddMarkerCommand* cmd = new AddMarkerCommand(m_rgDocument,
+                                                             m_composition->
+                                                                getPosition(),
                                                              "tranzport",
                                                              "");
                 CommandHistory::getInstance()->addCommand(cmd);

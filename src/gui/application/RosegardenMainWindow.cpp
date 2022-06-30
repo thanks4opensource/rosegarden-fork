@@ -153,6 +153,8 @@
 #include "gui/general/LilyPondProcessor.h"
 #include "gui/general/ProjectPackager.h"
 #include "gui/general/PresetHandlerDialog.h"
+#include "gui/rulers/MarkerRuler.h"
+#include "gui/rulers/StandardRuler.h"
 #include "gui/widgets/StartupLogo.h"
 #include "gui/widgets/TmpStatusMsg.h"
 #include "gui/widgets/WarningWidget.h"
@@ -6177,33 +6179,18 @@ RosegardenMainWindow::slotZoomOut()
     m_zoomSlider->decrement();
 }
 
-void
-RosegardenMainWindow::slotAddMarker(timeT time)
-{
-    Composition &comp(RosegardenDocument::currentDocument->getComposition());
-    const QString musicalTime(comp.getMusicalTimeStringForAbsoluteTime(time));
-
-    AddMarkerCommand *command =
-        new AddMarkerCommand(&comp,
-                             time,
-                             qStrToStrUtf8(musicalTime),
-                             qStrToStrUtf8(tr("no description")) );
-
-    CommandHistory::getInstance()->addCommand(command);
-}
-
+#if 0  // not used, and out of date with updated RemoveMarkerCommand
 void
 RosegardenMainWindow::slotDeleteMarker(int id, timeT time, QString name, QString description)
 {
-    RemoveMarkerCommand *command =
-        new RemoveMarkerCommand(&RosegardenDocument::currentDocument->getComposition(),
-                                id,
-                                time,
-                                qstrtostr(name),
-                                qstrtostr(description));
+    RosegardenDocument *doc = RosegardenDocument::currentDocument;
+    Composition &comp(doc->getComposition());
 
+    RemoveMarkerCommand *command =
+        new RemoveMarkerCommand(doc, &comp, id);
     CommandHistory::getInstance()->addCommand(command);
 }
+#endif
 
 void
 RosegardenMainWindow::slotDocumentModified(bool m)
@@ -8209,13 +8196,11 @@ RosegardenMainWindow::slotNewerVersionAvailable(QString v)
 void
 RosegardenMainWindow::slotAddMarker2()
 {
-    AddMarkerCommand *command =
-        new AddMarkerCommand(&RosegardenDocument::currentDocument->getComposition(),
-                             RosegardenDocument::currentDocument->getComposition().getPosition(),
-                             "new marker",
-                             "no description");
-
-    m_view->slotAddCommandToHistory(command);
+    getView()->
+    getTrackEditor()->
+    getTopStandardRuler()->
+    getMarkerRuler()->
+    slotInsertMarkerAtPointer();
 }
 
 void

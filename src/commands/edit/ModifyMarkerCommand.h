@@ -32,6 +32,7 @@ namespace Rosegarden
 {
 
 class Composition;
+class RosegardenDocument;
 
 
 class ModifyMarkerCommand : public NamedCommand
@@ -39,7 +40,8 @@ class ModifyMarkerCommand : public NamedCommand
     Q_DECLARE_TR_FUNCTIONS(Rosegarden::ModifyMarkerCommand)
 
 public:
-    ModifyMarkerCommand(Composition *comp,
+    ModifyMarkerCommand(RosegardenDocument *doc,
+                        Composition *comp,
                         int id,
                         timeT time,
                         timeT newTime,
@@ -54,9 +56,10 @@ public:
 
 protected:
 
-    Composition     *m_composition;
-    timeT            m_time;
-    timeT            m_newTime;
+    RosegardenDocument  *m_document;
+    Composition         *m_composition;
+    timeT                m_time;
+    timeT                m_newTime;
 
     int                          m_id;
     std::string                  m_name;

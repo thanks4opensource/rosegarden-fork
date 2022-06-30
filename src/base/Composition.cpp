@@ -1964,14 +1964,7 @@ Composition::getAbsoluteTimeForMusicalTime(int bar, int beat,
 QString
 Composition::getMusicalTimeStringForAbsoluteTime(timeT absoluteTime)
 {
-    int bar, beat, fraction, remainder;
-    getMusicalTimeForAbsoluteTime(absoluteTime, bar, beat, fraction, remainder);
-
-    if (fraction == 0 && remainder == 0)
-        return QString("%1:%2").arg(bar + 1).arg(beat);
-
     static const int MIDI_TICKS_PER_MEASURE = 3840;
-
     struct Gcd {
         Gcd(int n, int d) : num(n), den(d) {};
 
@@ -1986,16 +1979,23 @@ Composition::getMusicalTimeStringForAbsoluteTime(timeT absoluteTime)
             }
             return QString("%1/%2").arg(num / gcd).arg(den / gcd);
         }
-
         int num, den;
     };
 
-    int shortestNote = Note(Note::Shortest).getDuration();
-    int subBeats = fraction * shortestNote + remainder;
+    int bar, beat, remainder;
+    bar = getBarNumber(absoluteTime);
+    TimeSignature timeSig = getTimeSignatureAt(absoluteTime);
+    timeT barStart = getBarStart(bar);
+    timeT beatDuration = timeSig.getBeatDuration();
+    beat = (absoluteTime - barStart) / beatDuration + 1;
+    remainder = (absoluteTime - barStart) % beatDuration;
 
-    return QString("%1:%2+%3").arg(bar + 1)
-                              .arg(beat)
-                              .arg(Gcd(subBeats, MIDI_TICKS_PER_MEASURE)());
+    if (remainder == 0)
+        return QString("%1:%2").arg(bar + 1).arg(beat);
+    else
+        return QString("%1:%2+%3").arg(bar + 1)
+                                  .arg(beat)
+                                  .arg(Gcd(remainder, MIDI_TICKS_PER_MEASURE)());
 }
 
 timeT

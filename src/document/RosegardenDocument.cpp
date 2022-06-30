@@ -34,6 +34,7 @@
 #include "base/Exception.h"
 #include "base/Instrument.h"
 #include "base/SegmentLinker.h"
+#include "base/Marker.h"
 #include "base/MidiDevice.h"
 #include "base/MidiProgram.h"
 #include "base/MidiTypes.h"
@@ -311,6 +312,26 @@ RosegardenDocument::jumpToQuickMarker()
 
     if (m_quickMarkerTime >= 0)
         slotSetPointerPosition(m_quickMarkerTime);
+}
+
+void
+RosegardenDocument::addMarker(Marker *marker)
+{
+    m_composition.addMarker(marker);
+    emit markerAdded(marker);
+}
+
+void
+RosegardenDocument::modifyMarker(Marker *marker)
+{
+    emit markerModified(marker);
+}
+
+void
+RosegardenDocument::deleteMarker(Marker *marker)
+{
+    m_composition.detachMarker(marker);
+    emit markerDeleted(marker);
 }
 
 QString RosegardenDocument::getAutoSaveFileName()

@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -82,11 +82,11 @@ MarkerModifyDialog::initialise(Composition *composition,
     vboxLayout->addWidget(m_timeEdit);
 
     /*!!!
-     
+
         layout->addWidget(new QLabel(tr("Absolute Time:"), frame), 0, 0);
         m_timeEdit = new QSpinBox(frame);
         layout->addWidget(m_timeEdit, 0, 1);
-     
+
         m_timeEdit->setMinimum(INT_MIN);
         m_timeEdit->setMaximum(INT_MAX);
         m_timeEdit->setSingleStep(
@@ -112,12 +112,13 @@ MarkerModifyDialog::initialise(Composition *composition,
     m_desEdit = new LineEdit(des, frame);
     layout->addWidget(m_desEdit, 1, 1);
 
-    m_nameEdit->selectAll();
-    m_nameEdit->setFocus();
-
     frame->setLayout(layout);
     groupBox->setLayout(groupBoxLayout);
     vbox->setLayout(vboxLayout);
+
+    // Must be here, not earlier, to work
+    m_nameEdit->selectAll();
+    m_nameEdit->setFocus();
 
     QDialogButtonBox *buttonBox
         = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);

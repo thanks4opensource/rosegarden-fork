@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -18,20 +18,20 @@
 
 #include "AddMarkerCommand.h"
 
-#include "base/Composition.h"
 #include "base/Marker.h"
+#include "document/RosegardenDocument.h"
 #include <QString>
 
 
 namespace Rosegarden
 {
 
-AddMarkerCommand::AddMarkerCommand(Composition *comp,
+AddMarkerCommand::AddMarkerCommand(RosegardenDocument *doc,
                                    timeT time,
                                    const std::string &name,
                                    const std::string &description):
         NamedCommand(getGlobalName()),
-        m_composition(comp),
+        m_document(doc),
         m_detached(true)
 {
     m_marker = new Marker(time, name, description);
@@ -46,14 +46,14 @@ AddMarkerCommand::~AddMarkerCommand()
 void
 AddMarkerCommand::execute()
 {
-    m_composition->addMarker(m_marker);
+    m_document->addMarker(m_marker);
     m_detached = false;
 }
 
 void
 AddMarkerCommand::unexecute()
 {
-    m_composition->detachMarker(m_marker);
+    m_document->deleteMarker(m_marker);
     m_detached = true;
 }
 
