@@ -85,6 +85,7 @@ public:
     /// Set a loop on the sequencer.
     void setLoop(const RealTime &loopStart,
                  const RealTime &loopEnd);
+    void setLooping(bool active);
 
     /// Set the sequencer to a given time.
     void jumpTo(const RealTime &rt);
@@ -419,9 +420,6 @@ public:
      */
     void routeEvents(MappedEventList *mC, bool recording);
 
-    /// Are we looping?
-    bool isLooping() const { return !(m_loopStart == m_loopEnd); }
-
     /// Check for new external clients (ALSA sequencer or whatever).
     /**
      * Polled regularly.
@@ -513,8 +511,14 @@ private:
     RealTime m_audioWrite;
     int m_smallFileSize;
 
+    enum class LoopingMode {
+        ONE_SHOT,
+        CONTINUOUS
+    };
+
     RealTime m_loopStart;
     RealTime m_loopEnd;
+    LoopingMode m_loopingMode;
 
     std::vector<MappedInstrument*> m_instruments;
 

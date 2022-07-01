@@ -95,7 +95,7 @@ Event::EventData::getNotationDuration() const
 }
 
 timeT
-Event::getGreaterDuration()
+Event::getGreaterDuration() const
 {
     if (isa(Note::EventType)) {
         return std::max(getDuration(), getNotationDuration());

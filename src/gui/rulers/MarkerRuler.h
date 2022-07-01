@@ -19,6 +19,8 @@
 #ifndef RG_MARKERRULER_H
 #define RG_MARKERRULER_H
 
+#include <map>
+
 #include "gui/general/ActionFileClient.h"
 #include <QSize>
 #include <QWidget>
@@ -33,6 +35,7 @@ class QMainWindow;
 namespace Rosegarden
 {
 
+class Composition;
 class Marker;
 class RulerScale;
 class RosegardenDocument;
@@ -49,7 +52,7 @@ public:
                      const char* name = nullptr);
 
     ~MarkerRuler() override;
-    
+
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
 
@@ -57,46 +60,64 @@ public:
 
     void setWidth(int width) { m_width = width; }
 
+public slots:
+    // public for use by RosegardenMainWindow::slotAddMarker2()
+    void slotInsertMarkerAtPointer();
+
+    void slotMarkerAdded   (Marker*);
+    void slotMarkerModified(Marker*);
+    void slotMarkerDeleted (Marker*);
+    void slotEditAtAdd     ();
+
 signals:
-    /// Set the pointer position on mouse single click
-    void setPointerPosition(timeT);
-
-    /// Open the marker editor window on double click
-    void editMarkers();
-
-    /// add a marker
-    void addMarker(timeT);
-    
+    void editMarkers();  // Open the marker editor window on double click
     void deleteMarker(int, timeT, QString name, QString description);
-
-    /// Set a loop range
-    void setLoop(timeT, timeT);
 
 protected slots:
     void slotInsertMarkerHere();
-    void slotInsertMarkerAtPointer();
     void slotDeleteMarker();
     void slotEditMarker();
-    
+
 protected:
+    static constexpr const char *EDIT_WHEN_CREATED_PREF_GROUP =
+                                                    "GeneralOptionsConfigGroup";
+    static constexpr const char *EDIT_WHEN_CREATED_PREFERENCE =
+                                                    "editMarkerWhenCreated";
+
     void paintEvent(QPaintEvent*) override;
     void mousePressEvent(QMouseEvent *e) override;
     void mouseDoubleClickEvent(QMouseEvent *e) override;
 
-    void createMenu();
+    void createMarkerAction(Marker*);
+    void updateMenu();
+    void addMarker(timeT);
+    void doModifyDialog(Marker*);
+    void jumpToMarker(const Marker*);
     timeT getClickPosition();
     Rosegarden::Marker* getMarkerAtClickPosition();
-    
+
     //--------------- Data members ---------------------------------
     int m_currentXOffset;
     int m_width;
     int m_clickX;
-    
-    QMenu 	*m_menu;
-    
-    RosegardenDocument *m_doc;
-    RulerScale *m_rulerScale;
-    QMainWindow* m_parentMainWindow;
+
+    QMenu       *m_menu;
+
+    QAction     *m_insertHere,
+                *m_insertAtPos,
+                *m_delete,
+                *m_edit,
+                *m_editAll,
+                *m_editAtAdd;
+
+    Marker      *m_newestMarker;
+
+    RosegardenDocument  *m_doc;
+    Composition         &m_comp;
+    RulerScale          *m_rulerScale;
+    QMainWindow         *m_parentMainWindow;
+
+    std::map<const Marker*, QAction*> m_markerActions;
 
 };
 

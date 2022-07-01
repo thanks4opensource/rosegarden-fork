@@ -275,16 +275,17 @@
     <Action name="split" text="S&amp;plit" icon="split" shortcut="F7" group="tools_segment" checked="false" />
   <Separator/>
     <Menu name="Transport">
-      <text>T&amp;ransport</text>
+      <text>&amp;Transport</text>
       <!-- JAS need to know how to add Qt::KeypadModifier in Human Readable shortcut for Play 'KP_Enter'-->
-      <Action name="play" text="&amp;Play" icon="transport-play" shortcut="Ctrl+Enter, Enter, Media Play, Ctrl+Return" shortcut-context="application" />
+      <Action name="play" text="&amp;Play" icon="transport-play" shortcut="Ctrl+Enter, Enter, Media Play, Ctrl+Return" shortcut-context="application" checked="false" />
       <Action name="stop" text="&amp;Stop" icon="transport-stop" shortcut="Insert, Media Stop" shortcut-context="application" />
       <!-- JAS swapped rewind / ffwd to match matrix.rc -->
       <Action name="rewind" text="Re&amp;wind" icon="transport-rewind" shortcut="PgUp, Media Previous" shortcut-context="application" />
       <Action name="fast_forward" text="&amp;Fast Forward" icon="transport-ffwd" shortcut="PgDown, Media Next" shortcut-context="application" />
+      <Action name="toggle_loop" text="L&amp;oop" icon="transport-loop" checked="false" shortcut="@" />
       <Action name="record" text="&amp;Record" icon="transport-record" shortcut="Ctrl+Space, Media Record" shortcut-context="application" />
       <Action name="recordtoggle" text="P&amp;unch in Record" icon="transport-record" shortcut="Space" shortcut-context="application" />
-      <Action name="toggle_tracking" text="Scro&amp;ll to Follow Playback" icon="transport-tracking" shortcut="Pause" checked="true" />
+      <Action name="toggle_tracking" text="Scr&amp;oll to Follow Playback" icon="transport-tracking" shortcut="Pause" checked="true" />
       <Action name="panic" text="P&amp;anic" icon="transport-panic" shortcut="Alt+Ctrl+P" />
     </Menu>
   </Menu>
@@ -370,6 +371,7 @@
   <Action name="fast_forward" />
   <Action name="fastforwardtoend" text="Fast Forward to End" icon="transport-ffwd-end" shortcut="End" shortcut-context="application" />
   <Action name="stop" />
+  <Action name="toggle_loop" />
   <Action name="record" />
   <Action name="toggle_tracking"/>
   <Action name="panic"/>

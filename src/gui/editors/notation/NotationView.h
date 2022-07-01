@@ -104,6 +104,9 @@ signals:
     void editTriggerSegment(int);
     void stepByStepTargetRequested(QObject *);
 
+public slots:
+    void slotPlaying(bool playing);
+
 protected:
     void readOptions() override;
 
@@ -138,8 +141,12 @@ protected slots:
     void slotEditTranspose();
     void slotEditSwitchPreset();
 
-    void slotPreviewSelection();
+    void slotToggleLoopActive();
+    void slotLoopFromSelection();
     void slotClearLoop();
+    void slotLoopButtonClicked();
+    void slotSetLoopingMode(bool continuous);
+
     void slotClearSelection();
     void slotEscapePressed();
     void slotEditSelectFromStart();
@@ -395,6 +402,8 @@ protected slots:
     /// Select everything in the active segment and run interpret according to
     // the checked options on the toolbar
     void slotInterpretActivate();
+
+    void slotRulerSelectionUpdate();
 
 private:
     friend class ::TestNotationViewSelection;

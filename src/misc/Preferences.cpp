@@ -22,6 +22,9 @@
 namespace Rosegarden
 {
 
+namespace Preferences {
+    std::map<std::pair<const char*, const char*>, QVariant> preferences;
+}
 
 namespace
 {

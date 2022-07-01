@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -79,27 +79,12 @@ StandardRuler::StandardRuler(RosegardenDocument *doc,
         layout->addWidget(m_markerRuler);
     }
 
-    connect(CommandHistory::getInstance(), &CommandHistory::commandExecuted,
-            this,
-            static_cast<void(StandardRuler::*)()>(&StandardRuler::update));
-
-    if (RosegardenMainWindow::self()) {
-        QObject::connect
-                (m_markerRuler, &MarkerRuler::editMarkers,
-                 RosegardenMainWindow::self(), &RosegardenMainWindow::slotEditMarkers);
-
-        QObject::connect
-                (m_markerRuler, &MarkerRuler::addMarker,
-                 RosegardenMainWindow::self(), &RosegardenMainWindow::slotAddMarker);
-
-        QObject::connect
-                (m_markerRuler, &MarkerRuler::deleteMarker,
-                 RosegardenMainWindow::self(), &RosegardenMainWindow::slotDeleteMarker);
-
-        QObject::connect
-                (m_loopRuler, &LoopRuler::setPlayPosition,
-                 RosegardenMainWindow::self(), &RosegardenMainWindow::slotSetPlayPosition);
-    }
+     connect(doc, &RosegardenDocument::markerAdded,
+             m_markerRuler, &MarkerRuler::slotMarkerAdded);
+     connect(doc, &RosegardenDocument::markerModified,
+             m_markerRuler, &MarkerRuler::slotMarkerModified);
+     connect(doc, &RosegardenDocument::markerDeleted,
+             m_markerRuler, &MarkerRuler::slotMarkerDeleted);
 }
 
 void StandardRuler::setSnapGrid(const SnapGrid *grid)
@@ -123,29 +108,16 @@ void StandardRuler::connectRulerToDocPointer(RosegardenDocument *doc)
      doc, &RosegardenDocument::slotSetPointerPosition);
 
     QObject::connect
-    (m_markerRuler, &MarkerRuler::setPointerPosition,
-     doc, &RosegardenDocument::slotSetPointerPosition);
-
-    QObject::connect
     (m_loopRuler, &LoopRuler::dragPointerToPosition,
      this, &StandardRuler::dragPointerToPosition);
 
     QObject::connect
-    (m_loopRuler, &LoopRuler::dragLoopToPosition,
-     this, &StandardRuler::dragLoopToPosition);
+    (doc, &RosegardenDocument::loopRangeStartEndChanged,
+     m_loopRuler, &LoopRuler::slotSetLoopMarkerStartEnd);
 
     QObject::connect
-    (m_markerRuler, &MarkerRuler::setLoop,
-     doc, &RosegardenDocument::slotSetLoop);
-
-    QObject::connect
-    (m_loopRuler, &LoopRuler::setLoopRange,
-     doc, &RosegardenDocument::slotSetLoop);
-
-    QObject::connect
-    (doc, &RosegardenDocument::loopChanged,
-     m_loopRuler,
-     &LoopRuler::slotSetLoopMarker);
+    (doc, &RosegardenDocument::loopRangeActiveChanged,
+     m_loopRuler, &LoopRuler::slotSetLoopMarkerActive);
 
 //    m_loopRuler->setBackgroundColor(GUIPalette::getColour(GUIPalette::PointerRuler));
 }

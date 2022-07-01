@@ -38,6 +38,7 @@
 #include "gui/widgets/VUMeter.h"
 #include "gui/general/IconLoader.h"
 #include "gui/general/ActionFileClient.h"
+#include "gui/seqmanager/SequenceManager.h"
 #include "gui/widgets/TmpStatusMsg.h"
 #include "gui/dialogs/AboutDialog.h"
 #include "MidiMixerVUMeter.h"
@@ -99,6 +100,9 @@ MidiMixerWindow::MidiMixerWindow(QWidget *parent,
                 &ExternalController::externalControllerMMW,
             this, &MidiMixerWindow::slotExternalController);
 
+    // Set play button to current state
+    slotPlaying(document->getSequenceManager()->getTransportStatus() ==
+                TransportStatus::PLAYING);
 }
 
 void
@@ -795,6 +799,13 @@ void
 MidiMixerWindow::slotHelpAbout()
 {
     new AboutDialog(this);
+}
+
+void MidiMixerWindow::slotPlaying(bool playing)
+{
+    QAction *action = findAction("play");
+    if (!action) return;
+    action->setChecked(playing);
 }
 
 // Code stolen From src/base/MidiDevice

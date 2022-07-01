@@ -189,7 +189,7 @@ ChordLabel::getName(Key /* key */) const
 }
 
 int
-ChordLabel::rootPitch()
+ChordLabel::rootPitch() const
 {
     return m_data.m_rootPitch;
 }
@@ -715,9 +715,9 @@ AnalysisHelper::addProgressionToMap(Key k,
 // AnalysisHelper::ChordProgression
 /////////////////////////////////////////////////
 
-AnalysisHelper::ChordProgression::ChordProgression(ChordLabel first_,
-                                                   ChordLabel second_,
-                                                   Key key_) :
+AnalysisHelper::ChordProgression::ChordProgression(const ChordLabel& first_,
+                                                   const ChordLabel& second_,
+                                                   const Key& key_) :
     first(first_),
     second(second_),
     homeKey(key_)
@@ -767,7 +767,7 @@ AnalysisHelper::PitchProfile::distance(const PitchProfile &other)
 }
 
 double
-AnalysisHelper::PitchProfile::dotProduct(const PitchProfile &other)
+AnalysisHelper::PitchProfile::dotProduct(const PitchProfile &other) const
 {
     double product = 0;
 
@@ -780,7 +780,7 @@ AnalysisHelper::PitchProfile::dotProduct(const PitchProfile &other)
 }
 
 double
-AnalysisHelper::PitchProfile::productScorer(const PitchProfile &other)
+AnalysisHelper::PitchProfile::productScorer(const PitchProfile &other) const
 {
     double cumulativeProduct = 1;
     double numbersInProduct = 0;

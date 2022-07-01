@@ -327,12 +327,6 @@ Segment::setTrack(TrackId id)
 }
 
 timeT
-Segment::getStartTime() const
-{
-    return m_startTime;
-}
-
-timeT
 Segment::getClippedStartTime() const
 {
     // If there is a composition, and our start time is before the beginning of
@@ -391,7 +385,12 @@ Segment::setStartTime(timeT t)
 
     typedef EventContainer base;
     int dt = t - m_startTime;
-    if (dt == 0) return;
+    if (dt == 0) {
+        if (getComposition() && !getComposition()->fromFileInProgress())
+            updateMinMaxSegmentStartEndTimes();
+        return;
+    }
+
     timeT previousEndTime = m_endTime;
 
     // reset the time of all events.  can't just setAbsoluteTime on these,
@@ -469,6 +468,9 @@ Segment::setStartTime(timeT t)
     notifyEndMarkerChange(dt < 0);
     notifyStartChanged(m_startTime);
     updateRefreshStatuses(m_startTime, m_endTime);
+
+    if (getComposition() && !getComposition()->fromFileInProgress())
+            updateMinMaxSegmentStartEndTimes();
 }
 
 void
@@ -511,6 +513,9 @@ Segment::setEndMarkerTime(timeT t)
         else m_endMarkerTime = new timeT(t);
         notifyEndMarkerChange(shorten);
     }
+
+    if (getComposition() && !getComposition()->fromFileInProgress())
+        updateMinMaxSegmentStartEndTimes();
 }
 
 void
@@ -534,13 +539,16 @@ Segment::setEndTime(timeT t)
             normalizeRests(endTime, t);
         }
     }
+
+    if (getComposition() && !getComposition()->fromFileInProgress())
+        updateMinMaxSegmentStartEndTimes();
 }
 
 Segment::iterator
 Segment::getEndMarker() const
 {
     if (m_endMarkerTime) {
-        return findTime(*m_endMarkerTime);
+        return findTimeConst(*m_endMarkerTime);
     } else {
         return end();
     }
@@ -625,6 +633,7 @@ Segment::insert(Event *e)
     if (t1 == t0) t1 += 1;
 
     updateRefreshStatuses(t0, t1);
+
     return i;
 }
 
@@ -639,6 +648,12 @@ Segment::updateEndTime()
     }
 }
 
+void
+Segment::updateMinMaxSegmentStartEndTimes()
+{
+    if (m_composition)
+        m_composition->updateMinMaxSegmentStartEndTimes();
+}
 
 void
 Segment::erase(iterator pos)
@@ -740,14 +755,6 @@ Segment::findSingle(Event* e)
         }
     }
     return res;
-}
-
-
-Segment::iterator
-Segment::findTime(timeT t)
-{
-    Event dummy("dummy", t, 0, MIN_SUBORDERING);
-    return lower_bound(&dummy);
 }
 
 
@@ -1058,8 +1065,6 @@ Segment::normalizeRests(timeT startTime, timeT endTime)
                        (lastNoteEnds, endTime - lastNoteEnds));
     }
 
-    timeT duration;
-
     // For each gap, fill it in with rests.
     for (size_t gi = 0; gi < gaps.size(); ++gi) {
 
@@ -1068,7 +1073,7 @@ Segment::normalizeRests(timeT startTime, timeT endTime)
 #endif
 
         startTime = gaps[gi].first;
-        duration = gaps[gi].second;
+        timeT duration = gaps[gi].second;
 
         if (duration >= Note(Note::Shortest).getDuration()) {
             fillWithRests(startTime, startTime + duration);

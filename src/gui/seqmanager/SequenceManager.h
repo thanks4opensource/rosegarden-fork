@@ -141,12 +141,15 @@ public:
     void record(bool countIn);
 
     void jumpTo(const RealTime &time);
+    void jumpTo(timeT time);
 
     void setLoop(const timeT &lhs, const timeT &rhs);
+    void setLooping(bool active);
+    void resetLoopRange(bool active);
 
     void setTransportStatus(TransportStatus status)
             { m_transportStatus = status; }
-    TransportStatus getTransportStatus() const  { return m_transportStatus; }
+    TransportStatus getTransportStatus() const { return m_transportStatus; }
 
     bool inCountIn(const RealTime &time) const;
 
@@ -340,7 +343,7 @@ private slots:
     /// For the (unused) CountdownDialog.  See m_countdownDialog.
     void slotCountdownTimerTimeout();
 
-    // Activated by timer to allow a message to be reported to 
+    // Activated by timer to allow a message to be reported to
     // the user - we use this mechanism so that the user isn't
     // bombarded with dialogs in the event of lots of failures.
     // See m_reportTimer.
@@ -352,7 +355,7 @@ private slots:
      *     Inline into only caller.  It's only two lines of code.
      */
     void slotScheduledCompositionMapperReset();
-    
+
 private:
     /// Cache to avoid lock?
     /**

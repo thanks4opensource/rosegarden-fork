@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -24,6 +24,7 @@
 #include "sound/ControlBlock.h"
 #include "sound/ExternalController.h"
 #include "misc/Debug.h"
+#include "misc/Preferences.h"
 #include "misc/Strings.h"  // for qStrToBool()
 #include "misc/ConfigGroups.h"
 #include "base/Composition.h"
@@ -195,11 +196,8 @@ SequenceManager::play()
 
     setTempo(comp.getCurrentTempo());
 
-    RealTime startPos = comp.getElapsedRealTime(comp.getPosition());
-
-    // If we're looping then jump to loop start
-    if (comp.isLooping())
-        startPos = comp.getElapsedRealTime(comp.getLoopStart());
+    timeT currentPosition = comp.getPosition();
+    RealTime startPos = comp.getElapsedRealTime(currentPosition);
 
     int result = RosegardenSequencer::getInstance()->play(startPos);
 
@@ -356,6 +354,13 @@ SequenceManager::jumpTo(const RealTime &time)
 }
 
 void
+SequenceManager::jumpTo(timeT time)
+{
+    RosegardenSequencer::getInstance()->jumpTo(
+        m_doc->getComposition().getElapsedRealTime(time));
+}
+
+void
 SequenceManager::record(bool toggled)
 {
     if (!m_doc) return;
@@ -506,15 +511,16 @@ punchin:
         ControlBlock::getInstance()->setInstrumentForMetronome
             (m_metronomeMapper->getMetronomeInstrument());
         ControlBlock::getInstance()->setMetronomeMuted(!comp.useRecordMetronome());
-		
+
         QSettings settings;
         settings.beginGroup(GeneralOptionsConfigGroup);
-		
+
         // If we are looping then jump to start of loop and start recording,
         // if we're not take off the number of count-in bars and start
         // recording.
         //
-        if (comp.isLooping())
+        if (comp.loopRangeIsActive() &&
+                comp.loopingMode() == Composition::LoopingMode::CONTINUOUS)
             m_doc->slotSetPointerPosition(comp.getLoopStart());
         else {
             if (m_transportStatus != RECORDING_ARMED && punchIn == false) {
@@ -694,7 +700,7 @@ SequenceManager::processAsynchronousMidi(const MappedEventList &mC,
         }
 
     }
-	
+
     // send to the MIDI labels (which can only hold one event at a time)
 
     i = mC.begin();
@@ -967,7 +973,7 @@ SequenceManager::processAsynchronousMidi(const MappedEventList &mC,
                             // whatever, don't show again during this run
                             showTimerWarning = false;
                         }
-                        
+
                     } else if ((*i)->getData1() == MappedEvent::WarningImpreciseTimerTryRTC &&
                                shouldWarnForImpreciseTimer()) {
 
@@ -976,7 +982,7 @@ SequenceManager::processAsynchronousMidi(const MappedEventList &mC,
 //                        StartupLogo::hideIfStillThere();
 //
 //                        RosegardenMainWindow::self()->awaitDialogClearance();
-                        
+
                         // This is to avoid us ever showing the same
                         // dialog more than once during a single run
                         // of the program -- it's quite separate from
@@ -994,8 +1000,8 @@ SequenceManager::processAsynchronousMidi(const MappedEventList &mC,
                         // warning widget queue
                         if (informativeText != "")
                             emit sendWarning(WarningWidget::Timer, text, informativeText);
-                    } 
-                } 
+                    }
+                }
             }
         }
     }
@@ -1034,7 +1040,10 @@ SequenceManager::fastForwardToEnd()
 {
     RG_DEBUG << "fastForwardToEnd()";
     Composition &comp = m_doc->getComposition();
-    m_doc->slotSetPointerPosition(comp.getEndMarker());
+    if (Preferences::getStopAtEnd())
+        m_doc->slotSetPointerPosition(comp.getDuration(true));
+    else
+        m_doc->slotSetPointerPosition(comp.getEndMarker());
 }
 
 void
@@ -1048,15 +1057,15 @@ SequenceManager::setLoop(const timeT &lhs, const timeT &rhs)
     // transport itself.  #1240039 - DMM
     //    QSettings settings;
     //    settings.beginGroup( SequencerOptionsConfigGroup );
-    // 
+    //
 
     //    if ( qStrToBool( settings.value("jacktransport", "false" ) ) )
     //    {
-    //	// !!! message box should go here to inform user of why the loop was
-    //	//     not set, but I can't add it at the moment due to to the pre-release
-    //	//     freeze - DMM
+    //  // !!! message box should go here to inform user of why the loop was
+    //  //     not set, but I can't add it at the moment due to to the pre-release
+    //  //     freeze - DMM
     //    settings.endGroup();
-    //	return;
+    //  return;
     //    }
 
     RealTime loopStart =
@@ -1065,6 +1074,32 @@ SequenceManager::setLoop(const timeT &lhs, const timeT &rhs)
         m_doc->getComposition().getElapsedRealTime(rhs);
 
     RosegardenSequencer::getInstance()->setLoop(loopStart, loopEnd);
+}
+
+void SequenceManager::setLooping(bool active)
+{
+    RosegardenSequencer::getInstance()->setLooping(active);
+    resetLoopRange(m_doc->getComposition().loopRangeIsActive());
+}
+
+void SequenceManager::resetLoopRange(bool active)
+{
+    RosegardenSequencer* const sequencer = RosegardenSequencer::getInstance();
+    Composition &composition(m_doc->getComposition());
+    timeT tmStart,
+          tmFinsh;
+
+    if (active) {
+        tmStart = composition.getLoopStart(),
+        tmFinsh = composition.getLoopEnd();
+    }
+    else {
+        tmStart = composition.getMinSegmentStartTime();
+        tmFinsh = composition.getMaxSegmentEndTime();
+    }
+
+    sequencer->setLoop(composition.getElapsedRealTime(tmStart),
+                       composition.getElapsedRealTime(tmFinsh));
 }
 
 bool SequenceManager::inCountIn(const RealTime &time) const
@@ -1121,7 +1156,7 @@ SequenceManager::checkSoundDriverStatus(bool warnUser)
     if (!text.isEmpty()) {
         emit sendWarning(WarningWidget::Midi, text, informativeText);
         return;
-    } 
+    }
 
 #ifdef HAVE_LIBJACK
     // If audio driver is not ok...
@@ -1139,9 +1174,9 @@ SequenceManager::checkSoundDriverStatus(bool warnUser)
             text = tr("<h3>Audio sequencing and synth plugins unavailable!</h3>");
             informativeText = tr("<p>Rosegarden could not connect to the JACK audio server.  This probably means that Rosegarden was unable to start the audio server due to a problem with your configuration, your system installation, or both.</p><p>If you want to be able to play or record audio files or use plugins, we suggest that you exit Rosegarden and use the JACK Control utility (qjackctl) to try different settings until you arrive at a configuration that permits JACK to start.  You may also need to install a realtime kernel, edit your system security configuration, and so on.  Unfortunately, this is an extremely complex subject.</p><p> Once you establish a working JACK configuration, Rosegarden will be able to start the audio server automatically in the future.</p>");
             emit sendWarning(WarningWidget::Audio, text, informativeText);
-            
-            showJackWarning = false; 
-        } 
+
+            showJackWarning = false;
+        }
     }
 #endif
 }
@@ -1160,7 +1195,7 @@ SequenceManager::preparePlayback()
     Studio &studio = m_doc->getStudio();
     const InstrumentList list = studio.getAllInstruments();
 
-    // Send the MappedInstruments full information to the Sequencer 
+    // Send the MappedInstruments full information to the Sequencer
     InstrumentList::const_iterator it = list.begin();
     for (; it != list.end(); ++it) {
         StudioControl::sendMappedInstrument(MappedInstrument(*it));
@@ -1212,7 +1247,7 @@ void
 SequenceManager::panic()
 {
     RG_DEBUG << "panic()";
-    
+
     stop();
 
     MappedEvent mE(MidiInstrumentBase, MappedEvent::Panic, 0, 0);
@@ -1242,7 +1277,7 @@ void SequenceManager::setTempo(const tempoT tempo)
 void SequenceManager::resetCompositionMapper()
 {
     RG_DEBUG << "resetCompositionMapper()";
-    
+
     RosegardenSequencer::getInstance()->compositionAboutToBeDeleted();
 
     m_compositionMapper.reset(new CompositionMapper);
@@ -1276,7 +1311,7 @@ void SequenceManager::populateCompositionMapper()
 void SequenceManager::resetMetronomeMapper()
 {
     RG_DEBUG << "resetMetronomeMapper()";
-    
+
     if (m_metronomeMapper) {
         RosegardenSequencer::getInstance()->segmentAboutToBeDeleted
             (m_metronomeMapper);
@@ -1291,7 +1326,7 @@ void SequenceManager::resetMetronomeMapper()
 void SequenceManager::resetTempoSegmentMapper()
 {
     RG_DEBUG << "resetTempoSegmentMapper()";
-    
+
     if (m_tempoSegmentMapper) {
         RosegardenSequencer::getInstance()->segmentAboutToBeDeleted
             (m_tempoSegmentMapper);
@@ -1306,7 +1341,7 @@ void SequenceManager::resetTempoSegmentMapper()
 void SequenceManager::resetTimeSigSegmentMapper()
 {
     RG_DEBUG << "resetTimeSigSegmentMapper()";
-    
+
     if (m_timeSigSegmentMapper) {
         RosegardenSequencer::getInstance()->segmentAboutToBeDeleted
             (m_timeSigSegmentMapper);
@@ -1554,7 +1589,7 @@ void SequenceManager::segmentDeleted(Segment* s)
 
     {
         // getMappedEventBuffer() uses the segment pointer value as an
-    	// index into a map.  So this is not a dereference.
+        // index into a map.  So this is not a dereference.
         QSharedPointer<MappedEventBuffer> mapper =
             m_compositionMapper->getMappedEventBuffer(s);
         // segmentDeleted() has been reviewed and should only be using
@@ -1706,7 +1741,8 @@ void SequenceManager::tempoChanged(const Composition *c)
     m_timeSigSegmentMapper->refresh();
     m_tempoSegmentMapper->refresh();
 
-    if (c->isLooping())
+    if (c->loopRangeIsActive() &&
+            c->loopingMode() == Composition::LoopingMode::CONTINUOUS)
         setLoop(c->getLoopStart(), c->getLoopEnd());
     else if (m_transportStatus == PLAYING) {
 

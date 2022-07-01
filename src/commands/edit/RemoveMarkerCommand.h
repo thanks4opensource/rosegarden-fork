@@ -33,6 +33,7 @@ namespace Rosegarden
 
 class Marker;
 class Composition;
+class RosegardenDocument;
 
 
 class RemoveMarkerCommand : public NamedCommand
@@ -40,11 +41,9 @@ class RemoveMarkerCommand : public NamedCommand
     Q_DECLARE_TR_FUNCTIONS(Rosegarden::RemoveMarkerCommand)
 
 public:
-    RemoveMarkerCommand(Composition *comp,
-                        int id,
-                        timeT time,
-                        const std::string &name,
-                        const std::string &description);
+    RemoveMarkerCommand(RosegardenDocument *doc,
+                        Composition *comp,
+                        int id);
     ~RemoveMarkerCommand() override;
 
     static QString getGlobalName() { return tr("&Remove Marker"); }
@@ -54,13 +53,11 @@ public:
 
 protected:
 
-    Composition     *m_composition;
-    Marker          *m_marker;
-    int              m_id;
-    timeT            m_time;
-    std::string                  m_name;
-    std::string                  m_descr;
-    bool                         m_detached;
+    RosegardenDocument  *m_document;
+    Composition         *m_composition;
+    Marker              *m_marker;
+    int                  m_id;
+    bool                 m_detached;
 
 };
 

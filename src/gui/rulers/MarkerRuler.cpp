@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -22,12 +22,16 @@
 
 #include "misc/Debug.h"
 #include "misc/Strings.h"
+#include "misc/Preferences.h"
 #include "base/Composition.h"
 #include "base/RulerScale.h"
 #include "document/RosegardenDocument.h"
+#include "gui/application/RosegardenMainWindow.h"
 #include "gui/general/GUIPalette.h"
 #include "gui/dialogs/MarkerModifyDialog.h"
+#include "commands/edit/AddMarkerCommand.h"
 #include "commands/edit/ModifyMarkerCommand.h"
+#include "commands/edit/RemoveMarkerCommand.h"
 #include "document/CommandHistory.h"
 
 #include <QMouseEvent>
@@ -60,7 +64,15 @@ MarkerRuler::MarkerRuler(RosegardenDocument *doc,
         m_width(-1),
         m_clickX(0),
         m_menu(nullptr),
+        m_insertHere(nullptr),
+        m_insertAtPos(nullptr),
+        m_delete(nullptr),
+        m_edit(nullptr),
+        m_editAll(nullptr),
+        m_editAtAdd(nullptr),
+        m_newestMarker(nullptr),
         m_doc(doc),
+        m_comp(doc->getComposition()),
         m_rulerScale(rulerScale),
         m_parentMainWindow( dynamic_cast<QMainWindow*>(doc->parent()) )
 {
@@ -69,7 +81,7 @@ MarkerRuler::MarkerRuler(RosegardenDocument *doc,
     // Otherwise we'll end up adding all actions to the same
     // (document-level) action collection regardless of which window
     // we're in.
-    
+
     this->setObjectName(name);
     QObject *probe = parent;
     while (probe && !dynamic_cast<QMainWindow *>(probe)) probe = probe->parent();
@@ -79,12 +91,78 @@ MarkerRuler::MarkerRuler(RosegardenDocument *doc,
     font.setPointSize((font.pointSize() * 9) / 10);
     setFont(font);
 
-    createAction("insert_marker_here", SLOT(slotInsertMarkerHere()));
-    createAction("insert_marker_at_pointer", SLOT(slotInsertMarkerAtPointer()));
-    createAction("delete_marker", SLOT(slotDeleteMarker()));
-    createAction("edit_marker", SLOT(slotEditMarker()));
+    this->setToolTip(tr("Right-click to jump to, or add, a marker.\n"
+                        "Click on a marker to move the playback pointer.\n"
+                        "Shift-click to set a range between markers.\n"
+                        "Right-click on a marker to delete or edit .\n"
+                        "Double-click to open the markers editor."));
 
-    this->setToolTip(tr("Click on a marker to move the playback pointer.\nShift-click to set a range between markers.\nDouble-click to open the marker editor."));
+    createMenusAndToolbars("markerruler.rc");
+    m_menu = findChild<QMenu *>("marker_ruler_menu");
+
+    qDebug() << "MarkerRuler::MarkerRuler()"     // t4osDEBUG
+             << static_cast<void*>(this)
+             << static_cast<void*>(m_menu);
+
+    QString text;
+
+    text = "Insert Marker";
+    m_insertHere = new QAction(text, this);
+    m_insertHere->setObjectName(text);
+    connect(m_insertHere,
+            &QAction::triggered,
+            this,
+            &MarkerRuler::slotInsertMarkerHere);
+
+    text = "Insert Marker at Playback Position";
+    m_insertAtPos = new QAction(text, this);
+    m_insertAtPos->setObjectName(text);
+    connect(m_insertAtPos,
+            &QAction::triggered,
+            this,
+            &MarkerRuler::slotInsertMarkerAtPointer);
+
+    text = "Delete Marker";
+    m_delete = new QAction(text, this);
+    m_delete->setObjectName(text);
+    connect(m_delete,
+            &QAction::triggered,
+            this,
+            &MarkerRuler::slotDeleteMarker);
+
+    text = "Edit Marker";
+    m_edit = new QAction(text, this);
+    m_edit->setObjectName(text);
+    connect(m_edit,
+            &QAction::triggered,
+            this,
+            &MarkerRuler::slotEditMarker);
+
+    text = "Manage Markers";
+    m_editAll = new QAction(text, this);
+    m_editAll->setObjectName(text);
+    connect(m_editAll,
+            &QAction::triggered,
+            RosegardenMainWindow::self(),
+            &RosegardenMainWindow::slotEditMarkers);
+
+    text = "Edit immediately after insert";
+    m_editAtAdd = new QAction(text, this);
+    m_editAtAdd->setObjectName(text);
+    m_editAtAdd->setCheckable(true);
+    m_editAtAdd->setChecked(Preferences::getPreference(
+                                             EDIT_WHEN_CREATED_PREF_GROUP,
+                                             EDIT_WHEN_CREATED_PREFERENCE,
+                                             true));
+    connect(m_editAtAdd,
+            &QAction::triggered,
+            this,
+            &MarkerRuler::slotEditAtAdd);
+
+    for (Marker *marker : m_comp.getMarkers())
+        createMarkerAction(marker);
+
+    updateMenu();
 }
 
 MarkerRuler::~MarkerRuler()
@@ -92,31 +170,92 @@ MarkerRuler::~MarkerRuler()
 }
 
 void
-MarkerRuler::createMenu()
-{             
-    createMenusAndToolbars("markerruler.rc");
-    
-    m_menu = findChild<QMenu *>("marker_ruler_menu");
+MarkerRuler::updateMenu()
+{
+    m_menu->clear();
 
-//    if (!tmp) {
-//        RG_DEBUG << "MarkerRuler::createMenu() menu not found\n"
-//                 << domDocument().toString(4) << endl;
-//    }
-    
-    if (!m_menu) {
-        RG_DEBUG << "MarkerRuler::createMenu() failed\n";
+    auto markers = m_comp.getMarkers();
+    if (!markers.empty()) {
+        // Iterate through Composition's markers instead of own
+        // m_markerActions because former is sorted by time vs
+        // latter by marker object address.
+        for (const Marker *marker : markers)
+            m_menu->addAction(m_markerActions[marker]);
+
+        m_menu->addSeparator();
     }
+
+    m_menu->addAction(m_insertHere);
+    m_menu->addAction(m_insertAtPos);
+    m_menu->addSeparator();
+    m_menu->addAction(m_delete);
+    m_menu->addAction(m_edit);
+    m_menu->addAction(m_editAll);
+    m_menu->addSeparator();
+    m_menu->addAction(m_editAtAdd);
 }
 
+void
+MarkerRuler::slotMarkerAdded(Marker *marker)
+{
+    createMarkerAction(marker);
 
-void 
+    m_newestMarker = marker;  // For immediate modify dialog
+
+    updateMenu();
+    update();
+}
+
+void
+MarkerRuler::slotMarkerModified(Marker *marker)
+{
+    QString name = QString::fromStdString(marker->getName());
+    m_markerActions[marker]->setText(name);
+
+    updateMenu();
+    update();
+}
+
+void
+MarkerRuler::slotMarkerDeleted(Marker *marker)
+{
+    m_menu->removeAction(m_markerActions[marker]);
+    QAction *action = m_markerActions[marker];
+    m_markerActions.erase(marker);
+    delete action;
+
+    update();
+}
+
+void
+MarkerRuler::slotEditAtAdd()
+{
+    bool preference = Preferences::getPreference(
+                                        EDIT_WHEN_CREATED_PREF_GROUP,
+                                        EDIT_WHEN_CREATED_PREFERENCE,
+                                        true);
+
+    if (preference != m_editAtAdd->isChecked())
+        Preferences::setPreference(EDIT_WHEN_CREATED_PREF_GROUP,
+                                   EDIT_WHEN_CREATED_PREFERENCE,
+                                   m_editAtAdd->isChecked());
+}
+
+void
+MarkerRuler::jumpToMarker(const Marker *marker)
+{
+    RosegardenDocument::currentDocument->
+        slotSetPointerPosition(marker->getTime());
+}
+
+void
 MarkerRuler::scrollHoriz(int x)
 {
     m_currentXOffset = -x;
     update();
 }
 
-QSize 
+QSize
 MarkerRuler::sizeHint() const
 {
     int lastBar =
@@ -128,7 +267,7 @@ MarkerRuler::sizeHint() const
     return QSize(std::max(int(width), m_width), fontMetrics().height());
 }
 
-QSize 
+QSize
 MarkerRuler::minimumSizeHint() const
 {
     double firstBarWidth = m_rulerScale->getBarWidth(0);
@@ -137,29 +276,48 @@ MarkerRuler::minimumSizeHint() const
 }
 
 void
+MarkerRuler::addMarker(timeT time)
+{
+    const QString musicalTime(m_comp.getMusicalTimeStringForAbsoluteTime(time));
+
+    AddMarkerCommand *command = new AddMarkerCommand(m_doc,
+                                                     time,
+                                                     musicalTime.toStdString(),
+                                                     std::string(""));
+    CommandHistory::getInstance()->addCommand(command);
+
+    if (Preferences::getPreference(EDIT_WHEN_CREATED_PREF_GROUP,
+                                   EDIT_WHEN_CREATED_PREFERENCE,
+                                   true)) {
+        doModifyDialog(m_newestMarker);
+        m_newestMarker = nullptr;
+    }
+}
+
+void
 MarkerRuler::slotInsertMarkerHere()
 {
-    emit addMarker(getClickPosition());    
+     addMarker(getClickPosition());
 }
 
 void
 MarkerRuler::slotInsertMarkerAtPointer()
 {
-    emit addMarker(m_doc->getComposition().getPosition());
+     addMarker(m_doc->getComposition().getPosition());
 }
 
 void
 MarkerRuler::slotDeleteMarker()
 {
-    RG_DEBUG << "MarkerRuler::slotDeleteMarker()\n";
-    
     Rosegarden::Marker* marker = getMarkerAtClickPosition();
-    
-    if (marker)
-        emit deleteMarker(marker->getID(),
-                          marker->getTime(),
-                          strtoqstr(marker->getName()),
-                          strtoqstr(marker->getDescription()));                          
+
+    if (marker) {
+        RemoveMarkerCommand *command =
+            new RemoveMarkerCommand(m_doc,
+                                    &m_doc->getComposition(),
+                                    marker->getID());
+        CommandHistory::getInstance()->addCommand(command);
+    }
 }
 
 void
@@ -176,17 +334,11 @@ MarkerRuler::slotEditMarker()
     // inconsistent with the other methods, so if anyone wants to move
     // it, be my guest.
 
-    MarkerModifyDialog dialog(this, &m_doc->getComposition(), marker);
-    if (dialog.exec() == QDialog::Accepted) {
-        ModifyMarkerCommand *command =
-            new ModifyMarkerCommand(&m_doc->getComposition(),
-                                    marker->getID(),
-                                    dialog.getOriginalTime(),
-                                    dialog.getTime(),
-                                    qstrtostr(dialog.getName()),
-                                    qstrtostr(dialog.getDescription()));
-        CommandHistory::getInstance()->addCommand(command);
-    }
+    // My thoughts exactly. In fact, had just had them when I found
+    // the above comment. It was a lovely party -- thank you for
+    // having me as a guest.
+
+    doModifyDialog(marker);
 }
 
 timeT
@@ -262,7 +414,7 @@ MarkerRuler::getMarkerAtClickPosition()
 
     return nullptr;
 }
-    
+
 void
 MarkerRuler::paintEvent(QPaintEvent*)
 {
@@ -360,23 +512,36 @@ MarkerRuler::paintEvent(QPaintEvent*)
         timeT end = comp.getBarEnd(lastBar);
 
         QFontMetrics metrics = painter.fontMetrics();
+        QBrush brush(Qt::blue);
 
         for (it = markers.begin(); it != markers.end(); ++it) {
             if ((*it)->getTime() >= start && (*it)->getTime() < end) {
-                QString name(strtoqstr((*it)->getName()));
+                QString name(strtoqstr((*it)->getName()) + "   ");
 
                 double x = m_rulerScale->getXForTime((*it)->getTime())
                            + m_currentXOffset;
 
                 painter.fillRect(static_cast<int>(x), 1,
-                                 static_cast<int>(metrics.boundingRect(name).width() + 5),
+                                 static_cast<int>(
+                                    metrics.boundingRect(name).width() + 5),
                                  barHeight - 2,
-                                 QBrush(GUIPalette::getColour(GUIPalette::MarkerBackground)));
+                                 QBrush(GUIPalette::getColour(
+                                    GUIPalette::MarkerBackground)));
 
+#if 0  // Draw almost invisible line indicating exact time of marker.
                 painter.drawLine(int(x), 1, int(x), barHeight - 2);
                 painter.drawLine(int(x) + 1, 1, int(x) + 1, barHeight - 2);
-
-                const QPoint textDrawPoint(static_cast<int>(x + 3), barHeight - 4);
+#else  // Draw more reaonably visible skinny isosceles nabla.
+                QPolygon poly;
+                poly << QPoint(int(x) - 3, 3)
+                     << QPoint(int(x) + 3, 3)
+                     << QPoint(int(x)    , barHeight);
+                QPainterPath path;
+                path.addPolygon(poly);
+                painter.fillPath(path, brush);
+#endif
+                const QPoint textDrawPoint(static_cast<int>(x + 6),
+                                           barHeight - 4);
                 painter.drawText(textDrawPoint, name);
             }
         }
@@ -386,30 +551,23 @@ MarkerRuler::paintEvent(QPaintEvent*)
 void
 MarkerRuler::mousePressEvent(QMouseEvent *e)
 {
-    RG_DEBUG << "MarkerRuler::mousePressEvent: x = " << e->pos().x();
-
     if (!m_doc || !e)
         return;
 
     m_clickX = e->pos().x();
     Rosegarden::Marker* clickedMarker = getMarkerAtClickPosition();
-    
+
     // if right-click, show popup menu
     //
     if (e->button() == Qt::RightButton) {
-        if (!m_menu)
-            createMenu();
-        if (m_menu) {
-//             actionCollection()->action("delete_marker")->setEnabled(clickedMarker != 0);
-//             actionCollection()->action("edit_marker")->setEnabled(clickedMarker != 0);
-            findAction("delete_marker")->setEnabled(clickedMarker != nullptr);
-            findAction("edit_marker")->setEnabled(clickedMarker != nullptr);
-            
+        if (m_menu) {  // Can get rid of this test?
+            m_delete->setEnabled(clickedMarker != nullptr);
+            m_edit  ->setEnabled(clickedMarker != nullptr);
             m_menu->exec(QCursor::pos());
         }
-        return;       
+        return;
     }
-            
+
     bool shiftPressed = ((e->modifiers() & Qt::ShiftModifier) != 0);
 
     Composition &comp = m_doc->getComposition();
@@ -428,7 +586,7 @@ MarkerRuler::mousePressEvent(QMouseEvent *e)
             timeT cur = (*i)->getTime();
 
             if (cur >= t) {
-                emit setLoop(prev, cur);
+                m_doc->setLoopRange(prev, cur);
                 return ;
             }
 
@@ -436,21 +594,55 @@ MarkerRuler::mousePressEvent(QMouseEvent *e)
         }
 
         if (prev > 0)
-            emit setLoop(prev, comp.getEndMarker());
+            m_doc->setLoopRange(prev, comp.getEndMarker());
 
     } else { // set pointer to clicked marker
-
         if (clickedMarker)
-            emit setPointerPosition(clickedMarker->getTime());
+            m_doc->slotSetPointerPosition(clickedMarker->getTime());
     }
 }
 
 void
 MarkerRuler::mouseDoubleClickEvent(QMouseEvent *)
 {
-    RG_DEBUG << "MarkerRuler::mouseDoubleClickEvent";
+    RosegardenMainWindow::self()->slotEditMarkers();
+}
 
-    emit editMarkers();
+void
+MarkerRuler::doModifyDialog(Marker *marker)
+{
+    if (!marker) return;
+
+    std::string name(marker->getName()),
+                desc(marker->getDescription());
+
+    MarkerModifyDialog dialog(this, &m_doc->getComposition(), marker);
+    if (dialog.exec() == QDialog::Accepted) {
+        if (qstrtostr(dialog.getName())        != name ||
+            qstrtostr(dialog.getDescription()) != desc ||
+            dialog.getOriginalTime()           != dialog.getTime()) {
+
+            ModifyMarkerCommand *command =
+                new ModifyMarkerCommand(m_doc,
+                                        &m_doc->getComposition(),
+                                        marker->getID(),
+                                        dialog.getOriginalTime(),
+                                        dialog.getTime(),
+                                        qstrtostr(dialog.getName()),
+                                        qstrtostr(dialog.getDescription()));
+            CommandHistory::getInstance()->addCommand(command);
+        }
+    }
+}
+
+void MarkerRuler::createMarkerAction(Marker *marker)
+{
+    QString name = QString::fromStdString(marker->getName());
+    QAction *action = new QAction(name, this);
+    action->setObjectName(name);
+    connect(action, &QAction::triggered,
+            this, [this, marker]{jumpToMarker(marker);});
+    m_markerActions[marker] = action;
 }
 
 }

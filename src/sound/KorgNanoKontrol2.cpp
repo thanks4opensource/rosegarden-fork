@@ -3,7 +3,7 @@
   Rosegarden
   A sequencer and musical notation editor.
   Copyright 2020-2022 the Rosegarden development team.
- 
+
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License as
   published by the Free Software Foundation; either version 2 of the
@@ -270,7 +270,7 @@ void KorgNanoKontrol2::processEvent(const MappedEvent *event)
 
     // Cycle (Loop)
     if (controlNumber == 46  &&  value == 127) {
-        RosegardenMainWindow::self()->toggleLoop();
+        RosegardenDocument::currentDocument->toggleLoopingMode();
         return;
     }
 
@@ -613,7 +613,7 @@ void KorgNanoKontrol2::refreshLEDs()
     }
 
     // Cycle
-    const bool cycle = doc->getComposition().isLooping();
+    const bool cycle = (doc->getComposition().loopingMode() == Composition::LoopingMode::CONTINUOUS);
     // If there was a change...
     if (cycle != m_cycle) {
         ExternalController::send(

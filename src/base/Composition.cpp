@@ -23,6 +23,9 @@
 #include "base/SegmentLinker.h"
 #include "base/BaseProperties.h"
 #include "base/Profiler.h"
+
+#include "document/RosegardenDocument.h"
+
 #include "BasicQuantizer.h"
 #include "NotationQuantizer.h"
 #include "base/AudioLevel.h"
@@ -71,7 +74,7 @@ Composition::ReferenceSegmentEventCmp::operator()(const Event &e1,
     }
 }
 
-Composition::ReferenceSegment::ReferenceSegment(std::string eventType) :
+Composition::ReferenceSegment::ReferenceSegment(const std::string& eventType) :
     m_eventType(eventType)
 {
     // nothing
@@ -147,8 +150,9 @@ Composition::ReferenceSegment::getDuration() const
 Composition::ReferenceSegment::iterator
 Composition::ReferenceSegment::find(Event *e)
 {
-    return std::lower_bound
-        (begin(), end(), e, ReferenceSegmentEventCmp());
+    // Return the Event at or after e's time.
+    // Note that lower_bound() does a binary search.
+    return std::lower_bound(begin(), end(), e, ReferenceSegmentEventCmp());
 }
 
 Composition::ReferenceSegment::iterator
@@ -181,41 +185,57 @@ Composition::ReferenceSegment::eraseEvent(Event *e)
 }
 
 Composition::ReferenceSegment::iterator
-Composition::ReferenceSegment::findTime(timeT t)
+Composition::ReferenceSegment::findAtOrBefore(timeT t)
 {
-    Event dummy("dummy", t, 0, MIN_SUBORDERING);
-    return find(&dummy);
+    if (m_events.empty())
+        return end();
+
+    // Find the Event at or after t.
+    Event event("dummy", t, 0, MIN_SUBORDERING);
+    // Use std::lower_bound() which does a binary search.
+    // These tempo and time signature Segments tend to be really
+    // small, so a binary search probably isn't much faster than linear.
+    iterator i = std::lower_bound(
+            begin(), end(), &event, ReferenceSegmentEventCmp());
+
+    // Found an exact match, return it.
+    if (i != end()  &&  (*i)->getAbsoluteTime() == t)
+        return i;
+
+    // If begin() is after, indicate no Event prior.
+    if (i == begin())
+        return end();
+
+    // i is after, so return the previous which is before t.
+    return i - 1;
 }
 
 Composition::ReferenceSegment::iterator
-Composition::ReferenceSegment::findRealTime(RealTime t)
+Composition::ReferenceSegment::findAtOrBefore(RealTime t)
 {
-    Event dummy("dummy", 0, 0, MIN_SUBORDERING);
-    dummy.set<Bool>(NoAbsoluteTimeProperty, true);
-    setTempoTimestamp(&dummy, t);
-    return find(&dummy);
-}
+    if (m_events.empty())
+        return end();
 
-Composition::ReferenceSegment::iterator
-Composition::ReferenceSegment::findNearestTime(timeT t)
-{
-    iterator i = findTime(t);
-    if (i == end() || (*i)->getAbsoluteTime() > t) {
-        if (i == begin()) return end();
-        else --i;
-    }
-    return i;
-}
+    // Find the Event at or after t.
+    Event tempEvent("dummy", 0, 0, MIN_SUBORDERING);
+    tempEvent.set<Bool>(NoAbsoluteTimeProperty, true);
+    setTempoTimestamp(&tempEvent, t);
+    // Use std::lower_bound() which does a binary search.
+    // These tempo and time signature Segments tend to be really
+    // small, so a binary search probably isn't much faster than linear.
+    iterator i = std::lower_bound(
+            begin(), end(), &tempEvent, ReferenceSegmentEventCmp());
 
-Composition::ReferenceSegment::iterator
-Composition::ReferenceSegment::findNearestRealTime(RealTime t)
-{
-    iterator i = findRealTime(t);
-    if (i == end() || (getTempoTimestamp(*i) > t)) {
-        if (i == begin()) return end();
-        else --i;
-    }
-    return i;
+    // Found an exact match, return it.
+    if (i != end()  &&  getTempoTimestamp(*i) == t)
+        return i;
+
+    // If begin() is after, indicate no Event prior.
+    if (i == begin())
+        return end();
+
+    // i is after, so return the previous which is before t.
+    return i - 1;
 }
 
 namespace
@@ -241,7 +261,11 @@ Composition::Composition() :
     m_autoExpand(false),
     m_loopStart(0),
     m_loopEnd(0),
-    m_isLooping(false),
+    m_loopRangeIsActive(false),
+    m_loopingMode(LoopingMode::ONE_SHOT),
+    m_minSegmentStart(std::numeric_limits<timeT>::max()),
+    m_maxSegmentEnd(std::numeric_limits<timeT>::min()),
+    m_fromFileInProgress(false),
     m_playMetronome(false),
     m_recordMetronome(true),
     m_nextTriggerSegmentId(0),
@@ -271,6 +295,9 @@ Composition::addSegment(Segment *segment)
 {
     iterator res = weakAddSegment(segment);
 
+    if (!m_fromFileInProgress)
+        updateMinMaxSegmentStartEndTimes();
+
     if (res != end()) {
         updateRefreshStatuses();
         distributeVerses();
@@ -288,7 +315,6 @@ Composition::weakAddSegment(Segment *segment)
 
     iterator res = m_segments.insert(segment);
     segment->setComposition(this);
-
     return res;
 }
 
@@ -324,6 +350,22 @@ Composition::deleteSegment(Segment *segment)
 
 bool
 Composition::detachSegment(Segment *segment)
+{
+    bool res = weakDetachSegment(segment);
+
+    if (!m_fromFileInProgress)
+        updateMinMaxSegmentStartEndTimes();
+
+    if (res) {
+        distributeVerses();
+        notifySegmentRemoved(segment);
+        updateRefreshStatuses();
+    }
+
+    return res;
+}
+bool
+Composition::detachSegmentNoUpdateMinMax(Segment *segment)
 {
     bool res = weakDetachSegment(segment);
 
@@ -377,7 +419,7 @@ Composition::detachAllSegments(SegmentMultiSet segments)
     for (SegmentMultiSet::iterator i = segments.begin();
          i != segments.end();
          ++i)
-        { detachSegment(*i); }
+        { detachSegmentNoUpdateMinMax(*i); }
 }
 
 void
@@ -386,7 +428,7 @@ Composition::detachAllSegments(SegmentVec segments)
     for (SegmentVec::iterator i = segments.begin();
          i != segments.end();
          ++i)
-        { detachSegment(*i); }
+        { detachSegmentNoUpdateMinMax(*i); }
 }
 
 bool
@@ -645,6 +687,8 @@ Composition::updateTriggerSegmentReferences()
 }
 
 
+// This should be replaced with a m_maxSegEndTime member, updated
+// as segements are added/deleted/modified.
 timeT
 Composition::getDuration(bool withRepeats) const
 {
@@ -664,6 +708,93 @@ Composition::getDuration(bool withRepeats) const
     }
 
     return maxDuration;
+}
+
+// See declaration in Composition.h
+bool Composition::limitRangeToSegments(timeT &start, timeT &end,
+                                       bool *badRange)
+{
+    timeT prevStart = m_loopStart;
+    timeT prevEnd   = m_loopEnd;
+
+    // Disable range if completely before or after segments
+    if (start >= m_maxSegmentEnd || end <= m_minSegmentStart) {
+        start = 0;
+        end = 0;
+        if (badRange) *badRange = true;
+        return (prevStart != 0 || prevEnd != 0);
+    }
+
+    // Otherwise clip start and end to segments ...
+
+    if (start < m_minSegmentStart) start = m_minSegmentStart;
+    if (end > m_maxSegmentEnd)     end   = m_maxSegmentEnd;
+
+    if (badRange) *badRange = false;
+    return (start != prevStart || end != prevEnd);
+}
+
+
+// Update m_minSegmentStart and m_maxSegmentEnd as segments are
+// added, removed, or have their start or end times modified.
+//
+// Should be only be called as necessary and sufficient, not e.g.
+// as a segment's end time is being continuously extended as
+// during recording or when a document is being loaded -- the latter
+// because segment end times are unfortunately not explicit in the
+// file format but instead dynamically extended as notes and rests
+// are parsed, similar to what happoens during recording.
+//
+// See also comments in Composition.h at getMinSegmentStartTime()
+void
+Composition::updateMinMaxSegmentStartEndTimes()
+{
+    const timeT crntStart = m_minSegmentStart;
+    const timeT crntEnd   = m_maxSegmentEnd;
+
+    // In all below, use of Segment::getEndMarkerTime() instead of
+    // Segment::getEndTime() because they differ in the case of
+    // recorded segments and the former is what editors display.
+
+    // If adding   first segment: has already been done so >= 0
+    // If deleting last     "   :  "     "     "    "   "  == 0
+    if (m_segments.size() == 0) {
+        m_minSegmentStart = 0;
+        m_maxSegmentEnd   = 0;
+    }
+
+    else if (m_segments.size() == 1) {
+        const Segment *firstSegment = *m_segments.begin();
+        m_minSegmentStart = firstSegment->getClippedStartTime();
+        m_maxSegmentEnd   = firstSegment->getEndMarkerTime();
+    }
+
+    else {
+        m_minSegmentStart = std::numeric_limits<timeT>::max();
+        m_maxSegmentEnd   = std::numeric_limits<timeT>::min();
+        for (const auto each : m_segments) {
+            if (each->getClippedStartTime() < m_minSegmentStart)
+                m_minSegmentStart = each->getClippedStartTime();
+            if (each->getEndMarkerTime() > m_maxSegmentEnd)
+                m_maxSegmentEnd = each->getEndMarkerTime();
+        }
+    }
+
+    // Check if span has shrunk
+    if (m_minSegmentStart != crntStart ||
+        m_maxSegmentEnd   != crntEnd   ||
+        m_minSegmentStart == m_maxSegmentEnd) {
+
+        // Update loop start/end
+        bool outside;
+        if (limitRangeToSegments(m_loopStart, m_loopEnd, &outside)) {
+            // Changed, so update views.
+            RosegardenDocument::currentDocument->
+                loopRangeChanged(true,      // range adjusted to fit segments
+                                 outside,
+                                 true);     // was because segments changed
+        }
+    }
 }
 
 void
@@ -703,7 +834,8 @@ Composition::clear()
     m_maxTempo = 0;
     m_loopStart = 0;
     m_loopEnd = 0;
-    m_isLooping = false;
+    m_loopRangeIsActive = false;
+    m_loopingMode = LoopingMode::ONE_SHOT;
     m_position = 0;
     m_startMarker = 0;
     m_endMarker = getBarRange(defaultNumberOfBars).first;
@@ -786,7 +918,7 @@ int
 Composition::getBarNumber(timeT t) const
 {
     calculateBarPositions();
-    ReferenceSegment::iterator i = m_timeSigSegment.findNearestTime(t);
+    ReferenceSegment::iterator i = m_timeSigSegment.findAtOrBefore(t);
     int n;
 
     if (i == m_timeSigSegment.end()) { // precedes any time signatures
@@ -945,7 +1077,7 @@ Composition::getTimeSignatureInBar(int barNo, bool &isNew) const
 Composition::ReferenceSegment::iterator
 Composition::getTimeSignatureAtAux(timeT t) const
 {
-    ReferenceSegment::iterator i = m_timeSigSegment.findNearestTime(t);
+    ReferenceSegment::iterator i = m_timeSigSegment.findAtOrBefore(t);
 
     // In negative time, if there's no time signature actually defined
     // prior to the point of interest then we use the next time
@@ -999,7 +1131,7 @@ Composition::removeTimeSignature(int n)
 tempoT
 Composition::getTempoAtTime(timeT t) const
 {
-    ReferenceSegment::iterator i = m_tempoSegment.findNearestTime(t);
+    ReferenceSegment::iterator i = m_tempoSegment.findAtOrBefore(t);
 
     // In negative time, if there's no tempo event actually defined
     // prior to the point of interest then we use the next one after
@@ -1126,7 +1258,7 @@ Composition::getTempoChangeCount() const
 int
 Composition::getTempoChangeNumberAt(timeT t) const
 {
-    ReferenceSegment::iterator i = m_tempoSegment.findNearestTime(t);
+    ReferenceSegment::iterator i = m_tempoSegment.findAtOrBefore(t);
     if (i == m_tempoSegment.end()) return -1;
     else return std::distance(m_tempoSegment.begin(), i);
 }
@@ -1240,12 +1372,14 @@ Composition::compareSignaturesAndTempos(const Composition &other) const
     return true;
 }
 
+#ifndef BUG1627
+// Original version
 RealTime
 Composition::getElapsedRealTime(timeT t) const
 {
     calculateTempoTimestamps();
 
-    ReferenceSegment::iterator i = m_tempoSegment.findNearestTime(t);
+    ReferenceSegment::iterator i = m_tempoSegment.findAtOrBefore(t);
     if (i == m_tempoSegment.end()) {
         i = m_tempoSegment.begin();
         if (t >= 0 ||
@@ -1280,12 +1414,123 @@ Composition::getElapsedRealTime(timeT t) const
     return elapsed;
 }
 
+#else
+// Version with proposed fix for bug #1627
+RealTime
+Composition::getElapsedRealTime(timeT t) const
+{
+    calculateTempoTimestamps();
+
+    // In case we have an anacrusis, make sure we have the proper
+    // start time which could be negative.
+    const timeT start = getStartMarker();
+    const RealTime realStart = time2RealTime(start, m_defaultTempo);
+
+    // Elapsed time is dependent on tempo changes.  Find the previous one.
+    ReferenceSegment::iterator tempoIter = m_tempoSegment.findAtOrBefore(t);
+    // None found?  We should probably use the default tempo.
+    if (tempoIter == m_tempoSegment.end()) {
+        // Try the first, if any.
+        // ??? If present, this will be after t.  So it is useless.
+        // ??? Make this a new firstTempoIter for clarity.
+        tempoIter = m_tempoSegment.begin();
+
+        // If the tempo segment is empty OR the first tempo change is
+        // after the composition start OR t is after the composition start...
+        // ??? We can get rid of the parens by reordering this.  However,
+        //     we should probably reorder this for speed.  The first check
+        //     should be the one that is most frequently true.  And the
+        //     iter check should obviously be before dereferencing.
+        // ??? This will probably always be true since t will always
+        //     be at or after start.  Then again, what if the composition
+        //     start is changed to something large and positive, thus
+        //     cutting off the tempo changes?  Does that delete them?
+        // ??? Previously, this checked against 0.  So it only detected
+        //     anacrusis (negative start time).  With this new version,
+        //     will it be affected by composition start bar which can be
+        //     something other than 1?  The original code translates to
+        //     this:
+        //     If the tempo segment is empty OR the first tempo change
+        //     is after the anacrusis OR t is after the anacrusis.
+        if (t >= start ||
+            (tempoIter == m_tempoSegment.end() ||  // tempo segment empty?
+                 (*tempoIter)->getAbsoluteTime() > start)) {  // tempo change is after composition start?
+            // Perform a simple pulses to seconds conversion using the
+            // default tempo.
+            RealTime rt = time2RealTime(t, m_defaultTempo);
+            rt = rt - realStart;
+            RG_DEBUG << "getElapsedRealTime 1" << t << rt;
+            return rt;
+        }
+
+        // ??? To get here, we would need:
+        //
+        //       - t prior to the first tempo change (easy to do)
+        //       - t prior to the start of the Composition
+        //       - the first tempo change prior to the start of Composition
+        //
+        //     Is this possible?  Can we have an event and a tempo change
+        //     prior to the start of the Composition?  So, set up the
+        //     first condition, then move the Composition start past that
+        //     point.  I have a feeling that might purge the events and
+        //     the tempo change.
+
+        // ??? Previously to get here we would need:
+        //
+        //       - t < 0 (within an anacrusis or some other reason)
+        //       - At least one tempo change at time 0 or earlier
+        //         (e.g. within an anacrusis).  I don't believe we
+        //         support tempo changes at negative time, so it would
+        //         have to be at time zero.
+        //       - t prior to that first tempo change.
+        //       - So given a negative t and tempo change at zero, we
+        //         have what we need to exercise this.
+        //
+        //     Then what happens below in this case?
+
+        // ??? I'm wondering if the original intent of t >= 0 was, "is
+        //     t sensible".  But then anacrusis was added and t >= 0
+        //     inadvertently became, "is t not within the anacrusis".
+    }
+
+    RealTime elapsed;
+
+    tempoT target = -1;
+    timeT nextTempoTime = t;
+
+    if (!getTempoTarget(tempoIter, target, nextTempoTime)) target = -1;
+
+    if (target > 0) {
+        elapsed = getTempoTimestamp(*tempoIter) +
+            time2RealTime(t - (*tempoIter)->getAbsoluteTime(),
+                          tempoT((*tempoIter)->get<Int>(TempoProperty)),
+                          nextTempoTime - (*tempoIter)->getAbsoluteTime(),
+                          target);
+    } else {
+        elapsed = getTempoTimestamp(*tempoIter) +
+            time2RealTime(t - (*tempoIter)->getAbsoluteTime(),
+                          tempoT((*tempoIter)->get<Int>(TempoProperty)));
+    }
+
+#ifdef DEBUG_TEMPO_STUFF
+    RG_DEBUG << "getElapsedRealTime(): " << t << " -> " << elapsed << " (last tempo change at " << (*tempoIter)->getAbsoluteTime() << ")";
+#endif
+
+    elapsed = elapsed - realStart;
+    RG_DEBUG << "getElapsedRealTime 2" << t << elapsed;
+
+    return elapsed;
+}
+#endif
+
+#ifndef BUG1627
+// Original version.
 timeT
 Composition::getElapsedTimeForRealTime(RealTime t) const
 {
     calculateTempoTimestamps();
 
-    ReferenceSegment::iterator i = m_tempoSegment.findNearestRealTime(t);
+    ReferenceSegment::iterator i = m_tempoSegment.findAtOrBefore(t);
     if (i == m_tempoSegment.end()) {
         i = m_tempoSegment.begin();
         if (t >= RealTime::zeroTime ||
@@ -1328,6 +1573,64 @@ Composition::getElapsedTimeForRealTime(RealTime t) const
 #endif
     return elapsed;
 }
+
+#else
+// Proposed fix for bug #1627.
+timeT
+Composition::getElapsedTimeForRealTime(RealTime t) const
+{
+    calculateTempoTimestamps();
+
+    // if the composition does not start at bar 1 we must add the
+    // start time here
+    timeT start = getStartMarker();
+    RealTime realStart = time2RealTime(start, m_defaultTempo);
+    t = t + realStart;
+
+    ReferenceSegment::iterator i = m_tempoSegment.findAtOrBefore(t);
+    if (i == m_tempoSegment.end()) {
+        i = m_tempoSegment.begin();
+        if (t >= realStart ||
+            (i == m_tempoSegment.end() || (*i)->getAbsoluteTime() > 0)) {
+            return realTime2Time(t, m_defaultTempo);
+        }
+    }
+
+    timeT elapsed;
+
+    tempoT target = -1;
+    timeT nextTempoTime = 0;
+    if (!getTempoTarget(i, target, nextTempoTime)) target = -1;
+
+    if (target > 0) {
+        elapsed = (*i)->getAbsoluteTime() +
+            realTime2Time(t - getTempoTimestamp(*i),
+                          (tempoT)((*i)->get<Int>(TempoProperty)),
+                          nextTempoTime - (*i)->getAbsoluteTime(),
+                          target);
+    } else {
+        elapsed = (*i)->getAbsoluteTime() +
+            realTime2Time(t - getTempoTimestamp(*i),
+                          (tempoT)((*i)->get<Int>(TempoProperty)));
+    }
+
+#ifdef DEBUG_TEMPO_STUFF
+    static int doError = true;
+    if (doError) {
+        doError = false;
+        RealTime cfReal = getElapsedRealTime(elapsed);
+        timeT cfTimeT = getElapsedTimeForRealTime(cfReal);
+        doError = true;
+        RG_DEBUG << "getElapsedTimeForRealTime(): " << t << " -> "
+             << elapsed << " (error " << (cfReal - t)
+             << " or " << (cfTimeT - elapsed) << ", tempo "
+             << (*i)->getAbsoluteTime() << ":"
+             << (tempoT)((*i)->get<Int>(TempoProperty)) << ")";
+    }
+#endif
+    return elapsed;
+}
+#endif
 
 void
 Composition::calculateTempoTimestamps() const
@@ -1381,7 +1684,7 @@ static int DEBUG_silence_recursive_tempo_printout = 0;
 #endif
 
 RealTime
-Composition::time2RealTime(timeT t, tempoT tempo) const
+Composition::time2RealTime(timeT t, tempoT tempo)
 {
     static timeT cdur = Note(Note::Crotchet).getDuration();
 
@@ -1411,7 +1714,7 @@ Composition::time2RealTime(timeT t, tempoT tempo) const
 
 RealTime
 Composition::time2RealTime(timeT time, tempoT tempo,
-                           timeT targetTime, tempoT targetTempo) const
+                           timeT targetTime, tempoT targetTempo)
 {
     static timeT cdur = Note(Note::Crotchet).getDuration();
 
@@ -1461,7 +1764,7 @@ Composition::time2RealTime(timeT time, tempoT tempo,
 }
 
 timeT
-Composition::realTime2Time(RealTime rt, tempoT tempo) const
+Composition::realTime2Time(RealTime rt, tempoT tempo)
 {
     static timeT cdur = Note(Note::Crotchet).getDuration();
 
@@ -1490,7 +1793,7 @@ Composition::realTime2Time(RealTime rt, tempoT tempo) const
 
 timeT
 Composition::realTime2Time(RealTime rt, tempoT tempo,
-                           timeT targetTime, tempoT targetTempo) const
+                           timeT targetTime, tempoT targetTempo)
 {
     static timeT cdur = Note(Note::Crotchet).getDuration();
 
@@ -1615,7 +1918,7 @@ Composition::setTempoTimestamp(Event *e, RealTime t)
 void
 Composition::getMusicalTimeForAbsoluteTime(timeT absTime,
                                            int &bar, int &beat,
-                                           int &fraction, int &remainder)
+                                           int &fraction, int &remainder) const
 {
     bar = getBarNumber(absTime);
 
@@ -1633,7 +1936,7 @@ Composition::getMusicalTimeForAbsoluteTime(timeT absTime,
 void
 Composition::getMusicalTimeForDuration(timeT absTime, timeT duration,
                                        int &bars, int &beats,
-                                       int &fractions, int &remainder)
+                                       int &fractions, int &remainder) const
 {
     TimeSignature timeSig = getTimeSignatureAt(absTime);
     timeT barDuration = timeSig.getBarDuration();
@@ -1649,7 +1952,7 @@ Composition::getMusicalTimeForDuration(timeT absTime, timeT duration,
 
 timeT
 Composition::getAbsoluteTimeForMusicalTime(int bar, int beat,
-                                           int fraction, int remainder)
+                                           int fraction, int remainder) const
 {
     timeT t = getBarStart(bar - 1);
     TimeSignature timesig = getTimeSignatureAt(t);
@@ -1659,10 +1962,47 @@ Composition::getAbsoluteTimeForMusicalTime(int bar, int beat,
     return t;
 }
 
+QString
+Composition::getMusicalTimeStringForAbsoluteTime(timeT absoluteTime)
+{
+    static const int MIDI_TICKS_PER_MEASURE = 3840;
+    struct Gcd {
+        Gcd(int n, int d) : num(n), den(d) {};
+
+        QString operator()() {
+            int gcd  = num,
+                den2 = den;
+
+            while (den2 != 0) {
+                int tmp = den2;
+                den2 = gcd % den2;
+                gcd = tmp;
+            }
+            return QString("%1/%2").arg(num / gcd).arg(den / gcd);
+        }
+        int num, den;
+    };
+
+    int bar, beat, remainder;
+    bar = getBarNumber(absoluteTime);
+    TimeSignature timeSig = getTimeSignatureAt(absoluteTime);
+    timeT barStart = getBarStart(bar);
+    timeT beatDuration = timeSig.getBeatDuration();
+    beat = (absoluteTime - barStart) / beatDuration + 1;
+    remainder = (absoluteTime - barStart) % beatDuration;
+
+    if (remainder == 0)
+        return QString("%1:%2").arg(bar + 1).arg(beat);
+    else
+        return QString("%1:%2+%3").arg(bar + 1)
+                                  .arg(beat)
+                                  .arg(Gcd(remainder, MIDI_TICKS_PER_MEASURE)());
+}
+
 timeT
 Composition::getDurationForMusicalTime(timeT absTime,
                                        int bars, int beats,
-                                       int fractions, int remainder)
+                                       int fractions, int remainder) const
 {
     TimeSignature timeSig = getTimeSignatureAt(absTime);
     timeT barDuration = timeSig.getBarDuration();
@@ -1676,13 +2016,6 @@ void
 Composition::setPosition(timeT position)
 {
     m_position = position;
-}
-
-void
-Composition::setLooping(bool loop)
-{
-    RG_DEBUG << "setLooping" << loop;
-    m_isLooping = loop;
 }
 
 void Composition::setPlayMetronome(bool value)
@@ -2023,13 +2356,16 @@ std::string Composition::toXmlString() const
     composition << "\" compositionDefaultTempo=\"";
     composition << m_defaultTempo;
 
-    if (m_loopStart != m_loopEnd)
+    // Save loop range if has been set.
+    if (m_loopEnd > m_loopStart)
     {
         composition << "\" loopstart=\"" << m_loopStart;
         composition << "\" loopend=\"" << m_loopEnd;
     }
 
+#if 0   // No longer applicable, new haveLoopRange(), loopRangeActived(),
     composition << "\" islooping=\"" << m_isLooping;
+#endif
 
     composition << "\" startMarker=\"" << m_startMarker;
     composition << "\" endMarker=\"" << m_endMarker;
@@ -2525,6 +2861,11 @@ void
 Composition::addMarker(Rosegarden::Marker *marker)
 {
     m_markers.push_back(marker);
+    std::sort(m_markers.begin(),
+              m_markers.end(),
+              [](const Marker *left, const Marker *right) {
+                return left->getTime() < right->getTime();
+              });
     updateRefreshStatuses();
 }
 

@@ -82,7 +82,6 @@ public:
     // RosegardenTransport member accessors
     QPushButton* MetronomeButton()   { return ui->MetronomeButton; }
     QPushButton* SoloButton()        { return ui->SoloButton; }
-    QPushButton* LoopButton()        { return ui->LoopButton; }
     QPushButton* PlayButton()        { return ui->PlayButton; }
     QPushButton* StopButton()        { return ui->StopButton; }
     QPushButton* FfwdButton()        { return ui->FfwdButton; }
@@ -133,6 +132,7 @@ public slots:
     void slotChangeToEnd();
 
     void slotLoopButtonClicked();
+    void slotSetLoopingMode(bool contnuous);
 
     void slotPanelOpenButtonClicked();
     void slotPanelCloseButtonClicked();
@@ -157,14 +157,6 @@ public slots:
 
 signals:
     void closed();
-
-    // Set and unset the loop at the RosegardenMainWindow
-    //
-    void setLoop();
-    void unsetLoop();
-    void setLoopStartTime();
-    void setLoopStopTime();
-
     void editTempo(QWidget *);
     void editTimeSignature(QWidget *);
     void editTransportTime(QWidget *);
@@ -234,10 +226,16 @@ private:
 
     int m_sampleRate;
 
+    // Must maintain these local copies to prevent Composition
+    // from using its values when one has been defined here before
+    // the other, or when these are m_loopEnd <= m_loopStart
+    timeT m_loopStart;
+    timeT m_loopEnd;
+
     std::map<std::string, TimeDisplayMode> m_modeMap;
 };
 
- 
+
 
 
 

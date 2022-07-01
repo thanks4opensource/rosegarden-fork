@@ -45,7 +45,8 @@ public:
 
     void setSnapGrid(const SnapGrid *grid);
 
-    LoopRuler* getLoopRuler() { return m_loopRuler; }
+    LoopRuler*   getLoopRuler()   { return m_loopRuler; }
+    MarkerRuler* getMarkerRuler() { return m_markerRuler; }
 
     /**
      * Make connections from the LoopRuler to the document's
@@ -54,7 +55,7 @@ public:
      * LoopRuler's signals up to something yourself.
      */
     void connectRulerToDocPointer(RosegardenDocument *doc);
-    
+
     void setMinimumWidth(int width);
 
     /**

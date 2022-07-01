@@ -12,7 +12,7 @@
   <Menu name="Transport">
     <text>T&amp;ransport</text>
       <!-- JAS need to know how to add Qt::KeypadModifier in Human Readable shortcut for Play 'KP_Enter'-->
-      <Action name="play" text="&amp;Play" icon="transport-play" /> 
+      <Action name="play" text="&amp;Play" icon="transport-play" checked="false" />
       <Action name="stop" text="&amp;Stop" icon="transport-stop" /> 
       <!-- JAS action called "rewind" in rosegardenui.rc.  Is this the same call? -->
       <Action name="playback_pointer_back_bar" text="Re&amp;wind" icon="transport-rewind" />

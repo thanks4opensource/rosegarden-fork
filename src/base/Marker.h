@@ -24,7 +24,7 @@
 // A Marker is a user defined point in a Composition that can be
 // used to define looping points - jump to, make notes at etc.
 //
-// Not to be confused with Composition or Segment start and 
+// Not to be confused with Composition or Segment start and
 // end markers.  Which they probably could be quite easily.
 // I probably should've thought the name through a bit better
 // really..
@@ -36,7 +36,7 @@ namespace Rosegarden
 class Marker : public XmlExportable
 {
 public:
-    Marker():m_time(0), m_name(std::string("<unnamed>")), 
+    Marker():m_time(0), m_name(std::string("<unnamed>")),
              m_description(std::string("<none>")) { m_id = nextSeqVal(); }
 
     Marker(timeT time, const std::string &name,
@@ -48,7 +48,7 @@ public:
         m_name(other.m_name),
         m_description(other.m_description)
             {}
-        
+
     int getID() const { return m_id; }
     timeT getTime() const { return m_time; }
     std::string getName() const { return m_name; }
@@ -63,14 +63,14 @@ public:
 
 protected:
 
-	int      m_id;
-    timeT    m_time;
-    std::string          m_name;
-    std::string          m_description;
+    int          m_id;
+    timeT        m_time;
+    std::string  m_name;
+    std::string  m_description;
 
 private:
-	static int nextSeqVal() { return ++m_sequence; } // assume there won't be concurrency problem
-	static int m_sequence;
+        static int nextSeqVal() { return ++m_sequence; } // assume there won't be concurrency problem
+        static int m_sequence;
 };
 
 }

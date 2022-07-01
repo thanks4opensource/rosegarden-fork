@@ -176,14 +176,22 @@ MatrixViewSegment::segmentDeleted(const Segment *segment)
 void
 MatrixViewSegment::updateElements(timeT from, timeT to)
 {
-    if (!m_viewElementList) return;
-    ViewElementList::iterator i = m_viewElementList->findTime(from);
-    ViewElementList::iterator j = m_viewElementList->findTime(to);
-    while (i != m_viewElementList->end()) {
-        MatrixElement *e = static_cast<MatrixElement *>(*i);
+    if (!m_viewElementList)
+        return;
+
+    ViewElementList::iterator viewElementIter =
+            m_viewElementList->findTime(from);
+    ViewElementList::iterator endIter = m_viewElementList->findTime(to);
+
+    // For each ViewElement in the from-to range...
+    while (viewElementIter != m_viewElementList->end()) {
+        MatrixElement *e = static_cast<MatrixElement *>(*viewElementIter);
+        // Update the item on the display.
         e->reconfigure();
-        if (i == j) break;
-        ++i;
+
+        if (viewElementIter == endIter)
+            break;
+        ++viewElementIter;
     }
 }
 

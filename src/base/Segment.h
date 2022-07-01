@@ -252,7 +252,7 @@ public:
      * Return the start time of the Segment.  For a non-audio
      * Segment, this is the start time of the first event in it.
      */
-    timeT getStartTime() const;
+    timeT getStartTime() const { return m_startTime; }
 
     /**
      * Return the start time of the Segment, clipped so that if there is a
@@ -289,7 +289,7 @@ public:
     /**
      * DO NOT USE THIS METHOD
      * Simple accessor for the m_startTime member. Used by
-     * Composition#setSegmentStartTime
+     * Composition::setSegmentStartTime and RoseXmlHandler::startElement()
      */
     void setStartTimeDataMember(timeT t) { m_startTime = t; }
 
@@ -326,6 +326,11 @@ public:
      * Segment.  This may be earlier than the end() iterator.
      */
     iterator getEndMarker() const;
+
+    /**
+     * Call Composition::updateMinMaxSegmentStartEndTimes()
+     */
+    void updateMinMaxSegmentStartEndTimes();
 
     /**
      * Return true if the given iterator points earlier in the
@@ -422,18 +427,19 @@ public:
      */
     iterator findSingle(Event*);
 
-    const_iterator findSingle(Event *e) const {
-        return const_iterator(((Segment *)this)->findSingle(e));
-    }
-
     /**
      * Returns an iterator pointing to the first element starting at
      * or beyond the given absolute time
      */
-    iterator findTime(timeT time);
+    iterator findTime(timeT time)
+    {
+        Event temp("temp", time, 0, MIN_SUBORDERING);
+        return lower_bound(&temp);
+    }
 
-    const_iterator findTime(timeT time) const {
-        return const_iterator(((Segment *)this)->findTime(time));
+    const_iterator findTimeConst(timeT time) const {
+        Event temp("temp", time, 0, MIN_SUBORDERING);
+        return lower_bound(&temp);
     }
 
     /**
@@ -442,10 +448,6 @@ public:
      * time precedes the first event, not if it follows the last one)
      */
     iterator findNearestTime(timeT time);
-
-    const_iterator findNearestTime(timeT time) const {
-        return const_iterator(((Segment *)this)->findNearestTime(time));
-    }
 
 
     //////
@@ -1115,7 +1117,7 @@ public:
 class ROSEGARDENPRIVATE_EXPORT SegmentHelper
 {
 protected:
-    SegmentHelper(Segment &t) : m_segment(t) { }
+    explicit SegmentHelper(Segment &t) : m_segment(t) { }
     virtual ~SegmentHelper();
 
     typedef Segment::iterator iterator;

@@ -73,6 +73,7 @@ RosegardenSequencer::RosegardenSequencer() :
     m_smallFileSize(256),  // 256 kbytes
     m_loopStart(0, 0),
     m_loopEnd(0, 0),
+    m_loopingMode(LoopingMode::ONE_SHOT),
     m_studio(new MappedStudio()),
     m_transportToken(1),
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
@@ -456,6 +457,11 @@ RosegardenSequencer::setLoop(const RealTime &loopStart,
     m_driver->setLoop(loopStart, loopEnd);
 }
 
+void
+RosegardenSequencer::setLooping(bool active)
+{
+    m_loopingMode = (active ? LoopingMode::CONTINUOUS : LoopingMode::ONE_SHOT);
+}
 
 
 unsigned
@@ -1240,7 +1246,8 @@ RosegardenSequencer::keepPlaying()
     MappedEventList c;
 
     RealTime fetchEnd = m_songPosition + m_readAhead;
-    if (isLooping() && fetchEnd >= m_loopEnd) {
+    if (m_loopingMode == LoopingMode::CONTINUOUS && fetchEnd >= m_loopEnd)
+    {
         fetchEnd = m_loopEnd - RealTime(0, 1);
     }
     if (fetchEnd > m_lastFetchSongPosition) {
@@ -1280,8 +1287,7 @@ RosegardenSequencer::updateClocks()
 
     // Go around the loop if we've reached the end
     //
-    if (isLooping() && newPosition >= m_loopEnd) {
-
+    if (m_loopingMode == LoopingMode::CONTINUOUS && newPosition >= m_loopEnd) {
         RealTime oldPosition = m_songPosition;
 
         // Remove the loop width from the song position and send

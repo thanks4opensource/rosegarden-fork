@@ -153,10 +153,10 @@ ViewElementList::findTime(timeT time)
 }
 
 ViewElementList::iterator
-ViewElementList::findNearestTime(timeT t)
+ViewElementList::findNearestTime(timeT time)
 {
-    iterator i = findTime(t);
-    if (i == end() || (*i)->getViewAbsoluteTime() > t) {
+    iterator i = findTime(time);
+    if (i == end() || (*i)->getViewAbsoluteTime() > time) {
         if (i == begin()) return end();
         else --i;
     }
@@ -164,4 +164,3 @@ ViewElementList::findNearestTime(timeT t)
 }
 
 }
-

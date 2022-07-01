@@ -118,7 +118,7 @@ void
 EventSelection::insertThisEvent(Event *e)
 {
     if (contains(e)) return;
-    
+
     if (e->getAbsoluteTime() < m_beginTime || !m_haveRealStartTime) {
 	m_beginTime = e->getAbsoluteTime();
 	m_haveRealStartTime = true;
@@ -131,9 +131,9 @@ EventSelection::insertThisEvent(Event *e)
     if (eventEndTime > m_endTime) {
 	m_endTime = eventEndTime;
     }
-    
+
     m_segmentEvents.insert(e);
-    
+
     // Notify observers of new selected event
     for (ObserverSet::const_iterator i = m_observers.begin(); i != m_observers.end(); ++i) {
 	(*i)->eventSelected(this, e);
@@ -141,28 +141,35 @@ EventSelection::insertThisEvent(Event *e)
 }
 
 void
-EventSelection::eraseThisEvent(Event *e)
+EventSelection::eraseThisEvent(Event *event)
 {
-    
-    if (!contains(e)) return;  // This probably not needed.
+    // This is probably not needed?  After all, the code below will do nothing
+    // if the event isn't found.
+//    if (!contains(event))
+//        return;
 
-    std::pair<EventContainer::iterator, EventContainer::iterator> 
-	interval = m_segmentEvents.equal_range(e);
+    // There might be multiple Event objects at the same time.  This will
+    // get the range of those.
+    std::pair<EventContainer::iterator, EventContainer::iterator> interval =
+            m_segmentEvents.equal_range(event);
 
-    for (EventContainer::iterator it = interval.first;
-         it != interval.second; ++it) {
+    for (EventContainer::iterator eventIter = interval.first;
+         eventIter != interval.second;
+         ++eventIter) {
 
-        if (*it == e) {
+        // If this is the actual one we want to remove...
+        if (*eventIter == event) {
 
-	    m_segmentEvents.erase(it);
+            eventIter = m_segmentEvents.erase(eventIter);
 
-            // Notify observers of new deselected event
-            for (ObserverSet::const_iterator i = m_observers.begin();
-                    i != m_observers.end(); ++i) {
-                (*i)->eventDeselected(this, e);
-                
+            // Notify observers
+            for (ObserverSet::const_iterator observerIter = m_observers.begin();
+                 observerIter != m_observers.end();
+                 ++observerIter) {
+                (*observerIter)->eventDeselected(this, event);
             }
-            // Exit, since we found one good match.  Don't worry about others.
+
+            // Work is done.
             break;
         }
     }
@@ -173,7 +180,7 @@ EventSelection::addRemoveEvent(Event *e, EventFuncPtr insertEraseFn,
                                bool ties, bool forward)
 {
     const Segment::const_iterator baseSegmentItr = m_originalSegment.find(e);
-    
+
     //if (baseSegmentItr == m_originalSegment.end()) {
     //    RG_DEBUG << "EventSelection::addRemoveEvent(): "
     //             << "Sent event that can not be found in original segment.";
@@ -187,7 +194,7 @@ EventSelection::addRemoveEvent(Event *e, EventFuncPtr insertEraseFn,
 
     timeT eventStartTime = e->getAbsoluteTime();
     timeT eventEndTime = eventStartTime + eventDuration;
-    
+
     // Always add/remove at least the one Event we were called with.
     (this->*insertEraseFn)(e);
 
@@ -195,7 +202,7 @@ EventSelection::addRemoveEvent(Event *e, EventFuncPtr insertEraseFn,
 
     if (!ties) { return counter; }
 
-    
+
     // Now we handle the tied notes themselves.  If the event we're adding is
     // tied, then we iterate forward and back to try to find all of its linked
     // neighbors, and treat them as though they were one unit.  Musically, they
@@ -246,13 +253,13 @@ EventSelection::addRemoveEvent(Event *e, EventFuncPtr insertEraseFn,
             }
         }
     }
-    
+
     // looking BACK:
     if (e->has(BaseProperties::TIED_BACKWARD) && (m_originalSegment.begin() != m_originalSegment.end())) {
 
         long oldPitch = 0;
         if (e->has(BaseProperties::PITCH)) e->get<Int>(BaseProperties::PITCH, oldPitch);
-        
+
         for (Segment::const_iterator si = baseSegmentItr;
                 si != m_originalSegment.begin();) {
 
@@ -292,13 +299,13 @@ EventSelection::addRemoveEvent(Event *e, EventFuncPtr insertEraseFn,
 }
 
 void
-EventSelection::addObserver(EventSelectionObserver *obs) { 
-    m_observers.push_back(obs); 
+EventSelection::addObserver(EventSelectionObserver *obs) {
+    m_observers.push_back(obs);
 }
 
 void
-EventSelection::removeObserver(EventSelectionObserver *obs) { 
-    m_observers.remove(obs); 
+EventSelection::removeObserver(EventSelectionObserver *obs) {
+    m_observers.remove(obs);
 }
 
 
@@ -327,7 +334,7 @@ EventSelection::removeEvent(Event *e, bool ties, bool forward)
 bool
 EventSelection::contains(Event *e) const
 {
-    std::pair<EventContainer::const_iterator, EventContainer::const_iterator> 
+    std::pair<EventContainer::const_iterator, EventContainer::const_iterator>
 	interval = m_segmentEvents.equal_range(e);
 
     for (EventContainer::const_iterator it = interval.first;
@@ -483,7 +490,7 @@ EventSelection::dump() const
 template <typename ElementInfo>
 void
 TimewiseSelection<ElementInfo>::
-RemoveFromComposition(Composition *composition)
+RemoveFromComposition(Composition *composition) const
 {
     for (typename Container::const_iterator i = begin(); i != end(); ++i) {
         ElementInfo::RemoveFromComposition(composition, *i);
@@ -492,7 +499,7 @@ RemoveFromComposition(Composition *composition)
 
 template <typename ElementInfo>
 void
-TimewiseSelection<ElementInfo>::AddToComposition(Composition *composition)
+TimewiseSelection<ElementInfo>::AddToComposition(Composition *composition) const
 {
     for (typename Container::const_iterator i = begin(); i != end(); ++i) {
         ElementInfo::AddToComposition(composition, *i);
@@ -541,7 +548,7 @@ TimeSignatureSelection::addTimeSignature(timeT t, TimeSignature timeSig)
     m_timeSignatures.insert(timesigcontainer::value_type(t, timeSig));
 }
 void
-TimeSignatureSelection::RemoveFromComposition(Composition *composition)
+TimeSignatureSelection::RemoveFromComposition(Composition *composition) const
 {
     for (TimeSignatureSelection::timesigcontainer::const_iterator i =
                 begin(); i != end(); ++i) {
@@ -551,12 +558,12 @@ TimeSignatureSelection::RemoveFromComposition(Composition *composition)
     }
 }
 void
-TimeSignatureSelection::AddToComposition(Composition *composition)
+TimeSignatureSelection::AddToComposition(Composition *composition) const
 {
     for (TimeSignatureSelection::timesigcontainer::const_iterator i =
                 begin(); i != end(); ++i) {
         composition->addTimeSignature(i->first, i->second);
-    }    
+    }
 }
 
 
@@ -605,7 +612,7 @@ TempoSelection::addTempo(timeT t, tempoT tempo, tempoT targetTempo)
 }
 
 void
-TempoSelection::RemoveFromComposition(Composition *composition)
+TempoSelection::RemoveFromComposition(Composition *composition) const
 {
 
     for (TempoSelection::tempocontainer::const_iterator i = begin();
@@ -616,10 +623,10 @@ TempoSelection::RemoveFromComposition(Composition *composition)
             { composition->removeTempoChange(n); }
     }
 
-}    
-    
+}
+
 void
-TempoSelection::AddToComposition(Composition *composition)
+TempoSelection::AddToComposition(Composition *composition) const
 {
 
     for (TempoSelection::tempocontainer::const_iterator i = begin();

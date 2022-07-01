@@ -54,6 +54,8 @@ class ControlParameter;
  * of any functions carried out from menu and toolbar actions.  It
  * does not manage the editing tools (MatrixWidget does this) or the
  * selection state (MatrixScene does that).
+ *
+ * This class creates and owns the MatrixWidget instance (m_matrixWidget).
  */
 class MatrixView : public EditViewBase,
                    public SelectionManager
@@ -105,6 +107,9 @@ signals:
 
     void noteInsertedFromKeyboard(Segment * segment, int pitch);
 
+public slots:
+    void slotPlaying(bool playing);
+
 protected slots:
     /// Remove a segment from our list when it is deleted from the composition
     void slotSegmentDeleted(Segment *);
@@ -126,8 +131,11 @@ protected slots:
     void slotTriggerSegment();
     void slotRemoveTriggers();
     void slotSelectAll();
-    void slotPreviewSelection();
+    void slotToggleLoopActive();
+    void slotLoopFromSelection();
     void slotClearLoop();
+    void slotLoopButtonClicked();
+    void slotSetLoopingMode(bool continuous);
     void slotClearSelection();
     void slotEscapePressed();
     void slotFilterSelection();
@@ -165,6 +173,7 @@ protected slots:
     void slotToggleTracking();
 
     void slotUpdateMenuStates();
+    void slotRulerSelectionUpdate();
 
     void slotEditCut() override;
     void slotEditCopy() override;

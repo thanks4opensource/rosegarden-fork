@@ -171,7 +171,7 @@ getControlParameter2(const Segment &segment, int ccNumber)
     if (!controllable)
         return nullptr;
 
-    return controllable->getControlParameter(Controller::EventType, ccNumber);
+    return controllable->getControlParameterConst(Controller::EventType, ccNumber);
 }
 
 void
@@ -479,6 +479,9 @@ ControlRulerWidget::addPropertyRuler(const PropertyName &propertyName)
     //     actually does nothing right now.
     connect(controlRuler, &ControlRuler::rulerSelectionChanged,
             this, &ControlRulerWidget::slotChildRulerSelectionChanged);
+    // Forward.
+    connect(controlRuler, &ControlRuler::rulerSelectionUpdate,
+            this, &ControlRulerWidget::rulerSelectionUpdate);
 
     connect(controlRuler, &ControlRuler::showContextHelp,
             this,  &ControlRulerWidget::showContextHelp);

@@ -461,6 +461,9 @@ MatrixWidget::setSegments(RosegardenDocument *document,
     // Forward for MatrixView
     connect(m_controlsWidget, &ControlRulerWidget::childRulerSelectionChanged,
             this, &MatrixWidget::rulerSelectionChanged);
+    // Forward
+    connect(m_controlsWidget, &ControlRulerWidget::rulerSelectionUpdate,
+            this, &MatrixWidget::rulerSelectionUpdate);
 
     connect(m_scene, &MatrixScene::selectionChanged,
             this, &MatrixWidget::selectionChanged);
@@ -491,6 +494,11 @@ MatrixWidget::setSegments(RosegardenDocument *document,
 
     m_topStandardRuler->setSnapGrid(m_scene->getSnapGrid());
     m_bottomStandardRuler->setSnapGrid(m_scene->getSnapGrid());
+
+    m_topStandardRuler->getLoopRuler()->slotSetLoopMarkerStartEnd(
+        comp.getLoopStart(), comp.getLoopEnd());
+    m_bottomStandardRuler->getLoopRuler()->slotSetLoopMarkerStartEnd(
+        comp.getLoopStart(), comp.getLoopEnd());
 
     m_topStandardRuler->connectRulerToDocPointer(document);
     m_bottomStandardRuler->connectRulerToDocPointer(document);

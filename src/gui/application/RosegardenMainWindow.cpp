@@ -154,6 +154,8 @@
 #include "gui/general/LilyPondProcessor.h"
 #include "gui/general/ProjectPackager.h"
 #include "gui/general/PresetHandlerDialog.h"
+#include "gui/rulers/MarkerRuler.h"
+#include "gui/rulers/StandardRuler.h"
 #include "gui/widgets/StartupLogo.h"
 #include "gui/widgets/TmpStatusMsg.h"
 #include "gui/widgets/WarningWidget.h"
@@ -305,11 +307,6 @@ RosegardenMainWindow::RosegardenMainWindow(bool enableSound,
 //  m_deviceManager(),  QPointer inits itself to 0.
     m_warningWidget(nullptr),
     m_cpuMeterTimer(new QTimer(this)),
-    m_loopingAll(false),
-    m_loopAllEndTime(0),
-    m_deferredLoop(false),
-    m_deferredLoopStart(0),
-    m_deferredLoopEnd(0),
     m_endOfLatestSegment(0)
 {
     setAttribute(Qt::WA_DeleteOnClose);
@@ -388,6 +385,10 @@ RosegardenMainWindow::RosegardenMainWindow(bool enableSound,
             m_transport, &TransportDialog::slotRecording);
     connect(m_seqManager, &SequenceManager::signalMetronomeActivated,
             m_transport, &TransportDialog::slotMetronomeActivated);
+
+    // So play button is synced with others (transport dialog, editors)
+    connect(m_seqManager, &SequenceManager::signalPlaying,
+            this, &RosegardenMainWindow::slotPlaying);
 
     // Set up external controller.
     ExternalController::self().connectRMW(this);
@@ -874,6 +875,7 @@ RosegardenMainWindow::setupActions()
     createAction("record", SLOT(slotRecord()));
     createAction("rewindtobeginning", SLOT(slotRewindToBeginning()));
     createAction("fastforwardtoend", SLOT(slotFastForwardToEnd()));
+    createAction("toggle_loop", SLOT(slotLoopButtonClicked()));
     createAction("toggle_tracking", SLOT(slotToggleTracking()));
     createAction("panic", SLOT(slotPanic()));
     createAction("debug_dump_segments", SLOT(slotDebugDump()));
@@ -1241,7 +1243,6 @@ RosegardenMainWindow::setDocument(RosegardenDocument *newDocument)
     //     m_audioManagerDialog = 0;
 
     RosegardenDocument *oldDoc = RosegardenDocument::currentDocument;
-
     RosegardenDocument::currentDocument = newDocument;
 
     updateTitle();
@@ -1285,8 +1286,9 @@ RosegardenMainWindow::setDocument(RosegardenDocument *newDocument)
     connect(RosegardenDocument::currentDocument, &RosegardenDocument::documentModified,
             this, &RosegardenMainWindow::slotUpdateTitle);
 
-    connect(RosegardenDocument::currentDocument, SIGNAL(loopChanged(timeT, timeT)),
-            this, SLOT(slotSetLoop(timeT, timeT)));
+    connect(RosegardenDocument::currentDocument,
+            &RosegardenDocument::loopingModeChanged,
+            this, &RosegardenMainWindow::slotSetLoopingMode);
 
 //    CommandHistory::getInstance()->attachView(actionCollection());        //&&& needed ? how to ?
 
@@ -1356,11 +1358,13 @@ RosegardenMainWindow::setDocument(RosegardenDocument *newDocument)
 
     Composition &comp = RosegardenDocument::currentDocument->getComposition();
 
+
     // Set any loaded loop at the Composition and
     // on the marker on CompositionView and clients
     //
     if (m_seqManager)
-        RosegardenDocument::currentDocument->setLoop(comp.getLoopStart(), comp.getLoopEnd());
+        RosegardenDocument::currentDocument->setLoopRange(comp.getLoopStart(),
+                                                          comp.getLoopEnd());
 
     emit documentLoaded(RosegardenDocument::currentDocument);
 
@@ -1373,6 +1377,12 @@ RosegardenMainWindow::setDocument(RosegardenDocument *newDocument)
     // Readjust canvas size
     //
     m_view->getTrackEditor()->updateCanvasSize();
+
+    // Can't do this in RosegardenMainWindow::createAndSetupTransport()
+    // because document not created yet.
+    connect(RosegardenDocument::currentDocument,
+            &RosegardenDocument::loopingModeChanged,
+            m_transport, &TransportDialog::slotSetLoopingMode);
 
     // Show notes about the composition in a pop up dialog if asked for
     new CommentsPopupDialog(RosegardenDocument::currentDocument, this);
@@ -1616,12 +1626,8 @@ RosegardenMainWindow::createDocumentFromRGFile(
     }
 
     // Create a new blank document
-    RosegardenDocument *newDoc =
-            new RosegardenDocument(this,
-                    m_pluginManager,
-                    true,  // skipAutoload
-                    clearHistory,  // clearCommandHistory
-                    m_useSequencer);  // enableSound
+    RosegardenDocument *newDoc = newDocument(true, clearHistory);
+    newDoc->beginReadFromFile();
 
     // Read the document from the file.
     bool readOk = newDoc->openDocument(
@@ -1646,6 +1652,7 @@ RosegardenMainWindow::createDocumentFromRGFile(
         newDoc->setTitle(fileInfo.fileName());
     }
 
+    newDoc->endReadFromFile();
     return newDoc;
 }
 
@@ -2320,9 +2327,7 @@ RosegardenMainWindow::slotFileClose()
 
     TmpStatusMsg msg(tr("Closing file..."), this);
 
-    if (saveIfModified()) {
-        setDocument(newDocument());
-    }
+    if (saveIfModified()) setDocument(newDocument());
 
     // Don't close the whole view (i.e. Quit), just close the doc.
     //    close();
@@ -2979,12 +2984,10 @@ RosegardenMainWindow::createAndSetupTransport()
     connect(m_transport, &TransportDialog::closed,
             this, &RosegardenMainWindow::slotCloseTransport);
 
-    // Handle loop setting and unsetting from the transport loop button
+    // Handle loop setting and unsetting from the transport loop button, etc.
     //
-
-    connect(m_transport, SIGNAL(setLoop()), SLOT(slotSetLoop()));
-    connect(m_transport, &TransportDialog::unsetLoop, this, &RosegardenMainWindow::slotUnsetLoop);
-    connect(m_transport, &TransportDialog::panic, this, &RosegardenMainWindow::slotPanic);
+    connect(m_transport, &TransportDialog::panic, this,
+            &RosegardenMainWindow::slotPanic);
 
     connect(m_transport, SIGNAL(editTempo(QWidget*)),
             SLOT(slotEditTempo(QWidget*)));
@@ -2994,11 +2997,6 @@ RosegardenMainWindow::createAndSetupTransport()
 
     connect(m_transport, SIGNAL(editTransportTime(QWidget*)),
             SLOT(slotEditTransportTime(QWidget*)));
-
-    // Handle set loop start/stop time buttons.
-    //
-    connect(m_transport, &TransportDialog::setLoopStartTime, this, &RosegardenMainWindow::slotSetLoopStart);
-    connect(m_transport, &TransportDialog::setLoopStopTime, this, &RosegardenMainWindow::slotSetLoopStop);
 }
 
 void
@@ -4237,6 +4235,7 @@ RosegardenMainWindow::createDocumentFromMIDIFile(QString file)
     // Create new document (autoload is inherent)
     //
     RosegardenDocument *newDoc = newDocument();
+    newDoc->beginReadFromFile();
 
     MidiFile midiFile;
 
@@ -4377,6 +4376,7 @@ RosegardenMainWindow::createDocumentFromMIDIFile(QString file)
         comp->addTimeSignature(0, timeSig);
     }
 
+    newDoc->endReadFromFile();
     return newDoc;
 }
 
@@ -4455,6 +4455,7 @@ RosegardenMainWindow::createDocumentFromRG21File(QString file)
     // Inherent autoload
     //
     RosegardenDocument *newDoc = newDocument();
+    newDoc->beginReadFromFile();
 
     RG21Loader rg21Loader(&newDoc->getStudio());
 
@@ -4473,6 +4474,8 @@ RosegardenMainWindow::createDocumentFromRG21File(QString file)
     //
     newDoc->setTitle(QFileInfo(file).fileName());
     newDoc->setAbsFilePath(QFileInfo(file).absoluteFilePath());
+
+    newDoc->endReadFromFile();
 
     return newDoc;
 }
@@ -4552,7 +4555,7 @@ RosegardenMainWindow::createDocumentFromHydrogenFile(QString file)
     // Inherent autoload
     //
     RosegardenDocument *newDoc = newDocument();
-
+    newDoc->beginReadFromFile();
     HydrogenLoader hydrogenLoader(&newDoc->getStudio());
 
     if (!hydrogenLoader.load(file, newDoc->getComposition())) {
@@ -4570,6 +4573,8 @@ RosegardenMainWindow::createDocumentFromHydrogenFile(QString file)
     //
     newDoc->setTitle(QFileInfo(file).fileName());
     newDoc->setAbsFilePath(QFileInfo(file).absoluteFilePath());
+
+    newDoc->endReadFromFile();
 
     return newDoc;
 }
@@ -4650,6 +4655,7 @@ RosegardenMainWindow::createDocumentFromMusicXMLFile(QString file)
     // Inherent autoload
     //
     RosegardenDocument *newDoc = newDocument();
+    newDoc->beginReadFromFile();
 
     MusicXMLLoader musicxmlLoader(&newDoc->getStudio());
 
@@ -4669,6 +4675,8 @@ RosegardenMainWindow::createDocumentFromMusicXMLFile(QString file)
     //
     newDoc->setTitle(QFileInfo(file).fileName());
     newDoc->setAbsFilePath(QFileInfo(file).absoluteFilePath());
+
+    newDoc->endReadFromFile();
 
     return newDoc;
 
@@ -4948,27 +4956,28 @@ RosegardenMainWindow::slotUpdateMonitoring()
 void
 RosegardenMainWindow::slotSetPointerPosition(timeT t)
 {
-    Composition &comp = RosegardenDocument::currentDocument->getComposition();
-    bool stopatEnd = Preferences::getStopAtEnd();
+    RosegardenDocument *doc = RosegardenDocument::currentDocument;
+    Composition &comp = doc->getComposition();
+    bool stopAtEnd = Preferences::getStopAtEnd();
 
-    //RG_DEBUG << "slotSetPointerPosition(): t = " << t;
-    if (m_deferredLoop &&
-        t >= m_deferredLoopStart &&
-        t <= m_deferredLoopEnd) {
-        // now we set the loop
-        RG_DEBUG << "Setting deferred loop";
-        comp.setLooping(true);
-        m_seqManager->setLoop(m_deferredLoopStart, m_deferredLoopEnd);
-        m_deferredLoop = false;
-        m_loopingAll = false;
+    timeT startTime = 0;  // avoid compiler warning, "maybe-unitialized"
+    timeT stopTime  = 0;  //   "      "        "   , "  "  -     "     "
+    if (comp.loopRangeIsActive()) {
+        startTime = comp.getLoopStart();
+        stopTime = comp.getLoopEnd();
+    } else if (stopAtEnd) {
+        startTime = comp.getMinSegmentStartTime();
+        stopTime = comp.getMaxSegmentEndTime();
+    } else {
+        startTime = comp.getStartMarker();
+        stopTime = comp.getEndMarker();
     }
 
     if (m_seqManager) {
         // If we're playing and we're past the end...
-        timeT stopTime = comp.getEndMarker();
-        if (stopatEnd) stopTime = m_endOfLatestSegment;
-        if (m_seqManager->getTransportStatus() == PLAYING  &&
-            t > stopTime) {
+        // Also check startTime in case loop ruler click before start
+        if (m_seqManager->getTransportStatus() == PLAYING &&
+            (t > stopTime || t < startTime)) {
 
             // Stop - automatic stop - not triggered by the user
             doStop(true);
@@ -4979,7 +4988,6 @@ RosegardenMainWindow::slotSetPointerPosition(timeT t)
                 slotSetPointerPosition(stopTime);
 
             return;
-
         }
         // If we're recording and we're near the end...
         if (m_seqManager->getTransportStatus() == RECORDING  &&
@@ -5694,20 +5702,6 @@ RosegardenMainWindow::slotFastForwardToEnd()
     m_seqManager->fastForwardToEnd();
 }
 
-void
-RosegardenMainWindow::slotSetPlayPosition(timeT time)
-{
-    RG_DEBUG << "slotSetPlayPosition(" << time << ")";
-    if (m_seqManager->getTransportStatus() == RECORDING)
-        return ;
-
-    RosegardenDocument::currentDocument->slotSetPointerPosition(time);
-
-    if (m_seqManager->getTransportStatus() == PLAYING)
-        return ;
-
-    slotPlay();
-}
 
 void
 RosegardenMainWindow::slotRecord()
@@ -5799,56 +5793,6 @@ RosegardenMainWindow::slotToggleRecord()
 
 }
 
-void
-RosegardenMainWindow::slotSetLoop(timeT lhs, timeT rhs)
-{
-    RG_DEBUG << "slotSetLoop" << lhs << rhs;
-    QSettings settings;
-    settings.beginGroup(SequencerOptionsConfigGroup);
-    bool loopSong = settings.value("loopentiresong", false).toBool();
-    settings.endGroup();
-    Composition &comp =
-        RosegardenDocument::currentDocument->getComposition();
-
-    try {
-        RosegardenDocument::currentDocument->slotDocumentModified();
-
-        // toggle the loop button
-        getTransport()->LoopButton()->setChecked(true);
-        if (lhs != rhs) {
-            // special case - if the whole song is looping we defer
-            // the loop until we are in the loop range
-            if (m_loopingAll) {
-                RG_DEBUG << "defer looping" << lhs << rhs;
-                m_deferredLoop = true;
-                m_deferredLoopStart = lhs;
-                m_deferredLoopEnd = rhs;
-            } else {
-                comp.setLooping(true);
-                m_seqManager->setLoop(lhs, rhs);
-            }
-
-            enterActionState("have_range"); //@@@ JAS orig. KXMLGUIClient::StateNoReverse
-        } else {
-            if (loopSong && comp.isLooping()) {
-                // we no longer exit looping if the range is
-                // reset. Instead we go to looping the entire song
-                m_loopAllEndTime = comp.getDuration(true);
-                m_seqManager->setLoop(0, m_loopAllEndTime);
-                m_loopingAll = true;
-            } else {
-                // we have no range and we are not looping the whole
-                // song so exit looping
-                comp.setLooping(false);
-                m_seqManager->setLoop(0, 0);
-                getTransport()->LoopButton()->setChecked(false);
-            }
-            leaveActionState("have_range"); //@@@ JAS orig. KXMLGUIClient::StateReverse
-        }
-    } catch (const QString &s) {
-        QMessageBox::critical(this, tr("Rosegarden"), s);
-    }
-}
 
 bool
 RosegardenMainWindow::isUsingSequencer()
@@ -5867,6 +5811,7 @@ RosegardenMainWindow::isSequencerRunning()
 void
 RosegardenMainWindow::slotPlay()
 {
+
     if (!isUsingSequencer())
         return ;
 
@@ -5889,6 +5834,35 @@ RosegardenMainWindow::slotPlay()
     }
 
     try {
+        RosegardenDocument *document = RosegardenDocument::currentDocument;
+        Composition &composition(document->getComposition());
+
+        // Only have to do this when starting to play, not if already
+        // playing and play button is doing "pause".
+        if (m_seqManager->getTransportStatus() == TransportStatus::STOPPED) {
+            timeT position = composition.getPosition(),
+                  minTime,
+                  maxTime;
+
+            if (composition.loopRangeIsActive()) {
+                minTime = composition.getLoopStart();
+                maxTime = composition.getLoopEnd();
+            } else if (Preferences::getStopAtEnd()) {
+                minTime = composition.getMinSegmentStartTime();
+                maxTime = composition.getMaxSegmentEndTime();
+            } else {
+                minTime = composition.getStartMarker();
+                maxTime = composition.getEndMarker();
+            }
+
+            m_seqManager->setLoop(minTime, maxTime);
+
+            // Checking ">=" allows repeated single play at each play press
+            if (position < minTime || position >= maxTime) position = minTime;
+
+            composition.setPosition(position);
+            m_seqManager->jumpTo(composition.getElapsedRealTime(position));
+        }
         m_seqManager->play(); // this will stop playback (pause) if it's already running
     } catch (const QString &s) {
         QMessageBox::critical(this, tr("Rosegarden"), s);
@@ -5897,11 +5871,18 @@ RosegardenMainWindow::slotPlay()
     }
 }
 
+void RosegardenMainWindow::slotPlaying(bool playing)
+{
+    QAction *action = findAction("play");
+    if (!action) return;
+    action->setChecked(playing);
+}
+
 void
 RosegardenMainWindow::slotJumpToTime(RealTime rt)
 {
-    Composition *comp = &RosegardenDocument::currentDocument->getComposition();
-    timeT t = comp->getElapsedTimeForRealTime(rt);
+    Composition &comp(RosegardenDocument::currentDocument->getComposition());
+    timeT t = comp.getElapsedTimeForRealTime(rt);
     RosegardenDocument::currentDocument->slotSetPointerPosition(t);
 }
 
@@ -5935,8 +5916,6 @@ RosegardenMainWindow::doStop(bool autoStop)
     } catch (const Exception &e) {
         QMessageBox::critical(this, tr("Rosegarden"), strtoqstr(e.getMessage()));
     }
-    // cancel any deferred looping
-    m_deferredLoop = false;
 }
 
 void
@@ -5962,102 +5941,18 @@ RosegardenMainWindow::slotFastforward()
         m_seqManager->fastforward();
 }
 
+
 void
-RosegardenMainWindow::slotSetLoop()
+RosegardenMainWindow::slotLoopButtonClicked()
 {
-    RG_DEBUG << "slotSetLoop";
-    // if no loop is stored in the composition and option is set -
-    // loop the whole song
-    QSettings settings;
-    settings.beginGroup(SequencerOptionsConfigGroup);
-    bool loopSong = settings.value("loopentiresong", false).toBool();
-    settings.endGroup();
-
-    Composition &comp =
-        RosegardenDocument::currentDocument->getComposition();
-
-    if (comp.getLoopStart() != comp.getLoopEnd()) {
-        // we have a range set - loop it
-        comp.setLooping(true);
-        RosegardenDocument::currentDocument->setLoop
-            (comp.getLoopStart(), comp.getLoopEnd());
-        m_loopingAll = false;
-    } else {
-        // no range. If the option is set loop the whole song
-        if (loopSong) {
-            m_loopAllEndTime = comp.getDuration(true);
-            m_seqManager->setLoop(0, m_loopAllEndTime);
-            m_loopingAll = true;
-        } else {
-            // attempt to reinstate a stored loop
-            bool reinstated = getView()->getTrackEditor()->reinstateRange();
-            if (! reinstated) {
-                // reset the loop button
-                getTransport()->LoopButton()->setChecked(false);
-            }
-        }
-    }
+    RosegardenDocument::currentDocument->toggleLoopingMode();
 }
 
 void
-RosegardenMainWindow::slotUnsetLoop()
+RosegardenMainWindow::slotSetLoopingMode(bool continuous)
 {
-    m_loopingAll = false;
-
-    Composition &comp =
-        RosegardenDocument::currentDocument->getComposition();
-    comp.setLooping(false);
-    m_seqManager->setLoop(0, 0);
-
-    QSettings settings;
-    settings.beginGroup(SequencerOptionsConfigGroup);
-    bool loopSong = settings.value("loopentiresong", false).toBool();
-    settings.endGroup();
-
-    if (!loopSong) {
-        getView()->getTrackEditor()->hideRange();
-    }
-}
-
-void
-RosegardenMainWindow::slotSetLoopStart()
-{
-    RG_DEBUG << "slotSetLoopStart" <<
-        RosegardenDocument::currentDocument->getComposition().getPosition() <<
-        RosegardenDocument::currentDocument->getComposition().getLoopEnd();
-    // Check so that start time is before endtime, otherwise move up the
-    // endtime to that same pos.
-    if (RosegardenDocument::currentDocument->getComposition().getPosition() < RosegardenDocument::currentDocument->getComposition().getLoopEnd()) {
-        RosegardenDocument::currentDocument->setLoop(RosegardenDocument::currentDocument->getComposition().getPosition(), RosegardenDocument::currentDocument->getComposition().getLoopEnd());
-    } else {
-        RosegardenDocument::currentDocument->setLoop(RosegardenDocument::currentDocument->getComposition().getPosition(), RosegardenDocument::currentDocument->getComposition().getPosition());
-    }
-}
-
-void
-RosegardenMainWindow::slotSetLoopStop()
-{
-    RG_DEBUG << "slotSetLoopStop" <<
-        RosegardenDocument::currentDocument->getComposition().getPosition() <<
-        RosegardenDocument::currentDocument->getComposition().getLoopStart();
-
-    // Check so that end time is after start time, otherwise move up the
-    // start time to that same pos.
-    if (RosegardenDocument::currentDocument->getComposition().getLoopStart() < RosegardenDocument::currentDocument->getComposition().getPosition()) {
-        RosegardenDocument::currentDocument->setLoop(RosegardenDocument::currentDocument->getComposition().getLoopStart(), RosegardenDocument::currentDocument->getComposition().getPosition());
-    } else {
-        RosegardenDocument::currentDocument->setLoop(RosegardenDocument::currentDocument->getComposition().getPosition(), RosegardenDocument::currentDocument->getComposition().getPosition());
-    }
-}
-
-void
-RosegardenMainWindow::toggleLoop()
-{
-    // if a loop is set
-    if (RosegardenDocument::currentDocument->getComposition().isLooping())
-        slotUnsetLoop();
-    else
-        slotSetLoop();
+    QAction *action = findAction("toggle_loop");
+    action->setChecked(continuous);
 }
 
 void
@@ -6408,30 +6303,18 @@ RosegardenMainWindow::slotZoomOut()
     m_zoomSlider->decrement();
 }
 
-void
-RosegardenMainWindow::slotAddMarker(timeT time)
-{
-    AddMarkerCommand *command =
-        new AddMarkerCommand(&RosegardenDocument::currentDocument->getComposition(),
-                             time,
-                            qStrToStrUtf8(tr("new marker")),
-                            qStrToStrUtf8(tr("no description")) );
-
-    CommandHistory::getInstance()->addCommand(command);
-}
-
+#if 0  // not used, and out of date with updated RemoveMarkerCommand
 void
 RosegardenMainWindow::slotDeleteMarker(int id, timeT time, QString name, QString description)
 {
-    RemoveMarkerCommand *command =
-        new RemoveMarkerCommand(&RosegardenDocument::currentDocument->getComposition(),
-                                id,
-                                time,
-                                qstrtostr(name),
-                                qstrtostr(description));
+    RosegardenDocument *doc = RosegardenDocument::currentDocument;
+    Composition &comp(doc->getComposition());
 
+    RemoveMarkerCommand *command =
+        new RemoveMarkerCommand(doc, &comp, id);
     CommandHistory::getInstance()->addCommand(command);
 }
+#endif
 
 void
 RosegardenMainWindow::slotDocumentModified(bool m)
@@ -6447,18 +6330,6 @@ RosegardenMainWindow::slotDocumentModified(bool m)
     Composition &comp =
         RosegardenDocument::currentDocument->getComposition();
     m_endOfLatestSegment = comp.getDuration(true);
-
-    // if we are looping the entire song recalculate end position
-    if (m_loopingAll) {
-        // we need this check to avoid infinite recurstion
-        if (m_loopAllEndTime != m_endOfLatestSegment) {
-            m_loopAllEndTime = m_endOfLatestSegment;
-            RG_DEBUG << "slotDocumentModified setting loop all end: " <<
-                m_loopAllEndTime;
-            m_seqManager->setLoop(0, m_loopAllEndTime);
-        }
-    }
-
 }
 
 void
@@ -6553,6 +6424,14 @@ RosegardenMainWindow::leaveActionState(QString stateName)
    ActionFileClient::leaveActionState(stateName);
 }
 
+void
+RosegardenMainWindow::setHaveRange(bool haveRange)
+{
+    if (haveRange) enterActionState("have_range");
+    else           leaveActionState("have_range");
+
+    updateActions();
+}
 
 void
 RosegardenMainWindow::slotTestClipboard()
@@ -7148,6 +7027,9 @@ RosegardenMainWindow::slotOpenMidiMixer()
             this, &RosegardenMainWindow::slotRecord);
     connect(m_midiMixer, &MidiMixerWindow::panic,
             this, &RosegardenMainWindow::slotPanic);
+
+    connect(m_seqManager, &SequenceManager::signalPlaying,
+            m_midiMixer, &MidiMixerWindow::slotPlaying);
 
     m_midiMixer->show();
 }
@@ -8220,7 +8102,7 @@ RosegardenMainWindow::slotImportStudioFromFile(const QString &file)
     // We're only using this document temporarily, so we don't want to let it
     // obliterate the command history!
     bool clearCommandHistory = false, skipAutoload = true;
-    RosegardenDocument *doc = new RosegardenDocument(this, {}, skipAutoload, clearCommandHistory, m_useSequencer);
+    RosegardenDocument *doc = newDocument(skipAutoload, clearCommandHistory);
 
     Studio &oldStudio = RosegardenDocument::currentDocument->getStudio();
     Studio &newStudio = doc->getStudio();
@@ -8438,13 +8320,11 @@ RosegardenMainWindow::slotNewerVersionAvailable(QString v)
 void
 RosegardenMainWindow::slotAddMarker2()
 {
-    AddMarkerCommand *command =
-        new AddMarkerCommand(&RosegardenDocument::currentDocument->getComposition(),
-                             RosegardenDocument::currentDocument->getComposition().getPosition(),
-                             "new marker",
-                             "no description");
-
-    m_view->slotAddCommandToHistory(command);
+    getView()->
+    getTrackEditor()->
+    getTopStandardRuler()->
+    getMarkerRuler()->
+    slotInsertMarkerAtPointer();
 }
 
 void
@@ -8772,11 +8652,15 @@ RosegardenMainWindow::uiUpdateKludge()
                 RosegardenDocument::currentDocument->getComposition().getSelectedTrack());
 }
 
-RosegardenDocument *RosegardenMainWindow::newDocument(bool skipAutoload)
+RosegardenDocument *RosegardenMainWindow::newDocument(bool skipAutoload,
+                                                      bool clearHistory)
 {
-    return new RosegardenDocument(this, m_pluginManager, skipAutoload,
-                                  true, /*clear command history*/
-                                  m_useSequencer);
+    auto newDoc = new RosegardenDocument(this,
+                                         m_pluginManager,
+                                         skipAutoload,
+                                         clearHistory,
+                                         m_useSequencer);
+    return newDoc;
 }
 
 void
@@ -8867,7 +8751,7 @@ RosegardenMainWindow::customEvent(QEvent *event)
     }
 
     if (event->type() == Loop) {
-        toggleLoop();
+        RosegardenDocument::currentDocument->toggleLoopingMode();
         return;
     }
 

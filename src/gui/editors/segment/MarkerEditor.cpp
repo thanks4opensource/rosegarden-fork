@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -71,7 +71,7 @@ MarkerEditor::MarkerEditor(QWidget *parent,
     m_modified(false)
 {
     this->setObjectName("markereditordialog");
-    
+
     QWidget *mainFrame = new QWidget(this);
     QVBoxLayout *mainFrameLayout = new QVBoxLayout;
     setCentralWidget(mainFrame);
@@ -80,14 +80,14 @@ MarkerEditor::MarkerEditor(QWidget *parent,
 
     m_listView = new QTreeWidget(mainFrame);
     mainFrameLayout->addWidget(m_listView);
-    
+
     QStringList sl;
     sl    << tr("Time  ")
         << tr("Text  ")
         << tr("Comment ");
-    
+
     m_listView->setHeaderLabels(sl);
-    
+
     QGroupBox *posGroup = new QGroupBox(tr("Pointer position"), mainFrame);
     mainFrameLayout->addWidget(posGroup);
 
@@ -158,13 +158,13 @@ MarkerEditor::MarkerEditor(QWidget *parent,
     setupActions();
 
 //     CommandHistory::getInstance()->attachView(actionCollection());    //&&&
-    
+
     connect(CommandHistory::getInstance(), &CommandHistory::commandExecuted,
             this, &MarkerEditor::slotUpdate);
 
     connect(m_listView, &QTreeWidget::itemDoubleClicked,
             this, &MarkerEditor::slotEdit);
-    
+
     // qt4 code:
     // on pressed
     connect( m_listView, &QTreeWidget::itemPressed, //item,column
@@ -172,21 +172,21 @@ MarkerEditor::MarkerEditor(QWidget *parent,
 //     // on clicked
 //     connect( m_listView, SIGNAL(itemClicked( QTreeWidgetItem*, int)), //item,column
 //             this, SLOT(slotItemClicked(QTreeWidgetItem*, int)) );
-    
-    
+
+
     // Highlight all columns - enable extended selection mode
     //
     m_listView->setAllColumnsShowFocus(true);
 //     m_listView->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_listView->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    
-//     m_listView->setItemsRenameable(true);    
+
+//     m_listView->setItemsRenameable(true);
     QTreeWidgetItem* item;
     for(int i=0; i< m_listView->topLevelItemCount(); i++){
         item = m_listView->topLevelItem(i);
         item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable);
     }
-    
+
     initDialog();
 
 //     setAutoSaveSettings(MarkerEditorConfigGroup, true);    //&&&
@@ -290,7 +290,7 @@ MarkerEditor::slotUpdate()
 
     if (m_listView->topLevelItemCount() == 0) {
         QTreeWidgetItem *item = new MarkerEditorViewItem(m_listView, 0, QStringList(tr("<none>")));
-        
+
         ((MarkerEditorViewItem *)item)->setFake(true);
         m_listView->addTopLevelItem(item);
 
@@ -317,19 +317,17 @@ MarkerEditor::slotDeleteAll()
 //     do {
     for(int i=0; i< cnt; i++){
         item = m_listView->topLevelItem(i);
-        
+
         MarkerEditorViewItem *ei =
                 dynamic_cast<MarkerEditorViewItem *>(item);
-        
+
         if (!ei || ei->isFake())
                 continue;
 
         RemoveMarkerCommand *rc =
-            new RemoveMarkerCommand(&m_doc->getComposition(),
-                                    ei->getID(),
-                                    ei->getRawTime(),
-                                    qstrtostr(item->text(1)),
-                                    qstrtostr(item->text(2)));
+            new RemoveMarkerCommand(m_doc,
+                                    &m_doc->getComposition(),
+                                    ei->getID());
         command->addCommand(rc);
     };    // while ((item = item->nextSibling()));
 
@@ -341,10 +339,14 @@ MarkerEditor::slotAdd()
 {
     RG_DEBUG << "MarkerEditor::slotAdd";
 
+    Composition &comp(m_doc->getComposition());
+    timeT time = comp.getPosition();
+    QString name(comp.getMusicalTimeStringForAbsoluteTime(time));
+
     AddMarkerCommand *command =
-        new AddMarkerCommand(&m_doc->getComposition(),
-                             m_doc->getComposition().getPosition(),
-                             std::string("new marker"),
+        new AddMarkerCommand(m_doc,
+                             time,
+                             name.toStdString(),
                              std::string("no description"));
 
     addCommandToHistory(command);
@@ -363,11 +365,7 @@ MarkerEditor::slotDelete()
         return ;
 
     RemoveMarkerCommand *command =
-        new RemoveMarkerCommand(&m_doc->getComposition(),
-                                ei->getID(),
-                                ei->getRawTime(),
-                                qstrtostr(item->text(1)),
-                                qstrtostr(item->text(2)));
+        new RemoveMarkerCommand(m_doc, &m_doc->getComposition(), ei->getID());
 
     addCommandToHistory(command);
 
@@ -389,7 +387,7 @@ void
 MarkerEditor::setupActions()
 {
     createAction("file_close", SLOT(slotClose())); //!!! uh-oh, file_close_discard in rc file
-    
+
     m_closeButton->setText(tr("Close"));
     connect(m_closeButton, &QAbstractButton::released, this, &MarkerEditor::slotClose);
 
@@ -397,7 +395,7 @@ MarkerEditor::setupActions()
     settings.beginGroup(MarkerEditorConfigGroup);
 
     int timeMode = settings.value("timemode", 0).toInt() ;
-    
+
     QAction *a;
     a = createAction("time_musical", SLOT(slotMusicalTime()));
     a->setCheckable(true);
@@ -469,7 +467,8 @@ MarkerEditor::slotEdit(QTreeWidgetItem *i, int)
 
     if (dialog.exec() == QDialog::Accepted) {
         ModifyMarkerCommand *command =
-            new ModifyMarkerCommand(&m_doc->getComposition(),
+            new ModifyMarkerCommand(m_doc,
+                                    &m_doc->getComposition(),
                                     item->getID(),
                                     dialog.getOriginalTime(),
                                     dialog.getTime(),
@@ -486,7 +485,7 @@ void
 MarkerEditor::closeEvent(QCloseEvent *e)
 {
     if(e){ };    // remove warning
-    
+
     emit closing();
     close();
 //     KMainWindow::closeEvent(e);

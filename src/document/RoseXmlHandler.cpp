@@ -672,6 +672,8 @@ RoseXmlHandler::startElement(const QString& namespaceURI,
             getComposition().setLoopEnd(loopEnd);
         }
 
+#if 0   // No longer applicable, new Composition::haveLoopRange(),
+        // loopRangeActived(), loopingMode(), etc.
         QString isLooping = atts.value("islooping").toString();
         if (isLooping.isEmpty()) {
             // old document - use start = end
@@ -682,6 +684,7 @@ RoseXmlHandler::startElement(const QString& namespaceURI,
             else
                 getComposition().setLooping(false);
         }
+#endif
 
         QString selectedTrackStr = atts.value("selected").toString();
 

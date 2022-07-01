@@ -491,6 +491,9 @@ NotationWidget::setSegments(RosegardenDocument *document,
     // Forward for NotationView
     connect(m_controlRulerWidget, &ControlRulerWidget::childRulerSelectionChanged,
             this, &NotationWidget::rulerSelectionChanged);
+    // Forward
+    connect(m_controlRulerWidget, &ControlRulerWidget::rulerSelectionUpdate,
+            this, &NotationWidget::rulerSelectionUpdate);
 
     connect(m_scene, &NotationScene::currentViewSegmentChanged,
             m_controlRulerWidget, &ControlRulerWidget::slotSetCurrentViewSegment);
@@ -539,6 +542,13 @@ NotationWidget::setSegments(RosegardenDocument *document,
     m_layout->addWidget(m_tempoRuler, TEMPORULER_ROW, MAIN_COL, 1, 1);
     m_layout->addWidget(m_chordNameRuler, CHORDNAMERULER_ROW, MAIN_COL, 1, 1);
     m_layout->addWidget(m_rawNoteRuler, RAWNOTERULER_ROW, MAIN_COL, 1, 1);
+
+    m_topStandardRuler->getLoopRuler()->slotSetLoopMarkerStartEnd(
+        document->getComposition().getLoopStart(),
+        document->getComposition().getLoopEnd());
+    m_bottomStandardRuler->getLoopRuler()->slotSetLoopMarkerStartEnd(
+        document->getComposition().getLoopStart(),
+        document->getComposition().getLoopEnd());
 
     connect(m_topStandardRuler, &StandardRuler::dragPointerToPosition,
             this, &NotationWidget::slotStandardRulerDrag);

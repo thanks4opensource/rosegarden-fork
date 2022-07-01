@@ -36,6 +36,21 @@ class IsotropicRectItem;
 class IsotropicTextItem;
 class IsotropicDiamondItem;
 
+/// A note on the matrix editor.
+/**
+ * This is more of a "MatrixNoteView" in pattern-speak or a "MatrixNoteItem"
+ * in Qt-speak.
+ *
+ * m_item is the QGraphicsRectItem (or QGraphicsPolygonItem) that is
+ * displayed for a note on the matrix.  reconfigure() creates m_item and
+ * adds it to the scene.  m_item is owned by this class.
+ *
+ * MatrixElements (and ViewElements in general) are stored in
+ * ViewSegment::m_viewElementList.  They are created in
+ * MatrixViewSegment::makeViewElement().
+ *
+ * See MatrixViewSegment.
+ */
 class MatrixElement : public ViewElement
 {
 public:

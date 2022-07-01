@@ -226,7 +226,6 @@ RosegardenMainViewWidget::RosegardenMainViewWidget(bool showTrackLabels,
 RosegardenMainViewWidget::~RosegardenMainViewWidget()
 {
     RG_DEBUG << "dtor";
-
     delete m_rulerScale;
 }
 
@@ -429,6 +428,8 @@ RosegardenMainViewWidget::createNotationView(std::vector<Segment *> segmentsToEd
             notationView, SLOT(slotInsertableNoteOnReceived(int, int)));
     connect(sM, SIGNAL(insertableNoteOffReceived(int, int)),
             notationView, SLOT(slotInsertableNoteOffReceived(int, int)));
+    connect(sM, &SequenceManager::signalPlaying,
+            notationView, &NotationView::slotPlaying);
 
     connect(notationView, &NotationView::stepByStepTargetRequested,
             this, &RosegardenMainViewWidget::stepByStepTargetRequested);
@@ -690,7 +691,7 @@ RosegardenMainViewWidget::createMatrixView(std::vector<Segment *> segmentsToEdit
     connect(matrixView, &MatrixView::stop,
             RosegardenMainWindow::self(), &RosegardenMainWindow::slotStop);
     connect(matrixView, &MatrixView::fastForwardPlayback,
-            RosegardenMainWindow::self(), &RosegardenMainWindow::slotFastforward);
+            RosegardenMainWindow::self(),&RosegardenMainWindow::slotFastforward);
     connect(matrixView, &MatrixView::rewindPlayback,
             RosegardenMainWindow::self(), &RosegardenMainWindow::slotRewind);
     connect(matrixView, &MatrixView::fastForwardPlaybackToEnd,
@@ -719,6 +720,8 @@ RosegardenMainViewWidget::createMatrixView(std::vector<Segment *> segmentsToEdit
             matrixView, SLOT(slotInsertableNoteOnReceived(int, int)));
     connect(sM, SIGNAL(insertableNoteOffReceived(int, int)),
             matrixView, SLOT(slotInsertableNoteOffReceived(int, int)));
+    connect(sM, &SequenceManager::signalPlaying,
+            matrixView, &MatrixView::slotPlaying);
 
     connect(matrixView, &MatrixView::stepByStepTargetRequested,
             this, &RosegardenMainViewWidget::stepByStepTargetRequested);
