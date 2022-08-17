@@ -30,13 +30,12 @@ namespace Rosegarden
 class EventSelection;
 class CommandRegistry;
 
-
 class TieNotesCommand : public BasicCommand
 {
-    Q_DECLARE_TR_FUNCTIONS(Rosegarden::TieNotesCommand)
+    Q_DECLARE_TR_FUNCTIONS(Rosegarden::TieNotesCommand);
 
 public:
-    TieNotesCommand(EventSelection &selection) :
+    explicit TieNotesCommand(EventSelection &selection) :
         BasicCommand(tr("&Tie"), selection, true),
         m_selection(&selection)
     { }

@@ -40,6 +40,8 @@ namespace
     QString afldCustomLocation;
 
     bool chordRulerNonDiatonicChords = false;
+    bool bug1623 = false;
+    bool autoChannels = false;
 }
 
 void Preferences::setSendProgramChangesWhenLooping(bool value)
@@ -248,6 +250,48 @@ bool Preferences::getChordRulerNonDiatonicChords()
     }
 
     return chordRulerNonDiatonicChords;
+}
+
+bool Preferences::getBug1623()
+{
+    static bool firstGet = true;
+
+    if (firstGet) {
+        firstGet = false;
+
+        QSettings settings;
+        settings.beginGroup(ExperimentalConfigGroup);
+        bug1623 = settings.value("bug1623", "false").toBool();
+        // Write it back out so we can find it if it wasn't there.
+        settings.setValue("bug1623", bug1623);
+    }
+
+    return bug1623;
+}
+
+void Preferences::setAutoChannels(bool value)
+{
+    QSettings settings;
+    settings.beginGroup(ExperimentalConfigGroup);
+    settings.setValue("autoChannels", value);
+    autoChannels = value;
+}
+
+bool Preferences::getAutoChannels()
+{
+    static bool firstGet = true;
+
+    if (firstGet) {
+        firstGet = false;
+
+        QSettings settings;
+        settings.beginGroup(ExperimentalConfigGroup);
+        autoChannels = settings.value("autoChannels", "false").toBool();
+        // Write it back out so we can find it if it wasn't there.
+        settings.setValue("autoChannels", autoChannels);
+    }
+
+    return autoChannels;
 }
 
 }

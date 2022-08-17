@@ -37,7 +37,8 @@ namespace Rosegarden
 {
 
 BasicCommand::BasicCommand(const QString &name, Segment &segment,
-                           timeT start, timeT end, bool bruteForceRedo) :
+                           timeT start, timeT end,
+                           bool bruteForceRedoRequired) :
     NamedCommand(name),
     m_segment(&segment),
     m_originalStartTime(segment.getStartTime()),
@@ -59,7 +60,7 @@ BasicCommand::BasicCommand(const QString &name, Segment &segment,
     if (m_endTime == m_startTime)
         ++m_endTime;
 
-    if (bruteForceRedo)
+    if (bruteForceRedoRequired)
         m_redoEvents = QSharedPointer<Segment>
             (new Segment(segment.getType(), m_startTime));
 

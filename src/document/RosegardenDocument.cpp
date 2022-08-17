@@ -125,7 +125,7 @@ RosegardenDocument *RosegardenDocument::currentDocument{};
 
 RosegardenDocument::RosegardenDocument(
         QObject *parent,
-        QSharedPointer<AudioPluginManager> pluginManager,
+        QSharedPointer<AudioPluginManager> audioPluginManager,
         bool skipAutoload,
         bool clearCommandHistory,
         bool enableSound) :
@@ -136,7 +136,7 @@ RosegardenDocument::RosegardenDocument(
     m_audioFileManager(this),
     m_audioPeaksThread(&m_audioFileManager),
     m_seqManager(nullptr),
-    m_pluginManager(pluginManager),
+    m_pluginManager(audioPluginManager),
     m_audioRecordLatency(0, 0),
     m_quickMarkerTime(-1),
     m_autoSavePeriod(0),
@@ -2485,7 +2485,7 @@ RosegardenDocument::prepareAudio()
     RosegardenSequencer::getInstance()->clearAllAudioFiles();
 
     for (AudioFileVector::const_iterator it = m_audioFileManager.cbegin();
-         it != m_audioFileManager.cend(); it++) {
+         it != m_audioFileManager.cend(); ++it) {
 
         bool result = RosegardenSequencer::getInstance()->
             addAudioFile((*it)->getAbsoluteFilePath(),
@@ -2700,18 +2700,18 @@ RosegardenDocument::addRecordMIDISegment(TrackId tid)
     std::string label = "";
 
     Track *track = m_composition.getTrackById(tid);
-    if (track) {
-        if (track->getPresetLabel() != "") {
-            label = track->getPresetLabel();
-        } else if (track->getLabel() == "") {
-            Instrument *instr =
-                m_studio.getInstrumentById(track->getInstrument());
-            if (instr) {
-                label = m_studio.getSegmentName(instr->getId());
-            }
-        } else {
-            label = track->getLabel();
+    if (!track) return;
+
+    if (track->getPresetLabel() != "") {
+        label = track->getPresetLabel();
+    } else if (track->getLabel() == "") {
+        Instrument *instr =
+            m_studio.getInstrumentById(track->getInstrument());
+        if (instr) {
+            label = m_studio.getSegmentName(instr->getId());
         }
+    } else {
+        label = track->getLabel();
     }
 
     recordMIDISegment->setLabel(appendLabel(label,
@@ -2731,12 +2731,11 @@ RosegardenDocument::addRecordMIDISegment(TrackId tid)
 
     m_recordMIDISegments[track->getInstrument()] = recordMIDISegment;
 
-    RosegardenMainViewWidget *w;
     int lenx = m_viewList.count();
     int i = 0;
     //for (w = m_viewList.first(); w != 0; w = m_viewList.next()) {
     for( i=0; i<lenx; i++ ){
-        w = m_viewList.value( i );
+        RosegardenMainViewWidget *w = m_viewList.value( i );
         w->getTrackEditor()->getTrackButtons()->slotUpdateTracks();
     }
 
@@ -2783,19 +2782,17 @@ RosegardenDocument::addRecordAudioSegment(InstrumentId iid,
     //
     std::string label = "";
 
-    if (recordTrack) {
-        if (recordTrack->getLabel() == "") {
+    if (recordTrack->getLabel() == "") {
 
-            Instrument *instr =
-                m_studio.getInstrumentById(recordTrack->getInstrument());
+        Instrument *instr =
+            m_studio.getInstrumentById(recordTrack->getInstrument());
 
-            if (instr) {
-                label = instr->getName();
-            }
-
-        } else {
-            label = recordTrack->getLabel();
+        if (instr) {
+            label = instr->getName();
         }
+
+    } else {
+        label = recordTrack->getLabel();
     }
 
     recordSegment->setLabel(appendLabel(label, qstrtostr(RosegardenDocument::tr("(recorded)"))));
@@ -2813,12 +2810,11 @@ RosegardenDocument::addRecordAudioSegment(InstrumentId iid,
     RG_DEBUG << "RosegardenDocument::addRecordAudioSegment: adding record segment for instrument " << iid << " on track " << recordTrack->getId();
     m_recordAudioSegments[iid] = recordSegment;
 
-    RosegardenMainViewWidget *w;
     int lenx = m_viewList.count();
     int i = 0;
     //for (w = m_viewList.first(); w != 0; w = m_viewList.next()) {
     for( i=0; i<lenx; i++ ){
-        w = m_viewList.value( i );
+        RosegardenMainViewWidget *w = m_viewList.value( i );
         w->getTrackEditor()->getTrackButtons()->slotUpdateTracks();
     }
 
@@ -2929,11 +2925,11 @@ RosegardenDocument::stopRecordingAudio()
 }
 
 void
-RosegardenDocument::finalizeAudioFile(InstrumentId iid)
+RosegardenDocument::finalizeAudioFile(InstrumentId instrument)
 {
-    RG_DEBUG << "finalizeAudioFile(" << iid << ")";
+    RG_DEBUG << "finalizeAudioFile(" << instrument << ")";
 
-    Segment *recordSegment = m_recordAudioSegments[iid];
+    Segment *recordSegment = m_recordAudioSegments[instrument];
 
     if (!recordSegment) {
         RG_WARNING << "finalizeAudioFile() WARNING: Failed to find segment";
@@ -2943,7 +2939,7 @@ RosegardenDocument::finalizeAudioFile(InstrumentId iid)
     AudioFile *newAudioFile = m_audioFileManager.getAudioFile(
             recordSegment->getAudioFileId());
     if (!newAudioFile) {
-        RG_WARNING << "finalizeAudioFile() WARNING: No audio file found for instrument " << iid << " (audio file id " << recordSegment->getAudioFileId() << ")";
+        RG_WARNING << "finalizeAudioFile() WARNING: No audio file found for instrument " << instrument << " (audio file id " << recordSegment->getAudioFileId() << ")";
         return;
     }
 
@@ -2988,7 +2984,7 @@ RosegardenDocument::finalizeAudioFile(InstrumentId iid)
             newAudioFile->getId());
 
     // clear down
-    m_recordAudioSegments.erase(iid);
+    m_recordAudioSegments.erase(instrument);
     emit audioFileFinalized(recordSegment);
 }
 
@@ -3023,7 +3019,7 @@ RosegardenDocument::clearAllPlugins()
         if ((*it)->getType() == Instrument::Audio) {
             AudioPluginVector::iterator pIt = (*it)->beginPlugins();
 
-            for (; pIt != (*it)->endPlugins(); pIt++) {
+            for (; pIt != (*it)->endPlugins(); ++pIt) {
                 if ((*pIt)->getMappedId() != -1) {
                     if (StudioControl::
                         destroyStudioObject((*pIt)->getMappedId()) == false) {

@@ -17,6 +17,7 @@
 
 #include <QSettings>
 #include <QVariant>
+#include <QString>
 
 namespace Rosegarden
 {
@@ -106,6 +107,11 @@ namespace Preferences
 
     // Experimental
     bool getChordRulerNonDiatonicChords();
+    bool getBug1623();
+
+    void setAutoChannels(bool value);
+    bool getAutoChannels();
+
 }
 
 

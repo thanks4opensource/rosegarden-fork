@@ -28,17 +28,17 @@
 namespace Rosegarden
 {
 
-SegmentResizeFromStartCommand::SegmentResizeFromStartCommand(Segment *s,
-        timeT time) :
-        BasicCommand(getGlobalName(), *s,
-                     std::min(time, s->getStartTime()),
-                     std::max(time, s->getStartTime())),
-        m_segment(s),
-        m_oldStartTime(s->getStartTime()),
-        m_newStartTime(time)
+SegmentResizeFromStartCommand::SegmentResizeFromStartCommand(Segment *segment,
+        timeT newStartTime) :
+        BasicCommand(getGlobalName(), *segment,
+                     std::min(newStartTime, segment->getStartTime()),
+                     std::max(newStartTime, segment->getStartTime())),
+        m_segment(segment),
+        m_oldStartTime(segment->getStartTime()),
+        m_newStartTime(newStartTime)
 {
     RG_DEBUG << "ctor Segment start end" <<
-        s->getStartTime() << s->getEndTime();
+        segment->getStartTime() << segment->getEndTime();
     // nothing else
 }
 

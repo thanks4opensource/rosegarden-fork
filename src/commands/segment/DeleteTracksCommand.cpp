@@ -29,7 +29,7 @@ namespace Rosegarden
 {
 
 DeleteTracksCommand::DeleteTracksCommand(Composition *composition,
-        std::vector<TrackId> trackIds):
+        const std::vector<TrackId>& trackIds):
         NamedCommand(getGlobalName()),
         m_composition(composition),
         m_trackIds(trackIds),

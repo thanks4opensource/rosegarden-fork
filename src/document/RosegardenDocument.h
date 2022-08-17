@@ -234,7 +234,7 @@ public:
     /**
      * merge another document into this one
      */
-    void mergeDocument(RosegardenDocument *doc,
+    void mergeDocument(RosegardenDocument *srcDoc,
                        bool mergeAtEnd,
                        bool mergeTimesAndTempos);
 
@@ -353,7 +353,7 @@ public:
      * These MIDI events come from AlsaDriver::getMappedEventList() in
      * the sequencer thread.
      */
-    void insertRecordedMidi(const MappedEventList &mc);
+    void insertRecordedMidi(const MappedEventList &mC);
 
     /**
      * Update the recording value() -- called regularly from

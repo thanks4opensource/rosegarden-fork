@@ -86,7 +86,7 @@ public:
                             const QString& qName,
                             bool& finished) override;
 
-    bool characters(const QString& ch) override;
+    bool characters(const QString& chars) override;
 
     //--------------- Data members ---------------------------------
 
@@ -105,10 +105,10 @@ ConfigurationXmlSubHandler::ConfigurationXmlSubHandler(const QString &elementNam
 }
 
 bool ConfigurationXmlSubHandler::startElement(const QString&, const QString&,
-                                              const QString& lcName,
+                                              const QString& qName,
                                               const QXmlStreamAttributes& atts)
 {
-    m_propertyName = lcName;
+    m_propertyName = qName;
     m_propertyType = atts.value("type").toString();
 
     if (m_propertyName == "property") {
@@ -188,12 +188,12 @@ bool ConfigurationXmlSubHandler::characters(const QString& chars)
 bool
 ConfigurationXmlSubHandler::endElement(const QString&,
                                        const QString&,
-                                       const QString& lcName,
+                                       const QString& qName,
                                        bool& finished)
 {
     m_propertyName = "";
     m_propertyType = "";
-    finished = (lcName == m_elementName);
+    finished = (qName == m_elementName);
     return true;
 }
 
@@ -2469,10 +2469,10 @@ RoseXmlHandler::endElement(const QString& namespaceURI,
 }
 
 bool
-RoseXmlHandler::characters(const QString& s)
+RoseXmlHandler::characters(const QString& chars)
 {
     if (m_subHandler)
-        return m_subHandler->characters(s);
+        return m_subHandler->characters(chars);
 
     return true;
 }
