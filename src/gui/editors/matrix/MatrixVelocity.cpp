@@ -30,6 +30,8 @@
 #include "MatrixViewSegment.h"
 #include "MatrixMouseEvent.h"
 #include "MatrixTool.h"
+#include "MatrixToolBox.h"
+#include "MatrixResizer.h"
 #include "MatrixScene.h"
 #include "MatrixWidget.h"
 #include "misc/Debug.h"
@@ -40,24 +42,25 @@
 namespace Rosegarden
 {
 
-MatrixVelocity::MatrixVelocity(MatrixWidget *widget) :
-    MatrixTool("matrixvelocity.rc", "MatrixVelocity", widget),
-    m_mouseStartY(0),
+QCursor *MatrixVelocity::m_cursor(nullptr);
+QCursor *MatrixVelocity::m_selectCursor(nullptr);
+
+
+MatrixVelocity::MatrixVelocity(MatrixWidget *widget, MatrixToolBox *toolbox) :
+    MatrixTool("MatrixVelocity", widget, toolbox),
+    m_mouseStartY(0.0),
     m_velocityDelta(0),
-    m_screenPixelsScale(100),
+    m_screenPixelsScale(100.0),
     m_velocityScale(0),
     m_currentElement(nullptr),
     m_event(nullptr),
     m_currentViewSegment(nullptr),
     m_start(false)
 {
-    createAction("select", SLOT(slotSelectSelected()));
-    createAction("draw", SLOT(slotDrawSelected()));
-    createAction("erase", SLOT(slotEraseSelected()));
-    createAction("move", SLOT(slotMoveSelected()));
-    createAction("resize", SLOT(slotResizeSelected()));
-
     createMenu();
+    if (!m_cursor      ) m_cursor       = makeCursor("velocity", 4, 10);
+    if (!m_selectCursor) m_selectCursor = makeCursor("velocity_select_cursor",
+                                                     16, 16);
 }
 
 void
@@ -76,6 +79,8 @@ MatrixVelocity::handleEventRemoved(Event *event)
 void
 MatrixVelocity::handleLeftButtonPress(const MatrixMouseEvent *e)
 {
+    m_isFinished = false;
+
     if (!e->element) return;
 
     if (e->element->getSegment() !=
@@ -120,19 +125,52 @@ MatrixVelocity::handleLeftButtonPress(const MatrixMouseEvent *e)
     m_start = true;
 }
 
+void MatrixVelocity::handleMidButtonPress(const MatrixMouseEvent *event)
+{
+    MatrixTool *resizer = dynamic_cast<MatrixTool*>(
+                            m_toolbox->getTool(MatrixResizer::ToolName()));
+    if (!resizer) return;    // shouldn't ever happen
+    resizer->setRole(Role::SINGLE_ACTION);
+    m_toolbox->appendDispatchTool(resizer, event);
+    // Resizer might have done appendDispatchTool() of Select or Segment.
+    m_toolbox->getActiveTool()->handleLeftButtonPress(event);
+}
+
+bool
+MatrixVelocity::handleKeyPress(const MatrixMouseEvent *e, const int key)
+{
+    if (!m_isFinished || key != ALTERNATE_TOOL_QT_KEY)
+        return false;
+
+    if (m_role == Role::OVERLAY) {  // from MultiTool
+        m_toolbox->popDispatchTool();
+        return m_toolbox->getActiveTool()->handleKeyPress(e, key);
+    }
+
+    MatrixTool *resizer = dynamic_cast<MatrixTool*>(
+                            m_toolbox->getTool(MatrixResizer::ToolName()));
+    if (!resizer) return false;  // shouldn't ever happen
+    resizer->setRole(Role::PERSISTENT);
+    m_toolbox->appendDispatchTool(resizer, e);
+    return true;
+}
+
 FollowMode
 MatrixVelocity::handleMouseMove(const MatrixMouseEvent *e)
 {
-    setBasicContextHelp();
+    if (!e || (e->buttons == Qt::NoButton && overlaySelectOrSegment(e)))
+        return NO_FOLLOW;
+
+    setContextHelpForPos(e);
 
     if (!e || !m_currentElement || !m_currentViewSegment) {
-        m_mouseStartY = 0;
+        m_mouseStartY = 0.0;
         return NO_FOLLOW;
     }
 
     // Check if left mousebutton is down
     if (!(e->buttons & Qt::LeftButton)) {
-        m_mouseStartY = 0;
+        m_mouseStartY = 0.0;
         return NO_FOLLOW;
     }
 
@@ -142,17 +180,10 @@ MatrixVelocity::handleMouseMove(const MatrixMouseEvent *e)
     } else if ((m_mouseStartY - e->sceneY) < -m_screenPixelsScale) {
         m_velocityScale = -1.0;
     } else {
-        m_velocityScale =
-            (double)(m_mouseStartY - e->sceneY) /
-            (double)(m_screenPixelsScale);
+        m_velocityScale = (m_mouseStartY - e->sceneY) / m_screenPixelsScale;
     }
 
     m_velocityDelta = 128 * m_velocityScale;
-
-        // Preview calculated velocity info on element
-        // Dupe from MatrixMover
-    EventSelection* selection = m_scene->getSelection();
-
 
     // Is a velocity ruler visible ?
     ControlRulerWidget * controlRulerWidget =
@@ -176,6 +207,17 @@ MatrixVelocity::handleMouseMove(const MatrixMouseEvent *e)
     m_start = false;
 
 
+    // Preview calculated velocity info on element
+    // Dupe from MatrixMover
+    EventSelection* selection = m_scene->getSelection();
+
+    EventSelection singleSelection(*const_cast<Segment*>(m_currentElement->
+                                                         getSegment()));
+    if (!selection) {
+        if (m_event) singleSelection.addEvent(m_event);
+        selection = &singleSelection;
+    }
+
     int maxVelocity = 0;
     int minVelocity = 127;
 
@@ -198,7 +240,10 @@ MatrixVelocity::handleMouseMove(const MatrixMouseEvent *e)
         velocity += m_velocityDelta;
 
         element->reconfigure(velocity);
+
+#if 0   // t4os: Not necessary
         element->setSelected(true);
+#endif
 
         if (velocity > 127) velocity = 127;
         if (velocity < 0) velocity = 0;
@@ -238,8 +283,10 @@ MatrixVelocity::handleMouseMove(const MatrixMouseEvent *e)
 void
 MatrixVelocity::handleMouseRelease(const MatrixMouseEvent *e)
 {
+    m_isFinished = true;
+
     if (!e || !m_currentElement || !m_currentViewSegment) {
-        m_mouseStartY = 0;
+        m_mouseStartY = 0.0;
         // Mouse position is again related to pitch
         m_widget->showHighlight(true);
         return;
@@ -271,39 +318,70 @@ MatrixVelocity::handleMouseRelease(const MatrixMouseEvent *e)
 
     // Reset the start of mousemove
     m_start = false;
-    m_velocityDelta = m_mouseStartY = 0;
+    m_velocityDelta = 0;
+    m_mouseStartY = 0.0;
     m_currentElement = nullptr;
     m_event = nullptr;
-    setBasicContextHelp();
+
+    MatrixMouseEvent ePrime(*e);
+    m_scene->setMouseEventElement(ePrime);  // might have changed
+    setContextHelpForPos(&ePrime);
 
     // Mouse position is again related to pitch
     m_widget->showHighlight(true);
 }
 
 void
-MatrixVelocity::ready()
+MatrixVelocity::readyAtPos(const MatrixMouseEvent *event)
 {
-    setBasicContextHelp();
-    m_widget->setCanvasCursor(Qt::SizeVerCursor);
+    setCursor();
     m_start = false;
+    m_isFinished = true;
+    if (!overlaySelectOrSegment(event)) setContextHelpForPos(event);
+}
+
+void
+MatrixVelocity::setCursor()
+{
+    if (m_widget) {
+        if (m_cursor) m_widget->setCanvasCursor(m_cursor);
+        else          m_widget->setCanvasCursor(Qt::SizeVerCursor);
+    }
+}
+void
+MatrixVelocity::setSelectCursor()
+{
+    if (m_widget) {
+        if (m_selectCursor) m_widget->setCanvasCursor(m_selectCursor);
+        else                m_widget->setCanvasCursor(Qt::SizeVerCursor);
+    }
 }
 
 void
 MatrixVelocity::stow()
 {
     m_start = false;
-    m_widget->showHighlight(true);
 }
 
-void
-MatrixVelocity::setBasicContextHelp()
+QString
+MatrixVelocity::altToolHelpString()
+const
 {
-    EventSelection *selection = m_scene->getSelection();
-    if (selection && selection->getAddedEvents() > 1) {
-        setContextHelp(tr("Click and drag to scale velocity of selected notes"));
-    } else {
-        setContextHelp(tr("Click and drag to scale velocity of note"));
+    return altToolHelpStringTools(tr("velocity"), tr("resize"));
+}
+
+void MatrixVelocity::setContextHelpForPos(const MatrixMouseEvent *e)
+{
+    if (!e) {
+        setContextHelp(tr("Velocity tool: Move mouse over note or empty "
+                          "area for help."));
+        return;
     }
+
+    moveResizeVelocityContextHelp(e,
+                                  tr("adjust velocity of"),
+                                  tr("adjust velocity of"),
+                                  "");
 }
 
 QString MatrixVelocity::ToolName() { return "velocity"; }

@@ -90,7 +90,9 @@ public:
     virtual timeT getInsertionTime() const;
 
 signals:
+#if 0   // SIGNAL_SLOT_ABUSE
     void editTriggerSegment(int);
+#endif
     void play();
     void stop();
     void rewindPlayback();
@@ -146,7 +148,7 @@ protected slots:
 
     void slotSetPaintTool();
     void slotSetEraseTool();
-    void slotSetSelectTool();
+    void slotSetMultiTool();
     void slotSetMoveTool();
     void slotSetResizeTool();
     void slotSetVelocityTool();
@@ -302,6 +304,8 @@ private:
 
     bool m_Thorn;
     bool m_inChordMode;
+
+    QString m_contextHelp;
 
     int getPitchFromNoteInsertAction(QString name,
                                      Accidental &accidental,

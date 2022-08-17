@@ -17,6 +17,7 @@
 
 #include "MatrixResizer.h"
 
+#include "base/BaseProperties.h"
 #include "base/Event.h"
 #include "base/Segment.h"
 #include "base/Selection.h"
@@ -26,8 +27,10 @@
 #include "commands/notation/NormalizeRestsCommand.h"
 #include "document/CommandHistory.h"
 #include "MatrixElement.h"
+#include "MatrixMover.h"
 #include "MatrixScene.h"
 #include "MatrixTool.h"
+#include "MatrixToolBox.h"
 #include "MatrixWidget.h"
 #include "MatrixViewSegment.h"
 #include "MatrixMouseEvent.h"
@@ -39,18 +42,20 @@
 namespace Rosegarden
 {
 
-MatrixResizer::MatrixResizer(MatrixWidget *parent) :
-    MatrixTool("matrixresizer.rc", "MatrixResizer", parent),
+QCursor *MatrixResizer::m_cursor(nullptr);
+QCursor *MatrixResizer::m_selectCursor(nullptr);
+
+MatrixResizer::MatrixResizer(MatrixWidget *parent, MatrixToolBox *toolbox) :
+    MatrixTool("MatrixResizer", parent, toolbox),
     m_currentElement(nullptr),
     m_event(nullptr),
     m_currentViewSegment(nullptr)
 {
-    createAction("select", SLOT(slotSelectSelected()));
-    createAction("draw", SLOT(slotDrawSelected()));
-    createAction("erase", SLOT(slotEraseSelected()));
-    createAction("move", SLOT(slotMoveSelected()));
-
     createMenu();
+
+    if (!m_cursor      ) m_cursor       = makeCursor("resize_cursor", 11, 11);
+    if (!m_selectCursor) m_selectCursor = makeCursor("resize_select_cursor",
+                                                     16, 16);
 }
 
 void
@@ -72,7 +77,14 @@ MatrixResizer::handleLeftButtonPress(const MatrixMouseEvent *e)
     MATRIX_DEBUG << "MatrixResizer::handleLeftButtonPress() : el = "
                  << e->element;
 
+    m_isFinished = false;
+
     if (!e->element) return;
+
+    // Only resize normal segment notes, or percussion segment notes
+    // if in show percussion durations
+    if (m_widget->isDrumMode() && !m_widget->getShowPercussionDurations())
+        return;
 
     // Only resize active segment's notes
     if (e->element->getSegment() !=
@@ -111,47 +123,68 @@ MatrixResizer::handleLeftButtonPress(const MatrixMouseEvent *e)
     }
 }
 
+void MatrixResizer::handleMidButtonPress(const MatrixMouseEvent *event)
+{
+    MatrixTool *mover = dynamic_cast<MatrixTool*>(
+                            m_toolbox->getTool(MatrixMover::ToolName()));
+    if (!mover) return;  // shouldn't ever happen
+    mover->setRole(Role::SINGLE_ACTION);
+    m_toolbox->appendDispatchTool(mover, event);
+    // Mover might have done appendDispatchTool() of Select or Segment.
+    m_toolbox->getActiveTool()->handleLeftButtonPress(event);
+}
+
+bool
+MatrixResizer::handleKeyPress(const MatrixMouseEvent *e, const int key)
+{
+    if (!m_isFinished || key != ALTERNATE_TOOL_QT_KEY)
+        return false;
+
+    if (m_role == Role::OVERLAY) {  // from MultiTool
+        m_toolbox->popDispatchTool();
+        return m_toolbox->getActiveTool()->handleKeyPress(e, key);
+    }
+
+    MatrixTool *mover = dynamic_cast<MatrixTool*>(
+                            m_toolbox->getTool(MatrixMover::ToolName()));
+    if (!mover) return false;    // shouldn't ever happen
+    mover->setRole(Role::PERSISTENT);
+    m_toolbox->appendDispatchTool(mover, e);
+    return true;
+}
+
 FollowMode
 MatrixResizer::handleMouseMove(const MatrixMouseEvent *e)
 {
-    if (!e) return NO_FOLLOW;
+    if (!e || (e->buttons == Qt::NoButton && overlaySelectOrSegment(e)))
+        return NO_FOLLOW;
 
-    setBasicContextHelp();
+    setContextHelpForPos(e);
 
     if (!m_currentElement || !m_currentViewSegment) return NO_FOLLOW;
 
     if (getSnapGrid()->getSnapSetting() != SnapGrid::NoSnap) {
         setContextHelp(tr("Hold Shift to avoid snapping to beat grid"));
-    } else {
-        clearContextHelp();
     }
-
-    // snap in the closest direction
-    timeT snapTime = e->snappedLeftTime;
-    if (e->snappedRightTime - e->time < e->time - e->snappedLeftTime) {
-        snapTime = e->snappedRightTime;
-    }
-
-    timeT newDuration = snapTime - m_currentElement->getViewAbsoluteTime();
-    timeT durationDiff = newDuration - m_currentElement->getViewDuration();
 
     EventSelection* selection = m_scene->getSelection();
-    if (!selection || selection->getAddedEvents() == 0) return NO_FOLLOW;
+
+    // Can't happen, wouldn't be here if so.
+    if (!selection || selection->getAddedEvents() == 0)
+        return NO_FOLLOW;
+
+    timeT durationDiff = calculateDurationDiff(e);
 
     if (durationDiff == 0) return FOLLOW_HORIZONTAL;
 
-    for (MatrixElement *element : m_currentViewSegment->
-                                    getSelectedElements()) {
+    for (MatrixElement *element : m_currentViewSegment->getSelectedElements()) {
+        // Don't resize notes that are tied to subsequent ones.
+        if (element->event()->has(BaseProperties::TIED_FORWARD)) continue;
+
         timeT t = element->getViewAbsoluteTime();
         timeT d = element->getViewDuration();
 
-        d = d + durationDiff;
-        if (d < 0) {
-            t = t + d;
-            d = -d;
-        } else if (d == 0) {
-            d = getSnapGrid()->getSnapTime(t);
-        }
+        adjustTimeAndDuration(t, d, element->event(), durationDiff);
 
         element->reconfigure(t, d);
     }
@@ -163,19 +196,17 @@ MatrixResizer::handleMouseMove(const MatrixMouseEvent *e)
 void
 MatrixResizer::handleMouseRelease(const MatrixMouseEvent *e)
 {
+    m_isFinished = true;
+
     if (!e || !m_currentElement || !m_currentViewSegment) return;
 
-    // snap in the closest direction
-    timeT snapTime = e->snappedLeftTime;
-    if (e->snappedRightTime - e->time < e->time - e->snappedLeftTime) {
-        snapTime = e->snappedRightTime;
-    }
-
-    timeT newDuration = snapTime - m_currentElement->getViewAbsoluteTime();
-    timeT durationDiff = newDuration - m_currentElement->getViewDuration();
+    timeT durationDiff = calculateDurationDiff(e);
 
     EventSelection *selection = m_scene->getSelection();
-    if (!selection || selection->getAddedEvents() == 0) return;
+
+    // Can't happen, wouldn't be here if so.
+    if (!selection || selection->getAddedEvents() == 0)
+        return;
 
     QString commandLabel = tr("Resize Event");
     if (selection->getAddedEvents() > 1) commandLabel = tr("Resize Events");
@@ -189,33 +220,28 @@ MatrixResizer::handleMouseRelease(const MatrixMouseEvent *e)
 
     EventSelection *newSelection = new EventSelection(segment);
 
+    // Save forward tied notes because not resizing them and
+    // when command is executed they get deleted from the selection
+    // along with the original, pre-resize, note they're tied to.
+    // Can't be an EventSelection because those obey tied note
+    // semantics and notes get deleted from them when their
+    // tied note is removed from newSelection.
+    EventContainer *forwardTiedNotes = new EventContainer();
+
     timeT normalizeStart = selection->getStartTime();
     timeT normalizeEnd = selection->getEndTime();
 
     for (; it != selection->getSegmentEvents().end(); ++it) {
+        // Don't resize notes that are tied to subsequent ones.
+        if ((*it)->has(BaseProperties::TIED_FORWARD)) {
+            forwardTiedNotes->insert(*it);
+            continue;
+        }
 
         timeT t = (*it)->getAbsoluteTime();
         timeT d = (*it)->getDuration();
 
-        MATRIX_DEBUG << "MatrixResizer::handleMouseRelease - "
-                     << "Time = " << t
-                     << ", Duration = " << d;
-
-        d = d + durationDiff;
-        if (d < 0) {
-            t = t + d;
-            d = -d;
-        } else if (d == 0) {
-            d = getSnapGrid()->getSnapTime(t);
-        }
-
-        if (t + d > segment.getEndMarkerTime()) {
-            d = segment.getEndMarkerTime() - t;
-            if (d <= 0) {
-                d = segment.getEndMarkerTime();
-                t = d - getSnapGrid()->getSnapTime(t);
-            }
-        }
+        adjustTimeAndDuration(t, d, *it, durationDiff);
 
         Event *newEvent = new Event(**it, t, d);
 
@@ -234,59 +260,127 @@ MatrixResizer::handleMouseRelease(const MatrixMouseEvent *e)
     macro->addCommand(new NormalizeRestsCommand(segment,
                                                 normalizeStart,
                                                 normalizeEnd));
-
     m_scene->setSelection(nullptr, false);
     CommandHistory::getInstance()->addCommand(macro);
+
+    // Tied forward notes were removed from newSelection during execution
+    // of command (something to do with tied notes being selected together)
+    // so add them back in.
+    for (auto it = forwardTiedNotes->begin() ;
+              it != forwardTiedNotes->end() ;
+            ++it)
+        newSelection->addEvent(*it, false, false);
+
     m_scene->setSelection(newSelection, false);
+
+    delete forwardTiedNotes;
 
 //    m_mParentView->update();
     m_currentElement = nullptr;
     m_event = nullptr;
-    setBasicContextHelp();
+
+    MatrixMouseEvent ePrime(*e);
+    m_scene->setMouseEventElement(ePrime);  // might have changed
+    setContextHelpForPos(&ePrime);
 }
 
-void MatrixResizer::ready()
+timeT
+MatrixResizer::calculateDurationDiff(
+const MatrixMouseEvent *e)
+const
 {
-//    connect(m_parentView->getCanvasView(), SIGNAL(contentsMoving (int, int)),
-//            this, SLOT(slotMatrixScrolled(int, int)));
-    m_widget->setCanvasCursor(Qt::SizeHorCursor);
-    setBasicContextHelp();
-}
-
-void MatrixResizer::stow()
-{
-//    disconnect(m_parentView->getCanvasView(), SIGNAL(contentsMoving (int, int)),
-//               this, SLOT(slotMatrixScrolled(int, int)));
-}
-/*!!!
-void MatrixResizer::slotMatrixScrolled(int newX, int newY)
-{
-    QPoint newP1(newX, newY), oldP1(m_parentView->getCanvasView()->contentsX(),
-                                    m_parentView->getCanvasView()->contentsY());
-
-    QPoint p(newX, newY);
-
-    if (newP1.x() > oldP1.x()) {
-        p.setX(newX + m_parentView->getCanvasView()->visibleWidth());
+    timeT snapTime = e->snappedLeftTime;
+    if (e->snappedRightTime - e->time < e->time - e->snappedLeftTime) {
+        snapTime = e->snappedRightTime;
     }
 
-    p = m_mParentView->inverseMapPoint(p);
-    int newTime = getSnapGrid()->snapX(p.x());
-    handleMouseMove(newTime, 0, 0);
+    timeT newDuration  = snapTime - m_currentElement->getViewAbsoluteTime();
+    timeT durationDiff = newDuration - m_currentElement->getViewDuration();
+
+    return durationDiff;
 }
-*/
-void MatrixResizer::setBasicContextHelp()
+
+void
+MatrixResizer::adjustTimeAndDuration(timeT &time,
+                                     timeT &duration,
+                                     const Event *event,
+                                     const timeT durationDiff)
+const
 {
-    EventSelection *selection = m_scene->getSelection();
-    if (selection && selection->getAddedEvents() > 1) {
-        setContextHelp(tr("Click and drag to resize selected notes"));
-    } else {
-        setContextHelp(tr("Click and drag to resize a note"));
+    duration = duration + durationDiff;
+    if (duration < 0) {
+        if (event->has(BaseProperties::TIED_BACKWARD))
+            // Don't resize last of tied note backwards
+            duration = Note(Note::Shortest).getDuration();
+        else {
+            time = time + duration;
+            duration = -duration;
+        }
+    } else if (duration == 0) {
+        duration = getSnapGrid()->getSnapTime(time);
     }
+
+    Segment &segment = m_currentViewSegment->getSegment();
+
+    if (time + duration > segment.getEndMarkerTime()) {
+        duration = segment.getEndMarkerTime() - time;
+        if (duration <= 0) {
+            duration = segment.getEndMarkerTime();
+            time = duration - getSnapGrid()->getSnapTime(time);
+        }
+    }
+}
+
+void
+MatrixResizer::readyAtPos(const MatrixMouseEvent *event)
+{
+    setCursor();
+    m_isFinished = true;
+    if (!overlaySelectOrSegment(event)) setContextHelpForPos(event);
+}
+
+void
+MatrixResizer::setCursor()
+{
+    if (m_widget) {
+        if (m_cursor) m_widget->setCanvasCursor(m_cursor);
+        else          m_widget->setCanvasCursor(Qt::SizeHorCursor);
+    }
+}
+void
+MatrixResizer::setSelectCursor()
+{
+    if (m_widget) {
+        if (m_selectCursor) m_widget->setCanvasCursor(m_selectCursor);
+        else                m_widget->setCanvasCursor(Qt::SizeHorCursor);
+    }
+}
+
+QString
+MatrixResizer::altToolHelpString()
+const
+{
+    return altToolHelpStringTools(tr("resize"), tr("move"));
+}
+
+void MatrixResizer::setContextHelpForPos(const MatrixMouseEvent *e)
+{
+    if (!e) {
+        setContextHelp(tr("Resize tool: Move mouse over note or empty "
+                          "area for help."));
+        return;
+    }
+
+    if (m_widget->isDrumMode() && !m_widget->getShowPercussionDurations()) {
+        setContextHelp(tr("Turn on \"View -> Notes -> Show percussion "
+                          "durations\" to modify percussion segment notes, "
+                          "or left-click for tool/undo/segment menu."));
+        return;
+    }
+
+    moveResizeVelocityContextHelp(e, tr("resize"), tr("resize"), "");
 }
 
 QString MatrixResizer::ToolName() { return "resizer"; }
 
 }
-
-

@@ -15,43 +15,49 @@
     COPYING included with this distribution for more information.
 */
 
-#ifndef RG_MATRIXERASER_H
-#define RG_MATRIXERASER_H
+#ifndef RG_MATRIXSEGMENT_H
+#define RG_MATRIXSEGMENT_H
 
 #include "MatrixTool.h"
 
 namespace Rosegarden
 {
 
-class MatrixEraser : public MatrixTool
+class Segment;
+
+class MatrixSegment : public MatrixTool
 {
     Q_OBJECT
     friend class MatrixToolBox;
 
 public:
-    void handleLeftButtonPress(const MatrixMouseEvent*)                override;
-    void handleMidButtonPress (const MatrixMouseEvent*)                override;
-    bool handleKeyPress       (const MatrixMouseEvent*, const int key) override;
+    void       handleLeftButtonPress (const MatrixMouseEvent*) override;
+    void       handleMidButtonPress  (const MatrixMouseEvent*) override;
+    void       handleMouseDoubleClick(const MatrixMouseEvent*) override;
+    FollowMode handleMouseMove       (const MatrixMouseEvent*) override;
+    void       handleMouseRelease    (const MatrixMouseEvent*) override;
+    bool       handleKeyPress        (const MatrixMouseEvent*,
+                                      const int key)           override;
 
     void setCursor() override;
-    void setSelectCursor() override;
 
     static QString ToolName();
     QString toolName() const override { return ToolName();}
 
-    virtual QString altToolHelpString() const override;
-
 
 protected:
-    MatrixEraser(MatrixWidget*, MatrixToolBox*);
+    MatrixSegment(MatrixWidget*, MatrixToolBox*);
 
     void readyAtPos(const MatrixMouseEvent *e) override;
-    void setContextHelpForPos(const MatrixMouseEvent *e) override;
+
+    const Segment* segmentIfIsntActive(const MatrixMouseEvent *e) const;
+
+    const Segment *m_segment;
 
 private:
     static QCursor *m_cursor;
-    static QCursor *m_selectCursor;
 };
 
 }
+
 #endif

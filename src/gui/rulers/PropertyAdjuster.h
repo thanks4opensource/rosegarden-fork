@@ -61,7 +61,9 @@ protected:
     PropertyAdjuster(ControlRuler *);
     void setCursor(const ControlMouseEvent *);
 
+#if 0   // t4os: See comment in .cpp file
     void setBasicContextHelp();
+#endif
 
     float m_mouseStartY;
     float m_mouseLastY;

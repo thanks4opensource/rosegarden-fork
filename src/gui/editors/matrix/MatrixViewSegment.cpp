@@ -22,6 +22,7 @@
 
 #include "MatrixElement.h"
 #include "MatrixScene.h"
+#include "MatrixToolBox.h"
 #include "MatrixWidget.h"
 
 #include "base/NotationTypes.h"
@@ -120,6 +121,8 @@ MatrixViewSegment::colourChanged(const Segment *segment)
     if (m_scene->getCurrentSegment() == segment) {
         m_scene->getMatrixWidget()->setSegmentLabelAndChangerColor(segment);
     }
+
+    m_scene->getMatrixWidget()->getToolBox()->updateToolsMenus(segment);
 }
 
 // This is invoked via SegmentObserver notifications.
@@ -129,6 +132,7 @@ MatrixViewSegment::labelChanged(const Segment *segment)
     if (m_scene->getCurrentSegment() == segment) {
         m_scene->getMatrixWidget()->setSegmentTrackInstrumentLabel(segment);
     }
+    m_scene->getMatrixWidget()->getToolBox()->updateToolsMenus(segment);
 }
 
 // This is invoked via SegmentObserver notifications.
@@ -214,6 +218,26 @@ MatrixViewSegment::updateAllColors()
         ++i) {
         MatrixElement *e = static_cast<MatrixElement *>(*i);
         e->setColor();
+    }
+}
+
+void
+MatrixViewSegment::updateTiedUntied(const EventContainer &notes)
+{
+    for (auto elem : *m_viewElementList) {
+        MatrixElement *e = static_cast<MatrixElement*>(elem);
+        if (notes.find(e->event()) != notes.end())
+            e->reconfigure();
+    }
+}
+
+void
+MatrixViewSegment::clearAllSelected()
+{
+    for (auto elem : *m_viewElementList) {
+        MatrixElement *e = static_cast<MatrixElement*>(elem);
+        e->setSelected(false);
+        e->reconfigure();
     }
 }
 

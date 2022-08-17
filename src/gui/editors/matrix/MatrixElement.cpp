@@ -275,10 +275,24 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
     }
 
     setLayoutX(x0);
+    setLayoutY(pitchy);
 
-    // set a tooltip explaining why this event is drawn in a different pattern
-    if (tiedNote && m_noteItem) {
-        m_noteItem->setToolTip(QObject::tr("This event is tied to another event."));
+    // Leaving this in for now, but worried about it.
+    // No Qt removeToolTip(). Is setting to empty QString the same,
+    //   or does that leave empty QString tooltips on all non-tied
+    //   notes (99.99% of them) that otherwise would have no tooltip?
+    // Adding expensive m_onceHadToolTips hack to avoid.
+    // Can't have an m_hadToolTip flag because MatrixElements reuse
+    //   existing m_noteItems from pool so not are not associated
+    //   one-to-one MatrixElement-to-QGraphicsRectItem.
+    if (m_noteItem) {
+        if (tiedNote) {
+            m_noteItem->setToolTip(QObject::tr("This event is tied to "
+                                               "another event."));
+            m_onceHadToolTips.insert(m_noteItem);
+        }
+        else if (m_onceHadToolTips.find(m_noteItem) != m_onceHadToolTips.end())
+            m_noteItem->setToolTip(QString());
     }
 }
 
@@ -290,6 +304,7 @@ MatrixElement::isNote() const
 
 QAbstractGraphicsShapeItem*
 MatrixElement::getActiveItem()
+const
 {
     if (!m_drumDisplay && m_noteItem)
         return dynamic_cast<QAbstractGraphicsShapeItem *>(m_noteItem);
@@ -297,6 +312,19 @@ MatrixElement::getActiveItem()
         return dynamic_cast<QAbstractGraphicsShapeItem *>(m_drumItem);
     else  // safety check, can't happen
         return nullptr;
+}
+
+Qt::BrushStyle
+MatrixElement::tiedNoteFill()
+const
+{
+    // if the note has TIED_FORWARD or TIED_BACK properties, draw it with a
+    // different fill pattern
+    if (event()->has(BaseProperties::TIED_FORWARD) ||
+        event()->has(BaseProperties::TIED_BACKWARD))
+        return Qt::Dense2Pattern;
+    else
+        return Qt::SolidPattern;
 }
 
 void
@@ -322,7 +350,7 @@ MatrixElement::setSelected(bool selected, bool force)
             }
             m_noteSelectItem->setRect(m_noteItem->rect());
             m_noteSelectItem->setPos(m_noteItem->pos());
-            m_noteSelectItem->setBrush(QBrush(selectionColor));
+            m_noteSelectItem->setBrush(selectionColor);
             m_noteSelectItem->setData(MatrixElementData,
                                 QVariant::fromValue((void *)this));
         } else {   // item == m_drumItem
@@ -383,7 +411,7 @@ MatrixElement::setCurrent(bool current)
 
     QColor  color = noteColor();
 
-    item->setBrush(color);
+    item->setBrush(QBrush(color, tiedNoteFill()));
     item->setPen(outlinePen());
 
     item->setZValue(current ? ACTIVE_SEGMENT_NOTE_Z : NORMAL_SEGMENT_NOTE_Z);
@@ -410,7 +438,7 @@ void MatrixElement::setColor()
     QAbstractGraphicsShapeItem *item = getActiveItem();
     if (!item) return;
 
-    item->setBrush(color);
+    item->setBrush(QBrush(color, tiedNoteFill()));
     item->update();
 
     if (m_textItem) m_textItem->setBrush(textColor(color));
@@ -423,11 +451,15 @@ void MatrixElement::setColor()
 
 QPen MatrixElement::outlinePen() const
 {
+#if 0   // t4os
     const QColor outlineColor =
         m_current ?
         GUIPalette::getColour(GUIPalette::MatrixElementBorder) :
         GUIPalette::getColour(GUIPalette::MatrixElementLightBorder);
     return QPen(outlineColor, 0);
+#else
+    return QPen(selectionBorderColor(getActiveItem()), 0);
+#endif
 }
 
 QColor

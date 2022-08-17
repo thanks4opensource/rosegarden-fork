@@ -134,7 +134,11 @@ GUIPalette::GUIPalette()
     m_defaultsMap[StaffConnectingLine] = QColor(192, 192, 192);
     m_defaultsMap[StaffConnectingTerminatingLine] = QColor(128, 128, 128);
 
+#if 0   // t4os
     m_defaultsMap[Pointer] = QColor(Qt::darkBlue);
+#else
+    m_defaultsMap[Pointer] = QColor(Qt::blue);
+#endif
     m_defaultsMap[PointerRuler] = QColor(100, 100, 100);
 
     m_defaultsMap[InsertCursor] = QColor(160, 104, 186);

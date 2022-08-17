@@ -116,6 +116,9 @@ public:
     Segment *getPriorSegment();
     Segment *getNextSegment();
 
+    const std::vector<Segment*> &getSegments() const { return m_segments; }
+
+
     MatrixViewSegment *getCurrentViewSegment();
 
     bool segmentsContainNotes() const;
@@ -147,6 +150,18 @@ public:
     void updateAllSegmentsColors();
 
     void recreatePitchHighlights();
+
+    // For creating a MatrixMouseEvent as needed, e.g. upon keypress
+    // or when editor receives focus. I.e. in situatons other than normal
+    // setupMouseEvent(const QGraphicsSceneMouseEvent*, MatrixMouseEvent&)
+    // used by MatrixScene overrides of  QGraphicsScene::mousePressEvent(),
+    // mouseMoveEvent(), etc.
+    bool setupMouseEvent(MatrixMouseEvent&) const;
+
+    // Commands can add/remove/move ViewElements. This resets
+    // the MatrixMouseEvent::element to what is currently
+    // under the mouse pointer.
+    void setMouseEventElement(MatrixMouseEvent&) const;
 
     // QAbstractGraphicsItems are expensive to construct and destruct,
     // or more specifically to addItem()/removeItem() them to/from the
@@ -204,10 +219,12 @@ public:
     GraphicsItemPool<IsotropicDiamondItem>  graphicsIsotropicDiamondPool;
 
 signals:
+#if 0   // SIGNAL_SLOT_ABUSE
     void mousePressed(const MatrixMouseEvent *e);
     void mouseMoved(const MatrixMouseEvent *e);
     void mouseReleased(const MatrixMouseEvent *e);
     void mouseDoubleClicked(const MatrixMouseEvent *e);
+#endif
 
     void eventRemoved(Event *e);
 
@@ -226,14 +243,31 @@ signals:
     void segmentDeleted(Segment *);
     void sceneDeleted(); // all segments have been removed
 
+public slots:
+    void slotNotesTied  (const EventContainer &notes);
+    void slotNotesUntied(const EventContainer &notes);
+
+#if 0   // Experimental. Respond to finer-grained notifications instead
 protected slots:
     void slotCommandExecuted();
+#endif
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent *) override;
     void mouseMoveEvent(QGraphicsSceneMouseEvent *) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *) override;
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *) override;
+
+#if 0  // Failed experiments to use Alt or Tab for alternate tool switching
+    bool event(QEvent*) override;
+#endif
+#if 0  // Failed experiments to use Alt or Tab for alternate tool switching
+    bool eventFilter(QObject *obj, QEvent *ev) override;
+#endif
+
+    void focusInEvent(QFocusEvent*) override;
+    void keyPressEvent(QKeyEvent*) override;
+    void keyReleaseEvent(QKeyEvent*) override;
 
     // CompositionObserver notifications
     void segmentRemoved(const Composition *, Segment *) override;
@@ -279,7 +313,15 @@ private:
     std::vector<QGraphicsLineItem *> m_verticals;
     std::vector<QGraphicsRectItem *> m_highlights;
 
-    void setupMouseEvent(QGraphicsSceneMouseEvent *, MatrixMouseEvent &) const;
+    void setupMouseEvent(const QGraphicsSceneMouseEvent*,
+                         MatrixMouseEvent&) const;
+    void setupMouseEvent(const QPoint &screenPos,
+                         const QPointF &scenePos,
+                         const Qt::MouseButtons mouseButtons,
+                         const Qt::KeyboardModifiers keyboardModifiers,
+                         MatrixMouseEvent &mme) const;
+    void setMouseEventElement(const QPointF &scenePos,
+                              MatrixMouseEvent &mme) const;
     void recreateLines();
     void recreateTriadHighlights();
     void recreateBlackkeyHighlights();

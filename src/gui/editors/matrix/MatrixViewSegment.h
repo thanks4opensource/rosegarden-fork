@@ -50,6 +50,10 @@ public:
     void updateAll();
     void updateAllColors();
 
+    void updateTiedUntied(const EventContainer &notes);
+
+    void clearAllSelected();
+
     MatrixScene* getMatrixScene() const { return m_scene; }
 
     bool isDrumMode() const { return m_drum; }

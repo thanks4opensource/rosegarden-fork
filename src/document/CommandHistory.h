@@ -105,6 +105,10 @@ public:
     /// get pointer position
     timeT getPointerPosition() const;
 
+    /// accessors
+    unsigned undoStackSize() const { return m_undoStack.size(); }
+    unsigned redoStackSize() const { return m_redoStack.size(); }
+
 public slots:
     /**
      * Checkpoint function that should be called when the document is

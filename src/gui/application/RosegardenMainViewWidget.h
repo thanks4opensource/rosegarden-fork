@@ -300,9 +300,13 @@ private:
                             bool defaultOnly, bool selectedOnly);
 
 
+#if 0   // Now done in RosegardenMainWindow::focusInEvent so always happens
+        // wnen entering main window, not just widget area.
+        // Update: RosegardenMainWindow::changeEvent(), not focusInEvent()
     // QWidget override
     // For doing RosegardenSequencer::unSetTrackInstrumentOverride()
     void enterEvent(QEvent *event) override;
+#endif
 
 
     //--------------- Data members ---------------------------------

@@ -1917,15 +1917,12 @@ void NotationWidget::setTrackInstrumentOverride()
 }
 
 
-
+#if 0   // Now done in NotationScene::focusInEvent() so always happens
+        // wnen entering notation editor window, not just widget area.
 void NotationWidget::enterEvent(QEvent* /*event*/)
 {
     setTrackInstrumentOverride();
 }
-
-
-
-
+#endif
 
 }
-

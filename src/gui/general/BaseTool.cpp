@@ -68,10 +68,8 @@ QString BaseTool::getCurrentContextHelp() const
 
 void BaseTool::setContextHelp(const QString &help)
 {
-    if (help != m_contextHelp) {
-        m_contextHelp = help;
-        emit showContextHelp(m_contextHelp);
-    }
+    m_contextHelp = help;
+    emit showContextHelp(m_contextHelp);
 }
 
 }

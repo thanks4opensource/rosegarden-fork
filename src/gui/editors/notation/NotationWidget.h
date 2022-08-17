@@ -151,8 +151,11 @@ public:
     //  Valid or inhibit scrolling to kept the cursor in the view
     void setScroll(bool scroll) { m_noScroll = !scroll; }
 
+#if 0   // Now done in NotationScene::focusInEvent() so always happens
+        // wnen entering notation editor window, not just widget area.
     // QWidget override
     void enterEvent(QEvent *event) override;
+#endif
 
     // For doing RosegardenSequencer::setTrackInstrumentOverride()
     void setTrackInstrumentOverride();

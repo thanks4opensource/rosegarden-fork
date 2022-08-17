@@ -648,6 +648,20 @@ RosegardenMainWindow::signalAction(int fd)
     }
 }
 
+#if 0
+        // Now done here instead of in NotationWidget::enterEvent() so
+        // always happens when mouse enters anywhere in notation editor
+        // window (including window manager border), not just widget area.
+        //
+        // No, never gets called. Probably because changeEvent() gets
+        // first. Do this there instead.
+void RosegardenMainWindow::focusInEvent(QFocusEvent*)
+{
+    qDebug() << "RosegardenMainWindow::focusInEvent()";
+    RosegardenSequencer::getInstance()->unSetTrackInstrumentOverride();
+}
+#endif
+
 void
 RosegardenMainWindow::closeEvent(QCloseEvent *event)
 {
@@ -8681,6 +8695,11 @@ RosegardenMainWindow::changeEvent(QEvent *event)
     // If we aren't the active window, bail.
     if (!isActiveWindow())
         return;
+
+    // Always do this. Has to happen here because focusInEvent()
+    // never called as happens in MatrixScene and NotationScene (likely
+    // because intercepted here first.
+    RosegardenSequencer::getInstance()->unSetTrackInstrumentOverride();
 
     ExternalController::self().activeWindow =
             ExternalController::Main;

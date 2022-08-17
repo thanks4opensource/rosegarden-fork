@@ -15,11 +15,16 @@
     COPYING included with this distribution for more information.
 */
 
-#ifndef RG_MATRIXPAINTER_H
-#define RG_MATRIXPAINTER_H
+#ifndef RG_MATRIXSELECT_H
+#define RG_MATRIXSELECT_H
 
+#include <set>
+
+#include <QGraphicsRectItem>
 #include "MatrixTool.h"
 #include <QString>
+#include <QList>
+
 #include "base/Event.h"
 
 
@@ -29,11 +34,11 @@ namespace Rosegarden
 class ViewElement;
 class MatrixViewSegment;
 class MatrixElement;
-class Event;
 class EventSelection;
+class Event;
 
 
-class MatrixPainter : public MatrixTool
+class MatrixSelect : public MatrixTool
 {
     Q_OBJECT
 
@@ -41,35 +46,48 @@ class MatrixPainter : public MatrixTool
 
 public:
     void handleLeftButtonPress(const MatrixMouseEvent *) override;
-    void handleMouseDoubleClick(const MatrixMouseEvent *) override;
-    void handleMidButtonPress (const MatrixMouseEvent *) override;
+    void handleMidButtonPress(const MatrixMouseEvent *) override;
     FollowMode handleMouseMove(const MatrixMouseEvent *) override;
-    void handleMouseRelease   (const MatrixMouseEvent *) override;
-    bool handleKeyPress       (const MatrixMouseEvent*, const int key) override;
-    bool handleKeyRelease     (const MatrixMouseEvent*, const int key) override;
+    void handleMouseRelease(const MatrixMouseEvent *) override;
+    bool handleKeyPress(const MatrixMouseEvent*, const int key) override;
+
+    void stow() override;
 
     void setCursor() override;
-    void setSelectCursor() override;
 
     static QString ToolName();
     QString toolName() const override { return ToolName();}
 
-    virtual QString altToolHelpString() const override;
+
+signals:
+    void gotSelection(); // inform that we've got a new selection
+
 
 protected:
-    MatrixPainter(MatrixWidget*, MatrixToolBox*);
+    MatrixSelect(MatrixWidget*, MatrixToolBox*);
 
     void readyAtPos(const MatrixMouseEvent *e) override;
     void setContextHelpForPos(const MatrixMouseEvent *e) override;
 
-    timeT m_clickTime;
-    MatrixElement *m_currentElement;
+    bool getEventsInRectangle(EventSelection *&selection);
+
+    //--------------- Data members ---------------------------------
+
+    QGraphicsRectItem *m_selectionRect;
+    QPointF m_selectionOrigin;
+    bool m_updateRect;
+
     MatrixViewSegment *m_currentViewSegment;
-    EventSelection *m_doubleClickSelection;
+
+    EventSelection *m_selectionToAddTo;
+    EventSelection *m_eventsInRectangle;
+
+    QList<QGraphicsItem*> m_previousCollisions;
+
 
 private:
+    void setViewCurrentSelection(bool always);
     static QCursor *m_cursor;
-    static QCursor *m_selectCursor;
 };
 
 }

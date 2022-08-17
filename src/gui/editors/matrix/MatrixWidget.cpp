@@ -23,13 +23,7 @@
 
 #include "MatrixScene.h"
 #include "MatrixToolBox.h"
-#include "MatrixTool.h"
-#include "MatrixSelector.h"
-#include "MatrixPainter.h"
-#include "MatrixEraser.h"
 #include "MatrixMover.h"
-#include "MatrixResizer.h"
-#include "MatrixVelocity.h"
 #include "MatrixMouseEvent.h"
 #include "MatrixView.h"
 #include "MatrixViewSegment.h"
@@ -79,6 +73,7 @@
 #include <QGraphicsView>
 #include <QGridLayout>
 #include <QLabel>
+#include <QMessageBox>
 #include <QScrollBar>
 #include <QTimer>
 #include <QGraphicsScene>
@@ -86,9 +81,9 @@
 #include <QPushButton>
 #include <QRegularExpression>
 
+
 namespace Rosegarden
 {
-
 
 // Widgets vertical positions inside the main QGridLayout (m_layout).
 enum {
@@ -112,27 +107,37 @@ enum {
 MatrixWidget::MatrixWidget(MatrixView *matrixView) :
     m_view(matrixView),
     m_document(nullptr),
+    m_layout(nullptr),
     m_scene(nullptr),
     m_panned(nullptr),
     m_playTracking(true),
     m_hZoomFactor(1.0),
     m_vZoomFactor(1.0),
+    m_isCursorShape(true),
+    m_cursor(nullptr),
+    m_cursorShape(Qt::ArrowCursor),
+    m_panner(nullptr),
+    m_changerWidget(nullptr),
+    m_segmentChanger(nullptr),
+    m_lastSegmentChangerValue(0),
+    m_segmentLabel(nullptr),
     m_instrument(nullptr),
     m_localMapping(nullptr),
     m_pitchRuler(nullptr),
+    m_pianoPitchRuler(nullptr),
+    m_percussionPitchRuler(nullptr),
+    m_pitchRulerProxy(nullptr),
     m_pianoScene(nullptr),
     m_pianoView(nullptr),
     m_onlyKeyMapping(false),
     m_hasPercussionSegments(false),
     m_drumMode(false),
-    m_prevPitchRulerType(PrevPitchRulerType::NONE),
     m_firstNote(0),
     m_lastNote(0),
     m_highlightVisible(true),
     m_showNoteNames(false),
     m_showPercussionDurations(false),
     m_toolBox(nullptr),
-    m_currentTool(nullptr),
     m_currentVelocity(100),
     m_lastZoomWasHV(true),
     m_lastH(0),
@@ -336,11 +341,13 @@ MatrixWidget::MatrixWidget(MatrixView *matrixView) :
     connect(m_controlsWidget, &ControlRulerWidget::showContextHelp,
             this, &MatrixWidget::showContextHelp);
 
+#if 0  // Need to delay this until after setSegments() creates MatrixScene()
     MatrixMover *matrixMoverTool = dynamic_cast <MatrixMover *> (m_toolBox->getTool(MatrixMover::ToolName()));
     if (matrixMoverTool) {
         connect(matrixMoverTool, &MatrixMover::hoveredOverNoteChanged,
                 m_controlsWidget, &ControlRulerWidget::slotHoveredOverNoteChanged);
     }
+#endif
 
 //    MatrixVelocity *matrixVelocityTool = dynamic_cast <MatrixVelocity *> (m_toolBox->getTool(MatrixVelocity::ToolName()));
 //    if (matrixVelocityTool) {
@@ -348,8 +355,10 @@ MatrixWidget::MatrixWidget(MatrixView *matrixView) :
 //                m_controlsWidget, SLOT(slotHoveredOverNoteChanged()));
 //    }
 
+#if 0   // SIGNAL_SLOT_ABUSE
     connect(this, &MatrixWidget::toolChanged,
             m_controlsWidget, &ControlRulerWidget::slotSetTool);
+#endif
 
     // Make sure MatrixScene always gets mouse move events even when the
     // button isn't pressed.  This way the keys on the piano keyboard
@@ -375,6 +384,11 @@ MatrixWidget::~MatrixWidget()
     delete m_scene;
     // ??? See above.
     delete m_pianoScene;
+
+    // If both were created, m_pianoScene destructor only deletes
+    // currently active one. Delete the other.
+    if (m_pianoPitchRuler      != m_pitchRuler) delete m_pianoPitchRuler;
+    if (m_percussionPitchRuler != m_pitchRuler) delete m_percussionPitchRuler;
 }
 
 void
@@ -417,6 +431,7 @@ MatrixWidget::setSegments(RosegardenDocument *document,
 
     m_referenceScale = m_scene->getReferenceScale();
 
+#if 0   // SIGNAL_SLOT_ABUSE
     connect(m_scene, &MatrixScene::mousePressed,
             this, &MatrixWidget::slotDispatchMousePress);
 
@@ -428,6 +443,7 @@ MatrixWidget::setSegments(RosegardenDocument *document,
 
     connect(m_scene, &MatrixScene::mouseDoubleClicked,
             this, &MatrixWidget::slotDispatchMouseDoubleClick);
+#endif
 
     connect(m_scene, &MatrixScene::segmentDeleted,
             this, &MatrixWidget::segmentDeleted);
@@ -561,9 +577,14 @@ MatrixWidget::generatePitchRuler()
     m_instrument = m_document->getStudio().
                             getInstrumentById(track->getInstrument());
     if (m_instrument) {
+#if 0   // slotInstrumentGone() does little or nothing, so
+        // removing this so don't repeatedly stack up as
+        // active segment changed away from and back to
+        // same instrument.
         // Make instrument tell us if it gets destroyed.
         connect(m_instrument, &QObject::destroyed,
                 this, &MatrixWidget::slotInstrumentGone);
+#endif
 
         mapping = m_instrument->getKeyMapping();
         if (mapping) {
@@ -577,21 +598,37 @@ MatrixWidget::generatePitchRuler()
 
     if (isPercussion) {
         m_drumMode = true;
-        if (m_prevPitchRulerType == PrevPitchRulerType::PERCUSSION) return;
-        m_prevPitchRulerType = PrevPitchRulerType::PERCUSSION;
+        if (m_pitchRuler && m_pitchRuler == m_percussionPitchRuler) return;
     } else {
         m_drumMode = false;
-        if (m_prevPitchRulerType == PrevPitchRulerType::PIANO) return;
-        m_prevPitchRulerType = PrevPitchRulerType::PIANO;
+        if (m_pitchRuler && m_pitchRuler == m_pianoPitchRuler) return;
     }
 
-    delete m_pianoScene;   // Delete the old m_pitchRuler if any
+    // m_pitchRulerProxy is hack for missing Qt feature and known bug.
+    // Should be about to simply m_pianoScene->removeWidget() but
+    //   no such method.
+    // Whole "proxy" thing required instead, and removeItem doesn't
+    //   resets some internal flag so setWidget(nullptr) required.
+    // See https://bugreports.qt.io/browse/QTBUG-47388
+    if (m_pitchRuler) {
+        m_pitchRuler->disconnect();
+        m_pitchRuler->hide();
+        if (m_pitchRulerProxy) {
+            m_pianoScene->removeItem(m_pitchRulerProxy);
+            m_pitchRulerProxy->setWidget(nullptr);
+        }
+    }
 
-    if (mapping && !m_localMapping->getMap().empty()){
-        m_pitchRuler = new PercussionPitchRuler(nullptr, m_localMapping,
-                                                m_scene->getYResolution());
-    } else {
-        if (m_onlyKeyMapping) {
+    // Have to always make fresh. If not, strange things such as
+    // PercusionPitchRuler getting misaligned/cropped, and
+    // PianoPitchRuler never showing up active segment on startup
+    // is percussion.
+    delete m_pianoScene;
+    m_pianoScene = new QGraphicsScene();
+
+    if (m_drumMode) {
+        if (   !(mapping && !m_localMapping->getMap().empty())
+            &&  m_onlyKeyMapping) {
             // In such a case, a matrix resolution of 11 is used.
             // (See comments in MatrixScene::setSegments().)
             // As the piano keyboard works only with a resolution of 7, an
@@ -599,20 +636,38 @@ MatrixWidget::generatePitchRuler()
             m_localMapping.reset(new MidiKeyMapping());
             m_localMapping->getMap()[0] = "";  // extent() doesn't work?
             m_localMapping->getMap()[127] = "";
-            m_pitchRuler = new PercussionPitchRuler(nullptr, m_localMapping,
-                                                    m_scene->getYResolution());
-        } else {
-            m_pitchRuler = new PianoKeyboard(nullptr);
         }
+
+        if (!m_percussionPitchRuler)
+            m_percussionPitchRuler = new PercussionPitchRuler(
+                                            nullptr,
+                                            m_localMapping,
+                                            m_scene->getYResolution());
+        m_pitchRuler = m_percussionPitchRuler;
+    }
+    else {
+        if (!m_pianoPitchRuler)
+            m_pianoPitchRuler = new PianoKeyboard(nullptr,
+                                                  m_scene->getYResolution());
+        m_pitchRuler = m_pianoPitchRuler;
     }
 
     m_pitchRuler->setFixedSize(m_pitchRuler->sizeHint());
     m_pianoView->setFixedWidth(m_pitchRuler->sizeHint().width());
 
-    m_pianoScene = new QGraphicsScene();
-    QGraphicsProxyWidget *pianoKbd = m_pianoScene->addWidget(m_pitchRuler);
+    m_pitchRulerProxy = m_pianoScene->addWidget(m_pitchRuler);
+    m_pitchRuler->show();
     m_pianoView->setScene(m_pianoScene);
-    m_pianoView->centerOn(pianoKbd);
+
+
+#if 0   // Neither of these fix problems commented at
+        // "m_pianoScene = new QGraphicsScene()" above. Original
+        // was centerOn() but ensureVisible() makes more sense and
+        // doesn't seem to hurt anything.
+     m_pianoView->centerOn(m_pitchRulerProxy);
+#else
+     m_pianoView->ensureVisible(m_pitchRulerProxy, 0, 0);
+#endif
 
     QObject::connect(m_pitchRuler, &PitchRuler::hoveredOverKeyChanged,
                      this, &MatrixWidget::slotHoveredOverKeyChanged);
@@ -870,7 +925,11 @@ MatrixWidget::previousSegment()
     Segment *s = m_scene->getPriorSegment();
     if (s)
         m_scene->setCurrentSegment(s);
+#if 0   // Why would it have changed?
     updatePointer(m_document->getComposition().getPosition());
+#endif
+    clearSelection();
+    generatePitchRuler();
     updateToCurrentSegment(true);  // true == set instrument playback override
 }
 
@@ -883,7 +942,11 @@ MatrixWidget::nextSegment()
     Segment *s = m_scene->getNextSegment();
     if (s)
         m_scene->setCurrentSegment(s);
+#if 0   // Why would it have changed?
     updatePointer(m_document->getComposition().getPosition());
+#endif
+    clearSelection();
+    generatePitchRuler();
     updateToCurrentSegment(true);  // true == set instrument playback override
 }
 
@@ -908,20 +971,7 @@ MatrixWidget::getCurrentDevice()
 void
 MatrixWidget::slotDispatchMousePress(const MatrixMouseEvent *e)
 {
-    if (!m_currentTool)
-        return;
-
-    // Check for left and right *first*
-    if ((e->buttons & Qt::LeftButton)  &&  (e->buttons & Qt::RightButton)) {
-        m_currentTool->handleMidButtonPress(e);
-    } else if (e->buttons & Qt::LeftButton) {
-        m_currentTool->handleLeftButtonPress(e);
-    } else if (e->buttons & Qt::MiddleButton) {
-        m_currentTool->handleMidButtonPress(e);
-    } else if (e->buttons & Qt::RightButton) {
-        m_currentTool->handleRightButtonPress(e);
-    }
-
+    m_toolBox->handleButtonPress(e);
     m_autoScroller.start();
 }
 
@@ -934,10 +984,7 @@ MatrixWidget::slotDispatchMouseMove(const MatrixMouseEvent *e)
     // Needed to remove black trailers left by highlight at high zoom levels.
     m_pianoView->update();
 
-    if (!m_currentTool)
-        return;
-
-    FollowMode followMode = m_currentTool->handleMouseMove(e);
+    FollowMode followMode = m_toolBox->handleMouseMove(e);
 
     m_autoScroller.setFollowMode(followMode);
 }
@@ -946,20 +993,13 @@ void
 MatrixWidget::slotDispatchMouseRelease(const MatrixMouseEvent *e)
 {
     m_autoScroller.stop();
-
-    if (!m_currentTool)
-        return;
-
-    m_currentTool->handleMouseRelease(e);
+    m_toolBox->handleMouseRelease(e);
 }
 
 void
 MatrixWidget::slotDispatchMouseDoubleClick(const MatrixMouseEvent *e)
 {
-    if (!m_currentTool)
-        return;
-
-    m_currentTool->handleMouseDoubleClick(e);
+    m_toolBox->handleMouseDoubleClick(e);
 }
 
 void
@@ -972,10 +1012,21 @@ MatrixWidget::showHighlight(bool visible)
 }
 
 void
-MatrixWidget::setCanvasCursor(QCursor c)
+MatrixWidget::setCanvasCursor(const QCursor *cursor)
 {
-    if (m_panned)
-        m_panned->viewport()->setCursor(c);
+    if (!m_isCursorShape && cursor == m_cursor) return;
+    m_isCursorShape = false;
+    m_cursor = cursor;
+    if (m_panned) m_panned->viewport()->setCursor(*cursor);
+}
+
+void
+MatrixWidget::setCanvasCursor(const Qt::CursorShape cursorShape)
+{
+    if (m_isCursorShape && cursorShape == m_cursorShape) return;
+    m_isCursorShape = true;
+    m_cursorShape = cursorShape;
+    if (m_panned) m_panned->viewport()->setCursor(cursorShape);
 }
 
 QString MatrixWidget::segmentTrackInstrumentLabel(
@@ -1042,64 +1093,7 @@ const QColor *segmentColor)
 void
 MatrixWidget::setTool(QString name)
 {
-    MatrixTool *tool = dynamic_cast<MatrixTool *>(m_toolBox->getTool(name));
-    if (!tool)
-        return;
-
-    if (m_currentTool)
-        m_currentTool->stow();
-
-    m_currentTool = tool;
-    m_currentTool->ready();
-    emit toolChanged(name);
-}
-
-void
-MatrixWidget::setDrawTool()
-{
-    setTool(MatrixPainter::ToolName());
-}
-
-void
-MatrixWidget::setEraseTool()
-{
-    setTool(MatrixEraser::ToolName());
-}
-
-void
-MatrixWidget::setSelectAndEditTool()
-{
-    setTool(MatrixSelector::ToolName());
-
-    MatrixSelector *selector = dynamic_cast<MatrixSelector *>(m_currentTool);
-    if (selector) {
-        //RG_DEBUG << "setSelectAndEditTool(): selector successfully set";
-
-        // ??? This will pile up connections each time we select the arrow
-        //     tool.  Need to use Qt::AutoConnection | Qt::UniqueConnection.
-        //     This will cause connect() to fail.  Not sure how.  Might
-        //     need to check for errors.
-        connect(selector, &MatrixSelector::editTriggerSegment,
-                this, &MatrixWidget::editTriggerSegment);
-    }
-}
-
-void
-MatrixWidget::setMoveTool()
-{
-    setTool(MatrixMover::ToolName());
-}
-
-void
-MatrixWidget::setResizeTool()
-{
-    setTool(MatrixResizer::ToolName());
-}
-
-void
-MatrixWidget::setVelocityTool()
-{
-    setTool(MatrixVelocity::ToolName());
+    m_controlsWidget->slotSetTool(name);
 }
 
 void
@@ -1487,29 +1481,14 @@ MatrixWidget::slotSegmentChangerMoved(int v)
     int steps = v - m_lastSegmentChangerValue;
     if (steps < 0) steps *= -1;
 
-    bool    segmentChanged = true;
     for (int i = 0; i < steps; ++i) {
         if (v < m_lastSegmentChangerValue)
             nextSegment();
         else if (v > m_lastSegmentChangerValue)
             previousSegment();
-        else
-            segmentChanged = false;
     }
 
     m_lastSegmentChangerValue = v;
-
-    // If we are switching between a pitched instrument segment and a pecussion
-    // segment or betwween two percussion segments with different percussion
-    // sets, the pitch ruler may need to be regenerated.
-    //
-    // Only call if necessary, and generatePitchRuler() also checks
-    // if percussion->normal or normal->percussion.
-    if (segmentChanged) {
-        clearSelection();
-        generatePitchRuler();
-        updateToCurrentSegment(true);  // true == set instrument
-    }
 }
 
 void
@@ -1839,7 +1818,8 @@ MatrixWidget::slotZoomOut()
     slotHorizontalThumbwheelMoved(v);
 }
 
-
+#if 0   // Now done in MatrixScene::focusInEvent() so always happens
+        // wnen entering matrix editor window, not just widget area.
 void MatrixWidget::enterEvent(QEvent* /*event*/)
 {
     // Set to play MIDI with current segment's instrument
@@ -1861,6 +1841,7 @@ void MatrixWidget::enterEvent(QEvent* /*event*/)
                                           instrument->getNaturalChannel());
     }
 }
+#endif
 
 
 #if 0
@@ -1869,6 +1850,7 @@ void MatrixWidget::enterEvent(QEvent* /*event*/)
 // bars or lower context help area. Leave enabled, and disable when entering
 // RosegardenMainViewWidget or enable in NotationWidget (or any other
 // editor).
+// Further: Obviated by change documented above, enterEvent() comment.;
 void MatrixWidget::leaveEvent(QEvent* /*event*/)
 {
     RosegardenSequencer::getInstance()->unSetTrackInstrumentOverride();

@@ -335,13 +335,8 @@ ActionData::ActionData() :
     loadData("guitarchordinserter.rc");
     loadData("markereditor.rc");
     loadData("markerruler.rc");
-    loadData("matrixeraser.rc");
-    loadData("matrixmover.rc");
-    loadData("matrixpainter.rc");
     loadData("matrix.rc");
-    loadData("matrixresizer.rc");
-    loadData("matrixselector.rc");
-    loadData("matrixvelocity.rc");
+    loadData("matrixtool.rc");
     loadData("midimixer.rc");
     loadData("mixer.rc");
     loadData("notationeraser.rc");

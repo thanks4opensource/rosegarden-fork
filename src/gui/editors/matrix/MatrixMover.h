@@ -38,9 +38,12 @@ class MatrixMover : public MatrixTool
     friend class MatrixToolBox;
 
 public:
-    void handleLeftButtonPress(const MatrixMouseEvent *) override;
-    FollowMode handleMouseMove(const MatrixMouseEvent *) override;
-    void handleMouseRelease(const MatrixMouseEvent *) override;
+    void       handleLeftButtonPress(const MatrixMouseEvent*) override;
+    void       handleMidButtonPress (const MatrixMouseEvent*) override;
+    FollowMode handleMouseMove      (const MatrixMouseEvent*) override;
+    void       handleMouseRelease   (const MatrixMouseEvent*) override;
+    bool       handleKeyPress       (const MatrixMouseEvent*,
+                                     const int key)           override;
 
     /**
      * Respond to an event being deleted -- it may be the one the tool
@@ -48,10 +51,13 @@ public:
      */
     void handleEventRemoved(Event *event) override;
 
-    void ready() override;
-    void stow() override;
+    void setCursor() override;
+    void setSelectCursor() override;
 
     static QString ToolName();
+    QString toolName() const override { return ToolName();}
+
+    virtual QString altToolHelpString() const override;
 
 signals:
     void hoveredOverNoteChanged(int evPitch, bool haveEvent, timeT evTime);
@@ -60,9 +66,10 @@ protected slots:
 //    void slotMatrixScrolled(int x, int y); //!!! do we need this? probably not
 
 protected:
-    MatrixMover(MatrixWidget *);
+    MatrixMover(MatrixWidget*, MatrixToolBox*);
 
-    void setBasicContextHelp(const MatrixMouseEvent *e);
+    void readyAtPos(const MatrixMouseEvent *e) override;
+    void setContextHelpForPos(const MatrixMouseEvent *e) override;
 
     MatrixElement *m_currentElement;
     /// The Event associated with m_currentElement.
@@ -79,6 +86,10 @@ protected:
 
     timeT m_crntElementCrntTime;
     int m_prevDiffPitch;
+
+private:
+    static QCursor *m_cursor;
+    static QCursor *m_selectCursor;
 };
 
 }

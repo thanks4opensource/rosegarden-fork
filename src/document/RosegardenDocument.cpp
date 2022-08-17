@@ -334,6 +334,21 @@ RosegardenDocument::deleteMarker(Marker *marker)
     emit markerDeleted(marker);
 }
 
+void
+RosegardenDocument::signalNotesTied(
+const EventContainer &notes)
+{
+    emit notesTied(notes);
+}
+
+void
+RosegardenDocument::signalNotesUntied(
+const EventContainer &notes)
+{
+    emit notesUntied(notes);
+}
+
+
 QString RosegardenDocument::getAutoSaveFileName()
 {
     QString filename = getAbsFilePath();

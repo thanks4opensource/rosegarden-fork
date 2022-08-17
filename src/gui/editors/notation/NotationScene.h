@@ -261,10 +261,11 @@ signals:
     void hoveredOverAbsoluteTimeChanged(unsigned int time);
 
 public slots:
-    void slotMouseLeavesView(); 
+    void slotMouseLeavesView();
     void slotCommandExecuted();
 
 protected:
+    void focusInEvent(QFocusEvent *) override;
     void mousePressEvent(QGraphicsSceneMouseEvent *) override;
     void mouseMoveEvent(QGraphicsSceneMouseEvent *) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *) override;
@@ -304,7 +305,7 @@ private:
 
     std::vector<Segment *> m_externalSegments; // I do not own these
     std::vector<Segment *> m_clones; // I own these
-    std::vector<Segment *> m_segments; // The concatenation of m_clones 
+    std::vector<Segment *> m_segments; // The concatenation of m_clones
                                        // and m_externalSegments
     std::vector<NotationStaff *> m_staffs; // I own these
 

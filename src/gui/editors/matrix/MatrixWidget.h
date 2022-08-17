@@ -19,7 +19,6 @@
 #define RG_MATRIX_WIDGET_H
 
 #include "base/Event.h"             // for timeT
-#include "MatrixTool.h"
 #include "MatrixView.h"
 #include "base/MidiTypes.h"         // for MidiByte
 #include "gui/general/AutoScroller.h"
@@ -27,6 +26,7 @@
 
 #include <vector>
 
+#include <QCheckBox>
 #include <QSharedPointer>
 #include <QTimer>
 #include <QWidget>
@@ -50,6 +50,8 @@ class Panner;
 class Panned;
 class EventSelection;
 class PitchRuler;
+class PianoKeyboard;
+class PercussionPitchRuler;
 class MidiKeyMapping;
 class ControlRulerWidget;
 class StandardRuler;
@@ -83,6 +85,7 @@ class Thumbwheel;
  *   - The zoom area, m_HVzoom et al. (knobs in the bottom right corner)
  *
  * This class also owns the editing tools.
+ * t4os: No, moved to MatrixToolBox
  */
 class MatrixWidget : public QWidget,
                      public SelectionManager
@@ -99,6 +102,7 @@ public:
         SEGMENT_AND_VELOCITY
     };
 
+    RosegardenDocument *getDocument() { return m_document; }
     Device *getCurrentDevice();
     MatrixScene *getScene()  { return m_scene; }
     Panner *getPanner() { return m_panner; }
@@ -163,10 +167,11 @@ public:
 
     // Tools
 
-    MatrixToolBox *getToolBox() { return m_toolBox; }
+    MatrixToolBox *getToolBox()       const { return m_toolBox; }
 
     /// Used by the tools to set an appropriate mouse cursor.
-    void setCanvasCursor(QCursor cursor);
+    void setCanvasCursor(const QCursor*);
+    void setCanvasCursor(const Qt::CursorShape);
 
     // Used by updateSegmentChangerBackground() for main segment
     // label bar, and MatrixTool subclasses for help text when
@@ -207,18 +212,7 @@ public:
     void previousSegment();
     /// Move > Next Segment
     void nextSegment();
-    /// Tools > Draw
-    void setDrawTool();
-    /// Tools > Erase
-    void setEraseTool();
-    /// Tools > Select and Edit
-    void setSelectAndEditTool();
-    /// Tools > Move
-    void setMoveTool();
-    /// Tools > Resize
-    void setResizeTool();
-    /// Tools > Velocity
-    void setVelocityTool();
+    void setTool(QString name);
     /// Move > Scroll to Follow Playback
     void setScrollToFollowPlayback(bool);
     /// View > Rulers > Show Velocity Ruler
@@ -228,9 +222,18 @@ public:
     /// View > Rulers > Add Control Ruler
     void addControlRuler(QAction *);
 
-signals:
-    void toolChanged(QString);
+    // MatrixScene Interface
+    // SIGNAL_SLOT_ABUSE
+    // Were "private" but were called externally via signal, so not really
+    // t4os: No longer used as Qt slots, should be renamed to
+    //       dispatchMouse...()
+    void slotDispatchMousePress(const MatrixMouseEvent *);
+    void slotDispatchMouseMove(const MatrixMouseEvent *);
+    void slotDispatchMouseRelease(const MatrixMouseEvent *);
+    void slotDispatchMouseDoubleClick(const MatrixMouseEvent *);
 
+signals:
+#if 0   // SIGNAL_SLOT_ABUSE
     /**
      * Emitted when the user double-clicks on a note that triggers a
      * segment.
@@ -239,6 +242,7 @@ signals:
      * editor on the triggered segment in response to this.
      */
     void editTriggerSegment(int);
+#endif
 
     /// Forwarded from MatrixScene::segmentDeleted().
     void segmentDeleted(Segment *);
@@ -257,7 +261,6 @@ signals:
      */
     void rulerSelectionUpdate();
 
-
     void showContextHelp(const QString &);
 
 public slots:
@@ -272,9 +275,13 @@ protected:
     /// Make sure the rulers are in sync when we are shown.
     void showEvent(QShowEvent *event) override;
 
-    // QWidget override
-    // For doing RosegardenSequencer::setTrackInstrumentOverride()
+#if 0   // Now done in void MatrixScene::focusInEvent() so always happens
+        // wnen entering matrix editor window, not just widget area.
+        // Was:
+        // QWidget override
+        // For doing RosegardenSequencer::setTrackInstrumentOverride()
     void enterEvent(QEvent *event) override;
+#endif
 
 private slots:
     /// Called when the document is modified in some way.
@@ -291,11 +298,14 @@ private slots:
     /// Scroll rulers to sync up with view.
     void slotScrollRulers();
 
+#if 0   // SIGNAL_SLOT_ABUSE
+    // "private" but called externally via signal, so not really
     // MatrixScene Interface
     void slotDispatchMousePress(const MatrixMouseEvent *);
     void slotDispatchMouseMove(const MatrixMouseEvent *);
     void slotDispatchMouseRelease(const MatrixMouseEvent *);
     void slotDispatchMouseDoubleClick(const MatrixMouseEvent *);
+#endif
 
     /// Display the playback position pointer.
     void slotPointerPositionChanged(timeT t);
@@ -388,8 +398,12 @@ private:
     void setVerticalZoomFactor(double factor);
 
 
-    // Pointer
+    /// Cursor
+    bool m_isCursorShape;
+    const QCursor *m_cursor;
+    Qt::CursorShape m_cursorShape;
 
+    // Pointer
     void updatePointer(timeT t);
 
 
@@ -412,14 +426,24 @@ private:
     Instrument *m_instrument; // Studio owns this (TBC)
     /// Key mapping from the Instrument.
     QSharedPointer<MidiKeyMapping> m_localMapping;
+
     /// Either a PercussionPitchRuler or a PianoKeyboard object.
-    PitchRuler *m_pitchRuler; // I own this
+    PitchRuler *m_pitchRuler; // Points to ...
+    PianoKeyboard *m_pianoPitchRuler; // ... one of these ...
+    PercussionPitchRuler *m_percussionPitchRuler;  // ... two (I own both)
+
+    // For Qt bug workaround. See comments in generatePitchRuler() in .cxx file
+    QGraphicsProxyWidget *m_pitchRulerProxy;
+
     /// Contains m_pitchRuler.
     QGraphicsScene *m_pianoScene; // I own this
+
     /// Contains m_pianoScene.
     Panned *m_pianoView; // I own this
+
     /// All Segments only have key mappings.  Use a PercussionPitchRuler.
     bool m_onlyKeyMapping;
+
     /// One or more segments are percussion
     bool m_hasPercussionSegments;
     /// Percussion matrix editor?
@@ -428,10 +452,6 @@ private:
      * the PitchRuler.
      */
     bool m_drumMode;
-
-    // For determining if pitch ruler needs to be regenerated when
-    // changing segments.
-    enum class PrevPitchRulerType {NONE, PIANO, PERCUSSION} m_prevPitchRulerType;
 
     /// First note selected when doing a run up/down the keyboard.
     /**
@@ -465,13 +485,9 @@ private:
     bool m_noteColorAllSegments;
 
     // Tools
-
     MatrixToolBox *m_toolBox; // I own this
-    MatrixTool *m_currentTool; // Toolbox owns this
-    void setTool(QString name);
     /// Used by the MatrixMover and MatrixPainter tools for preview notes.
     int m_currentVelocity;
-
 
     // Zoom Area (to the right of the Panner)
 

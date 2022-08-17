@@ -40,11 +40,20 @@ class MatrixVelocity : public MatrixTool
     friend class MatrixToolBox;
 
 public:
-    void handleLeftButtonPress(const MatrixMouseEvent *) override;
-    FollowMode handleMouseMove(const MatrixMouseEvent *) override;
-    void handleMouseRelease(const MatrixMouseEvent *) override;
+    void       handleLeftButtonPress(const MatrixMouseEvent*) override;
+    void       handleMidButtonPress (const MatrixMouseEvent*) override;
+    FollowMode handleMouseMove      (const MatrixMouseEvent*) override;
+    void       handleMouseRelease   (const MatrixMouseEvent*) override;
+    bool       handleKeyPress       (const MatrixMouseEvent*,
+                                     const int key)           override;
+
+    void setCursor() override;
+    void setSelectCursor() override;
 
     static QString ToolName();
+
+    virtual QString altToolHelpString() const override;
+    QString toolName() const override { return ToolName();}
 
     /**
      * Respond to an event being deleted -- it may be the one the tool
@@ -52,17 +61,20 @@ public:
      */
     void handleEventRemoved(Event *event) override;
 
-    void ready() override;
     void stow() override;
 
-protected:
-    int m_mouseStartY;
-    int m_velocityDelta;
-    int m_screenPixelsScale; // Amount of screen pixels used for scale +-127 1:1 scale ratio
-    double m_velocityScale;
-    MatrixVelocity(MatrixWidget *);
 
-    void setBasicContextHelp();
+protected:
+    MatrixVelocity(MatrixWidget*, MatrixToolBox*);
+
+    void readyAtPos(const MatrixMouseEvent *e) override;
+    void setContextHelpForPos(const MatrixMouseEvent *e) override;
+
+    double m_mouseStartY;
+    int m_velocityDelta;
+    double m_screenPixelsScale;  // Amount of screen pixels used for
+                                 // scale +-127 1:1 scale ratio
+    double m_velocityScale;
 
     MatrixElement *m_currentElement;
     /// The Event associated with m_currentElement.
@@ -70,6 +82,10 @@ protected:
     MatrixViewSegment *m_currentViewSegment;
 
     bool m_start;   // Indicator of the start of a velocity change sequence
+
+private:
+    static QCursor *m_cursor;
+    static QCursor *m_selectCursor;
 };
 
 

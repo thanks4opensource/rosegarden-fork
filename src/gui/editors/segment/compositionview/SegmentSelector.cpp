@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -152,8 +152,13 @@ SegmentSelector::mousePressEvent(QMouseEvent *e)
 
     // *** Adjust Selection
 
-    // Shift key adds to selection.
-    m_segmentAddMode = ((e->modifiers() & Qt::ShiftModifier) != 0);
+    // Shift key or control key adds to selection.
+    // Control added to match common non-RG UI standards.
+    // Needs further work: Control should add/remove single segment,
+    //   shift should add/remove range of segments between last one
+    //   previously selected and current click.
+    m_segmentAddMode = ((e->modifiers() &
+                        (Qt::ShiftModifier | Qt::ControlModifier)) != 0);
 
     // if a segment was clicked
     if (item) {
@@ -473,7 +478,7 @@ SegmentSelector::mouseMoveEvent(QMouseEvent *e)
         // the originals to a new location.
 
         MacroCommand *macroCommand = 0;
-        
+
         if (m_segmentCopyingAsLink) {
             macroCommand = new MacroCommand(
                     SegmentQuickLinkCommand::getGlobalName());

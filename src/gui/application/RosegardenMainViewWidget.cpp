@@ -709,8 +709,10 @@ RosegardenMainViewWidget::createMatrixView(std::vector<Segment *> segmentsToEdit
             this, SLOT(slotEditSegmentsMatrix(std::vector<Segment *>)));
     connect(matrixView, SIGNAL(openInEventList(std::vector<Segment *>)),
             this, SLOT(slotEditSegmentsEventList(std::vector<Segment *>)));
+#if 0  // SIGNAL_SLOT_ABUSE
     connect(matrixView, &MatrixView::editTriggerSegment,
             this, &RosegardenMainViewWidget::slotEditTriggerSegment);
+#endif
     connect(matrixView, &EditViewBase::toggleSolo,
             RosegardenMainWindow::self(), &RosegardenMainWindow::slotToggleSolo);
 
@@ -966,9 +968,14 @@ void RosegardenMainViewWidget::slotSelectTrackSegments(int trackId)
 
     SegmentSelection segments;
 
-    if (QApplication::keyboardModifiers() != Qt::ShiftModifier) {
+    // Control key added to match common non-RG UI standards.
+    // Needs further work: Control should add/remove single track,
+    //   shift should add/remove range of segments between last one
+    //   previously selected and current click.
+    if (QApplication::keyboardModifiers() != Qt::ShiftModifier &&
+        QApplication::keyboardModifiers() != Qt::ControlModifier) {
 
-        // Shift key is not pressed :
+        // Neither shift nor control key is pressed :
 
         // Select all segments on the current track
         // (all the other segments will be deselected)
@@ -981,7 +988,7 @@ void RosegardenMainViewWidget::slotSelectTrackSegments(int trackId)
 
     } else {
 
-        // Shift key is pressed :
+        // Shift or control key is pressed :
 
         // Get the list of the currently selected segments
         segments = getSelection();
@@ -2513,8 +2520,12 @@ void RosegardenMainViewWidget::setSegmentSelectedColorMode(bool v)
     m_trackEditor->getCompositionView()->slotUpdateAll();
 }
 
+#if 0   // Now done in RosegardenMainWindow::focusInEvent() so always
+        // happens wnen entering main window, not just widget area.
+        // Update: RosegardenMainWindow::changeEvent(), not focusInEvent()
 void RosegardenMainViewWidget::enterEvent(QEvent* /*event*/)
 {
+    qDebug() << "RosegardenMainViewWidget::enterEvent()";
     // Matrix, Notation, or other editor might have set override.
     // Restore to normal so track's instrument plays on MIDI input.
     // Editors don't do this on leaveEvent() because doing so would
@@ -2524,5 +2535,6 @@ void RosegardenMainViewWidget::enterEvent(QEvent* /*event*/)
     // i.e. focus stays with window until enters another (RG) window.
     RosegardenSequencer::getInstance()->unSetTrackInstrumentOverride();
 }
+#endif
 
 }

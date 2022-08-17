@@ -21,11 +21,11 @@
 #include "MatrixView.h"
 
 #include "MatrixCommandRegistry.h"
-#include "MatrixWidget.h"
 #include "MatrixElement.h"
-#include "MatrixViewSegment.h"
 #include "MatrixScene.h"
-#include "PianoKeyboard.h"
+#include "MatrixToolBox.h"
+#include "MatrixViewSegment.h"
+#include "MatrixWidget.h"
 
 #include "misc/Debug.h"
 #include "misc/Strings.h"
@@ -176,8 +176,10 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     initRulersToolbar();
     initStatusBar();
 
+#if 0   // SIGNAL_SLOT_ABUSE
     connect(m_matrixWidget, &MatrixWidget::editTriggerSegment,
             this, &MatrixView::editTriggerSegment);
+#endif
 
     connect(m_matrixWidget, &MatrixWidget::showContextHelp,
             this, &MatrixView::slotShowContextHelp);
@@ -202,7 +204,7 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     if (!m_matrixWidget->segmentsContainNotes()) {
         toolAction = findAction("draw");
     } else {
-        toolAction = findAction("select");
+        toolAction = findAction("multitool");
     }
     if (toolAction) {
         MATRIX_DEBUG << "initial state for action '" << toolAction->objectName() << "' is " << toolAction->isChecked();
@@ -456,7 +458,7 @@ MatrixView::setupActions()
 
     setupBaseActions(true);
 
-    createAction("select", SLOT(slotSetSelectTool()));
+    createAction("multitool", SLOT(slotSetMultiTool()));
     createAction("draw", SLOT(slotSetPaintTool()));
     createAction("erase", SLOT(slotSetEraseTool()));
     createAction("move", SLOT(slotSetMoveTool()));
@@ -878,7 +880,10 @@ MatrixView::initStatusBar()
 void
 MatrixView::slotShowContextHelp(const QString &help)
 {
-    statusBar()->showMessage(help, 10000);
+    if (help != m_contextHelp) {
+        m_contextHelp = help;
+        statusBar()->showMessage(help, 10000);
+    }
 }
 
 void
@@ -945,48 +950,57 @@ MatrixView::slotRulerSelectionUpdate()
         return;
 
     crw->slotSelectionChanged(getSelection());
+
+    // Hack because if velocity ruler was used to change event it
+    // "selected" itself (only happens if nothing really selected
+    // when click-adjust in velocity ruler) it leaves event
+    // "pseudo-selected", i.e. with selection border, and subsequently
+    // moves/resizes/etc with tools  but not really (jumps back to
+    // previous state on mouse release).
+    if (!getSelection() || getSelection()->getAddedEvents() == 0)
+        m_matrixWidget->getScene()->getCurrentViewSegment()->clearAllSelected();
 }
 
 void
 MatrixView::slotSetPaintTool()
 {
     if (m_matrixWidget)
-        m_matrixWidget->setDrawTool();
+        m_matrixWidget->getToolBox()->setDrawTool();
 }
 
 void
 MatrixView::slotSetEraseTool()
 {
     if (m_matrixWidget)
-        m_matrixWidget->setEraseTool();
+        m_matrixWidget->getToolBox()->setEraseTool();
 }
 
 void
-MatrixView::slotSetSelectTool()
+MatrixView::slotSetMultiTool()
 {
     if (m_matrixWidget)
-        m_matrixWidget->setSelectAndEditTool();
+        m_matrixWidget->getToolBox()->setMultiTool();
 }
 
 void
 MatrixView::slotSetMoveTool()
 {
     if (m_matrixWidget)
-        m_matrixWidget->setMoveTool();
+        m_matrixWidget->getToolBox()->setMoveTool();
 }
 
 void
 MatrixView::slotSetResizeTool()
 {
     if (m_matrixWidget)
-        m_matrixWidget->setResizeTool();
+        m_matrixWidget->getToolBox()->setResizeTool();
 }
 
 void
 MatrixView::slotSetVelocityTool()
 {
     if (m_matrixWidget)
-        m_matrixWidget->setVelocityTool();
+        m_matrixWidget->getToolBox()->setVelocityTool();
 }
 
 Segment *
@@ -1409,7 +1423,7 @@ void MatrixView::slotEscapePressed()
     auto *toolAction = findAction("select");
     if (!toolAction->isChecked()) {
         toolAction->setChecked(true);
-        slotSetSelectTool();
+        slotSetMultiTool();
     }
 
     // ... and clears selection

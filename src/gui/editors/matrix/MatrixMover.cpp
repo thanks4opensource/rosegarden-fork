@@ -30,13 +30,17 @@
 #include "commands/matrix/MatrixInsertionCommand.h"
 #include "commands/notation/NormalizeRestsCommand.h"
 #include "document/CommandHistory.h"
-#include "MatrixElement.h"
-#include "MatrixScene.h"
-#include "MatrixWidget.h"
-#include "MatrixTool.h"
-#include "MatrixMouseEvent.h"
-#include "MatrixViewSegment.h"
 #include "misc/Debug.h"
+
+#include "MatrixElement.h"
+#include "MatrixMouseEvent.h"
+#include "MatrixResizer.h"
+#include "MatrixScene.h"
+#include "MatrixTool.h"
+#include "MatrixToolBox.h"
+#include "MatrixViewSegment.h"
+#include "MatrixWidget.h"
+
 
 #include <Qt>
 
@@ -44,8 +48,12 @@
 namespace Rosegarden
 {
 
-MatrixMover::MatrixMover(MatrixWidget *parent) :
-    MatrixTool("matrixmover.rc", "MatrixMover", parent),
+QCursor *MatrixMover::m_cursor      (nullptr);
+QCursor *MatrixMover::m_selectCursor(nullptr);
+
+
+MatrixMover::MatrixMover(MatrixWidget *parent, MatrixToolBox *toolbox) :
+    MatrixTool("MatrixMover", parent, toolbox),
     m_currentElement(nullptr),
     m_event(nullptr),
     m_currentViewSegment(nullptr),
@@ -56,12 +64,10 @@ MatrixMover::MatrixMover(MatrixWidget *parent) :
     m_crntElementCrntTime(-1),
     m_prevDiffPitch(IMPOSSIBLE_DIFF_PITCH)
 {
-    createAction("select", SLOT(slotSelectSelected()));
-    createAction("draw", SLOT(slotDrawSelected()));
-    createAction("erase", SLOT(slotEraseSelected()));
-    createAction("resize", SLOT(slotResizeSelected()));
-
     createMenu();
+    if (!m_cursor      ) m_cursor       = makeCursor("move_cursor", 11, 11);
+    if (!m_selectCursor) m_selectCursor = makeCursor("move_select_cursor",
+                                                     16, 16);
 }
 
 void
@@ -82,56 +88,12 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
 {
     RG_DEBUG << "handleLeftButtonPress() : snapped time = " << e->snappedLeftTime << ", el = " << e->element;
 
+    m_isFinished = false;
+
     if (!e->element) return;
 
     Segment *segment = m_scene->getCurrentSegment();
     if (!segment) return;
-
-    // Check the scene's current segment (apparently not necessarily the same
-    // segment referred to by the scene's current view segment) for this event;
-    // return if not found, indicating that this event is from some other,
-    // non-active segment.
-    //
-    // I think notation just makes whatever segment active when you click an
-    // event outside the active segment, and I think that's what this code
-    // attempted to do too.  I couldn't get that to work at all.  This is better
-    // than being able to click on non-active elements to create new events by
-    // accident, and will probably fly.  Especially since the multi-segment
-    // matrix is new, and we're defining the terms of how it works.
-    if (e->element->getSegment() != segment) {
-        // The above comment written and following warning/return code written
-        // 2009-12-18 05:01:46 +0000. Now implementing switching active
-        // segment on Alt+click.
-        // RG_WARNING << "handleLeftButtonPress(): "
-        //               "Clicked element not owned by active segment. "
-        //               "Returning...";
-        // return;
-
-        // Switch active segemnt on alt-click
-        if (e->modifiers & Qt::AltModifier) {
-            // But don't do if also shift or ctrl. Gets too confusing
-            // for both code and user to simultaneously switch segments
-            // and move/copy notes and/or add/subtract selection.
-            if (e->modifiers & (Qt::ControlModifier | Qt::ShiftModifier)) {
-                return;
-            }
-            const Segment *newSegment = const_cast<Segment*>(
-                                            e->element->getSegment());
-            m_widget->getScene()->setCurrentSegment(newSegment);
-            m_widget->clearSelection();
-            m_widget->updateToCurrentSegment(true, // true == change instrument
-                                             newSegment);
-            m_widget->generatePitchRuler(); //in case normal->drum or vice-versa
-            m_currentViewSegment = nullptr;
-            m_currentElement = nullptr;
-            m_event = nullptr;
-            setBasicContextHelp(e);
-            return;  // do nothing more -- wait for fresh click in new segment
-        } else {
-            // Not an error, no need for bogus stdout/stderr warning.
-            return;
-        }
-    }
 
     m_currentViewSegment = e->viewSegment;
     m_currentElement = e->element;
@@ -153,7 +115,7 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
 
     // Add this element and allow movement
     //
-    EventSelection* selection = m_scene->getSelection();
+    EventSelection *selection = m_scene->getSelection();
 
     if (selection) {
         EventSelection *newSelection;
@@ -183,7 +145,7 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
         if (didShiftRemove) {
             m_currentElement = nullptr;
             m_event = nullptr;
-            setBasicContextHelp(e);
+            setContextHelpForPos(e);
             return;
         }
 
@@ -227,15 +189,47 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
     m_crntElementCrntTime = e->snappedLeftTime - m_clickSnappedLeftDeltaTime;
     m_prevDiffPitch = IMPOSSIBLE_DIFF_PITCH;
 
-    setBasicContextHelp(e);
+    setContextHelpForPos(e);
+}
+
+void MatrixMover::handleMidButtonPress(const MatrixMouseEvent *event)
+{
+    MatrixTool *resizer = dynamic_cast<MatrixTool*>(
+                            m_toolbox->getTool(MatrixResizer::ToolName()));
+    if (!resizer) return;    // shouldn't ever happen
+    resizer->setRole(Role::SINGLE_ACTION);
+    m_toolbox->appendDispatchTool(resizer, event);
+
+    // Resizer might have done appendDispatchTool() of Select or Segment.
+    m_toolbox->getActiveTool()->handleLeftButtonPress(event);
+}
+
+bool
+MatrixMover::handleKeyPress(const MatrixMouseEvent *e, const int key)
+{
+    if (!m_isFinished || key != ALTERNATE_TOOL_QT_KEY)
+        return false;
+
+    if (m_role == Role::OVERLAY) {  // from MultiTool
+        m_toolbox->popDispatchTool();
+        return m_toolbox->getActiveTool()->handleKeyPress(e, key);
+    }
+
+    MatrixTool *resizer = dynamic_cast<MatrixTool*>(
+                            m_toolbox->getTool(MatrixResizer::ToolName()));
+    if (!resizer) return false;  // shouldn't ever happen
+    resizer->setRole(Role::PERSISTENT);
+    m_toolbox->appendDispatchTool(resizer, e);
+    return true;
 }
 
 FollowMode
 MatrixMover::handleMouseMove(const MatrixMouseEvent *e)
 {
-    if (!e) return NO_FOLLOW;
+    if (!e || (e->buttons == Qt::NoButton && overlaySelectOrSegment(e)))
+        return NO_FOLLOW;
 
-    setBasicContextHelp(e);
+    setContextHelpForPos(e);
 
     if (!m_currentElement || !m_currentViewSegment) return NO_FOLLOW;
 
@@ -254,12 +248,15 @@ MatrixMover::handleMouseMove(const MatrixMouseEvent *e)
         diffPitch = newPitch - m_event->get<Int>(PITCH);
     }
 
-    EventSelection* selection = m_scene->getSelection();
+    long pitchOffset;
+    if (m_scene && m_scene->getSelection())
+        pitchOffset = m_scene->getSelection()->getSegment().getTranspose();
+    else if (e->element && e->element->getSegment())
+        pitchOffset = e->element->getSegment()->getTranspose();
+    else
+        return NO_FOLLOW;
 
-    // factor in transpose to adjust the height calculation
-    long pitchOffset = selection->getSegment().getTranspose();
     diffPitch += (pitchOffset * -1);
-
     if (m_prevDiffPitch == IMPOSSIBLE_DIFF_PITCH) m_prevDiffPitch = diffPitch;
 
     if (diffPitch != m_prevDiffPitch || newTime != m_crntElementCrntTime) {
@@ -294,6 +291,8 @@ MatrixMover::handleMouseMove(const MatrixMouseEvent *e)
 void
 MatrixMover::handleMouseRelease(const MatrixMouseEvent *e)
 {
+    m_isFinished = true;
+
     if (!e) return;
 
     RG_DEBUG << "handleMouseRelease() - newPitch = " << e->pitch;
@@ -312,17 +311,25 @@ MatrixMover::handleMouseRelease(const MatrixMouseEvent *e)
     using BaseProperties::PITCH;
     timeT diffTime = newTime - m_currentElement->getViewAbsoluteTime();
     int diffPitch = 0;
-    if (m_event->has(PITCH)) {
+    if (m_event && m_event->has(PITCH)) {
         diffPitch = newPitch - m_event->get<Int>(PITCH);
     }
 
     EventSelection* selection = m_scene->getSelection();
-
     // factor in transpose to adjust the height calculation
-    long pitchOffset = selection->getSegment().getTranspose();
+    bool havePitchOffset = true;
+    long pitchOffset = 0;
+    if (selection)
+        pitchOffset = m_scene->getSelection()->getSegment().getTranspose();
+    else if (e->element && e->element->getSegment())
+        pitchOffset = e->element->getSegment()->getTranspose();
+    else
+        havePitchOffset = false;
+
     diffPitch += (pitchOffset * -1);
 
-    if ((diffTime == 0 && diffPitch == 0) || selection->getAddedEvents() == 0) {
+    if ((havePitchOffset && diffTime == 0 && diffPitch == 0) ||
+        (selection && selection->getAddedEvents() == 0)) {
         for (size_t i = 0; i < m_duplicateElements.size(); ++i) {
             delete m_duplicateElements[i]->event();
             delete m_duplicateElements[i];
@@ -336,13 +343,15 @@ MatrixMover::handleMouseRelease(const MatrixMouseEvent *e)
     if (newPitch != m_lastPlayedPitch) {
         long velocity = m_widget->getCurrentVelocity();
         m_event->get<Int>(BaseProperties::VELOCITY, velocity);
-        m_scene->playNote(m_currentViewSegment->getSegment(), newPitch + (pitchOffset * -1), velocity);
+        m_scene->playNote(m_currentViewSegment->getSegment(),
+                          newPitch + (pitchOffset * -1),
+                          velocity);
         m_lastPlayedPitch = newPitch;
     }
 
     QString commandLabel;
     if (m_quickCopy) {
-        if (selection->getAddedEvents() < 2) {
+        if (selection && selection->getAddedEvents() < 2) {
             commandLabel = tr("Copy and Move Event");
         } else {
             commandLabel = tr("Copy and Move Events");
@@ -356,6 +365,13 @@ MatrixMover::handleMouseRelease(const MatrixMouseEvent *e)
     }
 
     MacroCommand *macro = new MacroCommand(commandLabel);
+
+    EventSelection singleSelection(*const_cast<Segment*>(m_currentElement->
+                                                         getSegment()));
+    if (!selection) {
+        if (m_event) singleSelection.addEvent(m_event);
+        selection = &singleSelection;
+    }
 
     EventContainer::iterator it =
         selection->getSegmentEvents().begin();
@@ -434,64 +450,54 @@ MatrixMover::handleMouseRelease(const MatrixMouseEvent *e)
     m_currentElement = nullptr;
     m_event = nullptr;
 
-    setBasicContextHelp(nullptr);
+    MatrixMouseEvent ePrime(*e);
+    m_scene->setMouseEventElement(ePrime);  // might have changed
+    setContextHelpForPos(&ePrime);
 }
 
-void MatrixMover::ready()
+void MatrixMover::readyAtPos(const MatrixMouseEvent *e)
 {
-    m_widget->setCanvasCursor(Qt::SizeAllCursor);
-    setBasicContextHelp(nullptr);
+    setCursor();
+    m_isFinished = true;
+    if (!overlaySelectOrSegment(e)) setContextHelpForPos(e);
 }
 
-void MatrixMover::stow()
+void
+MatrixMover::setCursor()
 {
-    // Nothing of this vestigial code remains in modern Qt Rosegarden.
+    if (m_widget) {
+        if (m_cursor) m_widget->setCanvasCursor(m_cursor);
+        else          m_widget->setCanvasCursor(Qt::SizeAllCursor);
+    }
+}
+void
+MatrixMover::setSelectCursor()
+{
+    if (m_widget) {
+        if (m_selectCursor) m_widget->setCanvasCursor(m_selectCursor);
+        else                m_widget->setCanvasCursor(Qt::SizeAllCursor);
+    }
 }
 
-void MatrixMover::setBasicContextHelp(const MatrixMouseEvent *e)
+QString
+MatrixMover::altToolHelpString()
+const
 {
-    bool mouseButton     = false;
-    bool altPressed      = false;
-    bool onNote          = false;
-    bool inActiveSegment = false;
-    const Segment *newSegment = nullptr;
+    return altToolHelpStringTools(tr("move"), tr("resize"));
+}
 
-    if (e) {
-        mouseButton     = static_cast<bool>(e->buttons);
-        altPressed      = e->modifiers & Qt::AltModifier;
-        onNote          = e->element;
-        if (e->element) {
-            newSegment = e->element->getSegment();
-            inActiveSegment = onNote &&
-                              newSegment == m_scene->getCurrentSegment();
-        }
+void MatrixMover::setContextHelpForPos(const MatrixMouseEvent *e)
+{
+    if (!e) {
+        setContextHelp(tr("Move tool: Move mouse over note or empty "
+                          "area for help."));
+        return;
     }
 
-    const EventSelection *selection = m_scene->getSelection();
-    unsigned selectionSize = selection ? selection->getAddedEvents() : 0;
-    QString msg("");
-
-    if (m_currentElement && mouseButton && !altPressed) {
-        if (selectionSize  > 0) {
-            msg = tr("Move");
-            if (selectionSize == 1) msg += tr(" note");
-            else                    msg += tr(" notes");
-            msg += tr(", release mouse button to place.");
-        }
-    } else if (onNote) {
-        if (inActiveSegment) {
-            msg = ("Click/drag to move, Ctrl-click/drag to copy, "
-                   "Shift-click to add or remove from selection.");
-        } else {
-            msg =   tr("Alt-click to switch to")
-                  + m_widget->segmentTrackInstrumentLabel(
-                    " %5 (Track %1, %2, %3, %4)", newSegment);
-        }
-    }
-    else msg = tr("Hover over note to move/copy/select/deselect "
-                  "or switch active segment.");
-
-    setContextHelp(msg);
+    moveResizeVelocityContextHelp(e,
+                                  tr("move (Ctrl to copy)"),
+                                  tr("move/copy"),
+                                  tr(", hold Shift to disable grid snap"));
 }
 
 QString MatrixMover::ToolName() { return "mover"; }

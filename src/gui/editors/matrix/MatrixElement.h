@@ -25,6 +25,8 @@ class QColor;
 class QGraphicsItem;
 class QGraphicsRectItem;
 
+#include <set>
+
 
 namespace Rosegarden
 {
@@ -70,6 +72,10 @@ public:
     // short as 0, and durations less than about 60 generate too narrow a width
     // for human manipulation)
     double getWidth() const { return (m_width >= 6.0f ? m_width : 6.0f); }
+    // For e.g. MatrixTool::moveResizeVelocity() which need accurate
+    // value at large horizontal expansion ratios.
+    double getAccurateWidth() const { return m_width; }
+
     double getElementVelocity() { return m_velocity; }
 
     void setSelected(bool selected, bool force = false);
@@ -92,9 +98,6 @@ public:
     const Segment *getSegment() const  { return m_segment; }
 
     MatrixScene *getScene() { return m_scene; }
-
-    // Need for tools to know if MatrixMouseEvent is in selection
-    Event *getEvent() { return m_event; }
 
     static MatrixElement *getMatrixElement(QGraphicsItem *);
 
@@ -142,6 +145,8 @@ protected:
     IsotropicRectItem *m_noteSelectItem;
     IsotropicDiamondItem *m_drumSelectItem;
 
+    std::set<QGraphicsRectItem*> m_onceHadToolTips;
+
     double m_width;
     double m_velocity;
 
@@ -177,7 +182,9 @@ protected:
     QPen outlinePen() const;
 
     // Common code used by setSelected() and setCurrent()
-    QAbstractGraphicsShapeItem *getActiveItem();
+    QAbstractGraphicsShapeItem *getActiveItem() const;
+
+    Qt::BrushStyle tiedNoteFill() const;
 
 private:
     /// Adjust the item to reflect the given values, not those of our event

@@ -15,11 +15,16 @@
     COPYING included with this distribution for more information.
 */
 
-#ifndef RG_MATRIXRESIZER_H
-#define RG_MATRIXRESIZER_H
+#ifndef RG_MATRIXMULTITOOL_H
+#define RG_MATRIXMULTITOOL_H
 
+#include <set>
+
+#include <QGraphicsRectItem>
 #include "MatrixTool.h"
 #include <QString>
+#include <QList>
+
 #include "base/Event.h"
 
 
@@ -29,30 +34,31 @@ namespace Rosegarden
 class ViewElement;
 class MatrixViewSegment;
 class MatrixElement;
+class EventSelection;
 class Event;
 
 
-class MatrixResizer : public MatrixTool
+class MatrixMultiTool : public MatrixTool
 {
     Q_OBJECT
 
     friend class MatrixToolBox;
 
 public:
-    void       handleLeftButtonPress(const MatrixMouseEvent*) override;
-    void       handleMidButtonPress (const MatrixMouseEvent*) override;
-    FollowMode handleMouseMove      (const MatrixMouseEvent*) override;
-    void       handleMouseRelease   (const MatrixMouseEvent*) override;
-    bool       handleKeyPress       (const MatrixMouseEvent*,
-                                     const int key)           override;
+    void handleLeftButtonPress(const MatrixMouseEvent *) override;
+    void handleMidButtonPress(const MatrixMouseEvent *) override;
+    FollowMode handleMouseMove(const MatrixMouseEvent *) override;
+    bool handleKeyPress(const MatrixMouseEvent*, const int key) override;
 
     /**
-     * Respond to an event being deleted -- it may be the one the tool
-     * is remembering as the current event.
+     * Create the selection rect
+     *
+     * We need this because MatrixScene deletes all scene items along
+     * with it. This happens before the MatrixMultiTool is deleted, so
+     * we can't delete the selection rect in ~MatrixMultiTool because
+     * that leads to double deletion.
      */
-    void handleEventRemoved(Event *event) override;
 
-    void setCursor() override;
     void setSelectCursor() override;
 
     static QString ToolName();
@@ -60,31 +66,26 @@ public:
 
     virtual QString altToolHelpString() const override;
 
-protected slots:
-//!!!    void slotMatrixScrolled(int x, int y);
-
 protected:
-    MatrixResizer(MatrixWidget*, MatrixToolBox*);
+    enum class MoveResizeVelocity {
+        UNSET,
+        MOVE,
+        RESIZE,
+        VELOCITY
+    };
+    MoveResizeVelocity moveResizeVelocity(const MatrixMouseEvent*) const;
 
-    timeT calculateDurationDiff(const MatrixMouseEvent *e) const;
-    void  adjustTimeAndDuration(timeT &time,
-                                timeT &duration,
-                                const Event *event,
-                                const timeT durationDiff) const;
+    MatrixMultiTool(MatrixWidget*, MatrixToolBox*);
 
     void readyAtPos(const MatrixMouseEvent *e) override;
     void setContextHelpForPos(const MatrixMouseEvent *e) override;
 
-    MatrixElement *m_currentElement;
-    /// The Event associated with m_currentElement.
-    Event *m_event;
-    MatrixViewSegment *m_currentViewSegment;
-
+    //--------------- Data members ---------------------------------
 private:
-    static QCursor *m_cursor;
+    MatrixTool *overlayTool(const MatrixMouseEvent*);
+    MoveResizeVelocity m_currentOverlay;
     static QCursor *m_selectCursor;
 };
 
 }
-
 #endif

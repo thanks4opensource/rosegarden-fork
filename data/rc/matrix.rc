@@ -221,7 +221,7 @@
 
   <Menu name="Tools">
     <text>&amp;Tools</text>
-    <Action name="select" text="&amp;Select and Edit" icon="select" shortcut="F2" group="tools_segment" checked="true" />
+    <Action name="multitool" text="M&amp;ultiTool;" icon="multitool" shortcut="F2" group="tools_segment" checked="true" />
     <Action name="draw" text="&amp;Draw" icon="pencil" shortcut="F3" group="tools_segment" checked="false" />
     <Action name="erase" text="&amp;Erase" icon="eraser" shortcut="F4" group="tools_segment" checked="false" />
     <Action name="move" text="&amp;Move" icon="move" shortcut="F5" group="tools_segment" checked="false" />
@@ -349,7 +349,7 @@
 
 <ToolBar name="Tools Toolbar">
   <text>Tools Toolbar</text>
-  <Action name="select" />
+  <Action name="multitool" />
   <Action name="draw" />
   <Action name="erase" />
   <Action name="move" />

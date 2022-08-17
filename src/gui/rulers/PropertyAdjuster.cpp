@@ -68,7 +68,9 @@ PropertyAdjuster::handleLeftButtonPress(const ControlMouseEvent *e)
 FollowMode
 PropertyAdjuster::handleMouseMove(const ControlMouseEvent *e)
 {
+#if 0   // t4os
     setBasicContextHelp();
+#endif
 
     if (e->buttons == Qt::NoButton) {
         // No button pressed, set cursor style
@@ -122,7 +124,9 @@ PropertyAdjuster::handleMouseRelease(const ControlMouseEvent *e)
     // May have moved off the item during a drag so use setCursor to correct its state
     setCursor(e);
 
+#if 0   // t4os
     setBasicContextHelp();
+#endif
 }
 
 void
@@ -160,7 +164,9 @@ PropertyAdjuster::ready()
 
 //    m_widget->setCanvasCursor(Qt::sizeAllCursor);
 
+#if 0   // t4os
     setBasicContextHelp();
+#endif
 }
 
 void
@@ -170,11 +176,14 @@ PropertyAdjuster::stow()
 //               m_widget, SLOT(slotHoveredOverNoteChanged(int, bool, timeT)));
 }
 
+#if 0   // t4os: Was interfering with Matrix Editor context help when
+        // changing tools.
 void
 PropertyAdjuster::setBasicContextHelp()
 {
     setContextHelp("");
 }
+#endif
 
 QString
 PropertyAdjuster::ToolName()

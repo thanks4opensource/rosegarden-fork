@@ -266,11 +266,13 @@ set(rg_CPPS
   gui/editors/matrix/MatrixScene.cpp
   gui/editors/matrix/MatrixEraser.cpp
   gui/editors/matrix/MatrixTool.cpp
+  gui/editors/matrix/MatrixMultiTool.cpp
   gui/editors/matrix/MatrixPainter.cpp
   gui/editors/matrix/MatrixResizer.cpp
+  gui/editors/matrix/MatrixSegment.cpp
   gui/editors/matrix/MatrixVelocity.cpp
   gui/editors/matrix/MatrixViewSegment.cpp
-  gui/editors/matrix/MatrixSelector.cpp
+  gui/editors/matrix/MatrixSelect.cpp
   gui/editors/matrix/MatrixToolBox.cpp
   gui/editors/eventlist/TrivialVelocityDialog.cpp
   gui/editors/eventlist/EventView.cpp

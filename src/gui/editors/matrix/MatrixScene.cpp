@@ -20,10 +20,12 @@
 
 #include "MatrixScene.h"
 
+#include "MatrixElement.h"
+#include "MatrixTool.h"
+#include "MatrixToolBox.h"
 #include "MatrixMouseEvent.h"
 #include "MatrixViewSegment.h"
 #include "MatrixWidget.h"
-#include "MatrixElement.h"
 
 #include "IsotropicDiamondItem.h"
 #include "IsotropicRectItem.h"
@@ -39,18 +41,27 @@
 #include "base/SnapGrid.h"
 
 #include "gui/general/GUIPalette.h"
+#include "gui/studio/StudioControl.h"
 #include "gui/widgets/Panned.h"
 #include "gui/widgets/Panner.h"
 
 #include "base/BaseProperties.h"
 #include "base/NotationRules.h"
-#include "gui/studio/StudioControl.h"
+
+#include "sequencer/RosegardenSequencer.h"
 
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsLineItem>
+#include <QGuiApplication>
+#include <QKeyEvent>
 #include <QSettings>
 #include <QPointF>
 #include <QRectF>
+
+#if 0  // Failed experiments to use Alt or Tab for alternate tool switching
+// Not defined in any Qt header file.
+void qt_set_sequence_auto_mnemonic(bool b);
+#endif
 
 #include <algorithm>  // for std::sort
 
@@ -78,8 +89,26 @@ MatrixScene::MatrixScene() :
     m_selection(nullptr),
     m_highlightType(HT_BlackKeys)
 {
+#if 0   // Experimental. Respond to finer-grained notifications instead
     connect(CommandHistory::getInstance(), &CommandHistory::commandExecuted,
             this, &MatrixScene::slotCommandExecuted);
+#endif
+
+    connect(RosegardenDocument::currentDocument,
+            &RosegardenDocument::notesTied,
+            this,
+            &MatrixScene::slotNotesTied);
+    connect(RosegardenDocument::currentDocument,
+            &RosegardenDocument::notesUntied,
+            this,
+            &MatrixScene::slotNotesUntied);
+
+#if 0  // Failed experiments to use Alt or Tab for alternate tool switching
+    qt_set_sequence_auto_mnemonic(false);
+#endif
+#if 0  // Failed experiments to use Alt or Tab for alternate tool switching
+    installEventFilter(this);
+#endif
 }
 
 MatrixScene::~MatrixScene()
@@ -322,6 +351,8 @@ MatrixScene::segmentsContainNotes() const
 void
 MatrixScene::recreateLines()
 {
+    // Why is this here instead of in MatrixWidget?
+
     timeT start = 0, end = 0;
 
     // Determine total distance that requires lines (considering multiple segments
@@ -373,6 +404,17 @@ MatrixScene::recreateLines()
 
     int firstbar = c->getBarNumber(start), lastbar = c->getBarNumber(end);
 
+#if 1   // t4os
+    // Differentiate between differnt vertical line semantics.
+    // Really need Qt to have non-zero width "isCosmetic" pens (specific
+    //   screen space pixel widths other than 1) but isn't supported.
+    // Can't manually fake it because this isn't called when matrix grid
+    //   is resized. Only way around would be something like
+    //   IsotropicXyzItem classes (see respective .h files).
+    QPen barPen (Qt::black,             0.0, Qt::SolidLine),
+         beatPen(QColor(200, 200, 200), 0.0, Qt::SolidLine),
+         gridPen(QColor(200, 200, 200), 0.0, Qt:: DashLine);
+#endif
     // Draw Vertical Lines
     i = 0;
     for (int bar = firstbar; bar <= lastbar; ++bar) {
@@ -400,6 +442,11 @@ MatrixScene::recreateLines()
         double dx = width / gridLines;
         double x = x0;
 
+#if 1   // t4os
+        unsigned beatModulo = (unsigned)gridLines / timeSig.getNumerator();
+        if (beatModulo < 1) beatModulo = 1;
+#endif
+
         for (int index = 0; index < gridLines; ++index) {
 
             // Check to see if we are withing the first segments start time.
@@ -423,12 +470,19 @@ MatrixScene::recreateLines()
                 m_verticals.push_back(line);
             }
 
+#if 0   // t4os
             if (index == 0) {
               // index 0 is the bar line
                 line->setPen(QPen(GUIPalette::getColour(GUIPalette::MatrixBarLine), pw));
             } else {
                 line->setPen(QPen(GUIPalette::getColour(GUIPalette::BeatLine), pw));
             }
+#else
+            // Visual distinction between bars/beats/grid lines.
+            if      (index == 0)              line->setPen( barPen);
+            else if (index % beatModulo == 0) line->setPen(beatPen);
+            else                              line->setPen(gridPen);
+#endif
 
             line->setZValue(index > 0 ? MatrixElement::VERTICAL_BEAT_LINE_Z
                                       : MatrixElement::VERTICAL_BAR_LINE_Z);
@@ -651,25 +705,56 @@ MatrixScene::recreatePitchHighlights()
     update();
 }
 
+void MatrixScene::setMouseEventElement(MatrixMouseEvent &mme)
+const
+{
+    setMouseEventElement(QPointF(mme.sceneX, mme.sceneY), mme);
+}
+
+bool
+MatrixScene::setupMouseEvent(MatrixMouseEvent &mme) const
+{
+    bool foundPos = false;
+    QPoint screenPos = QCursor::pos();
+    QPointF scenePos;
+    for (QGraphicsView *view: views()) {
+        QWidget *viewport = view->viewport();
+        QRect viewportRect = viewport->rect();
+        QPoint viewportPos = viewport->mapFromGlobal(screenPos);
+        if (viewportRect.contains(viewportPos)) {
+            scenePos = view->mapToScene(viewportPos);
+            foundPos = true;
+            break;
+        }
+    }
+
+    if (!foundPos) return false;
+
+    setupMouseEvent(screenPos,
+                    scenePos,
+                    QGuiApplication::mouseButtons(),
+                    Qt::KeyboardModifiers(),
+                    mme);
+    return true;
+}
+
 void
-MatrixScene::setupMouseEvent(QGraphicsSceneMouseEvent *e,
+MatrixScene::setupMouseEvent(const QGraphicsSceneMouseEvent *e,
                              MatrixMouseEvent &mme) const
 {
-    double sx = e->scenePos().x();
-    int sy = lrint(e->scenePos().y());
+    setupMouseEvent(e->screenPos(),
+                    e->scenePos(),
+                    e->buttons(),
+                    e->modifiers(),
+                    mme);
+}
 
-    mme.viewpos = e->screenPos();
-
-    mme.sceneX = sx;
-    mme.sceneY = sy;
-
-    mme.modifiers = e->modifiers();
-    mme.buttons = e->buttons();
-
+void MatrixScene::setMouseEventElement(const QPointF &scenePos,
+                                       MatrixMouseEvent &mme)
+const
+{
     mme.element = nullptr;
-
-    QList<QGraphicsItem *> l = items(e->scenePos());
-//   MATRIX_DEBUG << "Found " << l.size() << " items at " << e->scenePos();
+    QList<QGraphicsItem *> l = items(scenePos);
     for (int i = 0; i < l.size(); ++i) {
         MatrixElement *element = MatrixElement::getMatrixElement(l[i]);
         if (element) {
@@ -678,12 +763,33 @@ MatrixScene::setupMouseEvent(QGraphicsSceneMouseEvent *e,
             break;
         }
     }
+}
+
+void
+MatrixScene::setupMouseEvent(const QPoint &screenPos,
+                             const QPointF &scenePos,
+                             const Qt::MouseButtons mouseButtons,
+                             const Qt::KeyboardModifiers keyboardModifiers,
+                             MatrixMouseEvent &mme) const
+{
+    double sx = scenePos.x();
+    int sy = lrint(scenePos.y());
+
+    mme.viewpos = screenPos;
+
+    mme.sceneX = sx;
+    mme.sceneY = sy;
+
+    mme.modifiers = keyboardModifiers;
+    mme.buttons = mouseButtons;
+
+    setMouseEventElement(scenePos, mme);
 
     mme.viewSegment = m_viewSegments[m_currentSegmentIndex];
 
     mme.time = m_scale->getTimeForX(sx);
 
-    if (e->modifiers() & Qt::ShiftModifier) {
+    if (keyboardModifiers & Qt::ShiftModifier) {
         mme.snappedLeftTime = mme.time;
         mme.snappedRightTime = mme.time;
         mme.snapUnit = Note(Note::Shortest).getDuration();
@@ -728,12 +834,192 @@ int MatrixScene::calculatePitchFromY(int y) const {
     return pitch;
 }
 
+#if 0  // Failed experiments to use Alt or Tab for alternate tool switching
+// Override/intercept to pass through Alt and/or Tab normally filtered
+// out by QGraphicsScene base class.
+bool
+MatrixScene::event(QEvent *e)
+{
+    qDebug() << "\nMatrixScene::Event()"
+             << e
+             << e->type()
+             << '\n';
+
+    if (e->type() == QEvent::KeyPress)
+        keyPressEvent(dynamic_cast<QKeyEvent*>(e));
+    else if (e->type() == QEvent::KeyRelease)
+        keyReleaseEvent(dynamic_cast<QKeyEvent*>(e));
+    else
+        return QGraphicsScene::event(e);
+
+    return false;
+}
+#endif
+
+#if 0  // Failed experiments to use Alt or Tab for alternate tool switching
+// Alternative to event(), above. Also problematic.
+bool MatrixScene::eventFilter(QObject *obj, QEvent *event)
+{
+#if 0
+    if (obj == textEdit) {
+        if (event->type() == QEvent::KeyPress) {
+            QKeyEvent *keyEvent = static_cast<QKeyEvent*>(event);
+            qDebug() << "Ate key press" << keyEvent->key();
+            return true;
+        } else {
+            return false;
+        }
+    } else {
+        // pass the event on to the parent class
+        return QMainWindow::eventFilter(obj, event);
+    }
+#else
+    qDebug() << "\nMatrixScene::eventFilter()"
+             << obj
+             << event
+             << '\n';
+    return QGraphicsScene::eventFilter(obj, event);
+#endif
+}
+#endif
+
+#if 1   // Now done here instead of in MatrixWidget::enterEvent() so
+        // always happens when mouse enters anywhere in matrix editor
+        // window (including window manager border), not just widget area.
+void MatrixScene::focusInEvent(QFocusEvent*)
+{
+    m_widget->getToolBox()->checkKeysStateOnEntry();
+    m_widget->getToolBox()->getActiveTool()->ready();
+
+    // Set to play MIDI with current segment's instrument
+
+    Composition &composition = m_document->getComposition();
+    const Segment *segment = getCurrentSegment();
+    if (!segment) return;
+
+    const TrackId trackId = segment->getTrack();
+    const Track *track = composition.getTrackById(trackId);
+    if (!track) return;
+
+    InstrumentId instrumentId = track->getInstrument();
+    Instrument  *instrument = m_document->getStudio().
+                                    getInstrumentById(instrumentId);
+    if (instrument) {
+        RosegardenSequencer::getInstance()
+            ->setTrackInstrumentOverride(instrumentId,
+                                          instrument->getNaturalChannel());
+    }
+}
+#endif
+
+void
+MatrixScene::keyPressEvent(QKeyEvent *e)
+{
+#if 0  // Failed experiments to use Alt or Tab for alternate tool switching
+    qDebug() << "MatrixScene::keyPressEvent()"
+             << "\n  key:" << e->key()
+             << "\n  modifiers:" << e->modifiers()
+             << "\n  nativeModifiers:" << e->nativeModifiers()
+             << "\n  text:" << e->text()
+             << "\n  key alt?" << (e->key() == Qt::Key_Alt)
+             << "\n  mod alt?" << bool(e->modifiers() & Qt::AltModifier)
+             << "\n  key lock?" << (e->key() == Qt::Key_CapsLock)
+             << "\n  mod shtf?" << bool(e->modifiers() & Qt::ShiftModifier)
+             << "\n  accepted?" << e->isAccepted()
+             << "\n  mouse:" << QGuiApplication::mouseButtons();
+#endif
+
+#if 0  // Failed experiments to use Alt or Tab for alternate tool switching
+    // Escape works, but is ergonomically inconvenient.
+    // Also requires ignoring autorepeat.
+    if (e->key() != Qt::Key_Escape || e->isAutoRepeat())
+#elif 0
+    // Ibid.
+    if (e->isAutoRepeat() ||
+        (e->key() != Qt::Key_Escape && e->key() != Qt::Key_Control))
+#elif 0
+    if (e->key() != Qt::Key_Alt && e->key() != Qt::Key_Control)
+#else
+    if (e->key() != Qt::Key_CapsLock && e->key() != Qt::Key_Control)
+#endif
+    {
+        QGraphicsScene::keyPressEvent(e);
+        return;
+    }
+
+    MatrixMouseEvent mme;
+    if (setupMouseEvent(mme)) {
+        // In setupMouseEvent(), both Qt::KeyboardModifiers()
+        // and alternately QApplication::keyboardModifiers() are
+        // empty, so have to put this in manually.
+        if (e->key() == Qt::Key_Control)
+            mme.modifiers |= Qt::ControlModifier;
+
+        m_widget->getToolBox()->handleKeyPress(&mme, e->key());
+    }
+    else
+        m_widget->getToolBox()->handleKeyPress(nullptr, e->key());
+
+    // Pass all/others for normal use (shortcuts, accelerators, etc)
+    QGraphicsScene::keyPressEvent(e);
+}
+
+void
+MatrixScene::keyReleaseEvent(QKeyEvent *e)
+{
+#if 0  // Failed experiments to use Alt or Tab for alternate tool switching
+    qDebug() << "MatrixScene::keyReleaseEvent()"
+             << "\n  key:" << e->key()
+             << "\n  modifiers:" << e->modifiers()
+             << "\n  nativeModifiers:" << e->nativeModifiers()
+             << "\n  text:" << e->text()
+             << "\n  key lock?" << (e->key() == Qt::Key_CapsLock)
+             << "\n  mod shft?" << bool(e->modifiers() & Qt::ShiftModifier)
+             << "\n  accepted?" << e->isAccepted();
+#endif
+
+#if 0  // Failed experiments to use Alt or Tab for alternate tool switching
+    // See comments in keyPressEvent(), above.
+    if (e->key() != Qt::Key_Escape || e->isAutoRepeat())
+#elif 0
+    if (e->isAutoRepeat() ||
+        (e->key() != Qt::Key_Escape && e->key() != Qt::Key_Control))
+#elif 0
+    if (e->key() != Qt::Key_Alt && e->key() != Qt::Key_Control)
+#else
+    if (e->key() != Qt::Key_CapsLock && e->key() != Qt::Key_Control)
+#endif
+    {
+        QGraphicsScene::keyPressEvent(e);
+        return;
+    }
+
+    MatrixMouseEvent mme;
+    if (setupMouseEvent(mme)) {
+        // In setupMouseEvent(), both Qt::KeyboardModifiers()
+        // nor alternately QApplication::keyboardModifiers() are
+        // empty, so have to put this in manually.
+        if (e->key() == Qt::Key_Control) mme.modifiers |= Qt::ControlModifier;
+
+        m_widget->getToolBox()->handleKeyRelease(&mme, e->key());
+    }
+    else
+        m_widget->getToolBox()->handleKeyRelease(nullptr, e->key());
+
+    // Pass all/others for normal use (shortcuts, accelerators, etc)
+    QGraphicsScene::keyReleaseEvent(e);
+}
+
 void
 MatrixScene::mousePressEvent(QGraphicsSceneMouseEvent *e)
 {
     MatrixMouseEvent nme;
     setupMouseEvent(e, nme);
+#if 0   // SIGNAL_SLOT_ABUSE
     emit mousePressed(&nme);
+#else
+    m_widget->slotDispatchMousePress(&nme);
+#endif
 }
 
 void
@@ -741,7 +1027,11 @@ MatrixScene::mouseMoveEvent(QGraphicsSceneMouseEvent *e)
 {
     MatrixMouseEvent nme;
     setupMouseEvent(e, nme);
+#if 0   // SIGNAL_SLOT_ABUSE
     emit mouseMoved(&nme);
+#else
+    m_widget->slotDispatchMouseMove(&nme);
+#endif
 }
 
 void
@@ -749,7 +1039,11 @@ MatrixScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *e)
 {
     MatrixMouseEvent nme;
     setupMouseEvent(e, nme);
+#if 0   // SIGNAL_SLOT_ABUSE
     emit mouseReleased(&nme);
+#else
+    m_widget->slotDispatchMouseRelease(&nme);
+#endif
 }
 
 void
@@ -757,16 +1051,20 @@ MatrixScene::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *e)
 {
     MatrixMouseEvent nme;
     setupMouseEvent(e, nme);
+#if 0   // SIGNAL_SLOT_ABUSE
     emit mouseDoubleClicked(&nme);
+#else
+    m_widget->slotDispatchMouseDoubleClick(&nme);
+#endif
 }
 
+#if 0   // Experimental. Respond to finer-grained notifications instead
 void
 MatrixScene::slotCommandExecuted()
 {
-#if 0   // Experimenta. Respond to finer-grained notifications instead
     checkUpdate();
-#endif
 }
+#endif
 
 void
 MatrixScene::checkUpdate()
@@ -1198,6 +1496,22 @@ MatrixScene::updateAllSegments(bool onlyPercussion)
         }
         (*i)->updateAll();
     }
+}
+
+void
+MatrixScene::slotNotesTied(
+const EventContainer &notes)
+{
+    MatrixViewSegment *viewSegment = getCurrentViewSegment();
+    if (viewSegment) viewSegment->updateTiedUntied(notes);
+}
+
+void
+MatrixScene::slotNotesUntied(
+const EventContainer &notes)
+{
+    MatrixViewSegment *viewSegment = getCurrentViewSegment();
+    if (viewSegment) viewSegment->updateTiedUntied(notes);
 }
 
 void

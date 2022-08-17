@@ -22,6 +22,7 @@
 
 #include <QSize>
 
+#include <array>
 #include <vector>
 
 
@@ -39,7 +40,7 @@ class PianoKeyboard : public PitchRuler
 {
     Q_OBJECT
 public:
-    PianoKeyboard(QWidget *parent, int keys = 88);
+    PianoKeyboard(QWidget *parent, int pitchY, int keys = 88);
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
@@ -53,6 +54,15 @@ public:
     void hideHighlight() override;
 
 protected:
+    static const int   WHITE_KEY_WIDTH;
+    static const float BLACK_KEY_WIDTH,
+                       BLACK_KEY_HEIGHT_FACTOR,
+                       INITIAL_Y;
+
+    enum class KeyColor {WHITE, BLACK};
+    static const std::array<KeyColor, 12> KeyColors;
+    static const std::array<bool    , 12> KeyGaps;
+    static const std::array<float   , 12> KeyHeights;
 
     void paintEvent(QPaintEvent*) override;
 
@@ -71,14 +81,18 @@ protected:
     void computeKeyPos();
 
     //--------------- Data members ---------------------------------
+    int m_pitchY;
     QSize m_keySize;
     QSize m_blackKeySize;
     unsigned int m_nbKeys;
 
-    std::vector<unsigned int> m_whiteKeyPos;
-    std::vector<unsigned int> m_blackKeyPos;
+    struct KeyGeom {  // Can't be a union because non-default constructors
+        QLineF line;
+        QRectF rect;
+    } ;
+    std::vector<KeyGeom> m_keyGeoms;
+
     std::vector<unsigned int> m_labelKeyPos;
-    std::vector<unsigned int> m_allKeyPos;
 
     bool                      m_mouseDown;
     bool                      m_selecting;

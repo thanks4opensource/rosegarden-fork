@@ -119,7 +119,7 @@ public:
     // Add new colour entry at ID, or overwrite existing at that ID
     void addEntry(unsigned colourID, QColor colour, std::string name);
 
-    void modifyName(unsigned colourID, std::string name);
+    void modifyName(unsigned colourID, const std::string &name);
     void modifyColour(unsigned colourID, QColor colour);
     void deleteEntry(unsigned colourID);
 

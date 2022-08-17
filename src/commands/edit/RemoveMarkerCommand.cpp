@@ -52,9 +52,6 @@ RemoveMarkerCommand::execute()
 
     Composition::markerconstiterator it = markers.begin();
     for (; it != markers.end(); ++it) {
-        qDebug() << "  "   // t4osDEBUG
-                 << (*it)->getName()
-                 << (*it)->getID();
         if ((*it)->getID() == m_id) {
             m_marker = (*it);
             m_document->deleteMarker(*it);

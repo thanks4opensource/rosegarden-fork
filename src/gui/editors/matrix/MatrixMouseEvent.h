@@ -43,7 +43,7 @@ public:
 
     int pitch;
     double sceneX;
-    int sceneY;
+    double sceneY;
 
     QPoint viewpos;
 
@@ -55,6 +55,23 @@ public:
         time(0), pitch(0),
         sceneX(0), sceneY(0),
         modifiers(), buttons() { }
+
+    // Copy constructor for special case where code needs to modify
+    // existing object. See MatrixToolBox::handleKeyRelease().
+    MatrixMouseEvent(const MatrixMouseEvent &orig) :
+        viewSegment(orig.viewSegment),
+        element(orig.element),
+        time(orig.time),
+        snappedLeftTime(orig.snappedLeftTime),
+        snappedRightTime(orig.snappedRightTime),
+        snapUnit(orig.snapUnit),
+        pitch(orig.pitch),
+        sceneX(orig.sceneX),
+        sceneY(orig.sceneY),
+        viewpos(orig.viewpos),
+        modifiers(orig.modifiers),
+        buttons(orig.buttons)
+    {}
 };
 
 }

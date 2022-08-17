@@ -20,9 +20,10 @@
 
 #include "NotationScene.h"
 
+#include "base/BaseProperties.h"
+#include "base/Profiler.h"
 #include "base/Segment.h"
 #include "base/SegmentLinker.h"
-#include "base/BaseProperties.h"
 
 #include "NotationStaff.h"
 #include "NotationHLayout.h"
@@ -34,17 +35,19 @@
 #include "NotationWidget.h"
 #include "NotationMouseEvent.h"
 #include "NoteFontFactory.h"
+
+#include "document/CommandHistory.h"
+#include "document/RosegardenDocument.h"
+
+#include "gui/studio/StudioControl.h"
 #include "gui/widgets/Panned.h"
 
 #include "misc/Debug.h"
 #include "misc/Strings.h"
-
 #include "misc/ConfigGroups.h"
-#include "document/CommandHistory.h"
-#include "document/RosegardenDocument.h"
-#include "base/Profiler.h"
 
-#include "gui/studio/StudioControl.h"
+#include "sequencer/RosegardenSequencer.h"
+
 #include "sound/MappedEvent.h"
 
 #include <QApplication>
@@ -901,6 +904,32 @@ NotationScene::slotMouseLeavesView()
     clearPreviewNote();
 }
 
+#if 1   // Now done here instead of in NotationWidget::enterEvent() so
+        // always happens when mouse enters anywhere in notation editor
+        // window (including window manager border), not just widget area.
+void NotationScene::focusInEvent(QFocusEvent*)
+{
+    // Set to play MIDI with current segment's instrument
+
+    Composition &composition = m_document->getComposition();
+    const Segment *segment = getCurrentSegment();
+    if (!segment) return;
+
+    const TrackId trackId = segment->getTrack();
+    const Track *track = composition.getTrackById(trackId);
+    if (!track) return;
+
+    InstrumentId instrumentId = track->getInstrument();
+    Instrument  *instrument = m_document->getStudio().
+                                    getInstrumentById(instrumentId);
+    if (instrument) {
+        RosegardenSequencer::getInstance()
+            ->setTrackInstrumentOverride(instrumentId,
+                                          instrument->getNaturalChannel());
+    }
+}
+#endif
+
 void
 NotationScene::mousePressEvent(QGraphicsSceneMouseEvent *e)
 {
@@ -1308,6 +1337,10 @@ NotationScene::segmentRemoved(const Composition *c, Segment *s)
         delete staff;
         m_staffs.erase(staffToDelete);
     }
+
+    // Redo the layouts so that there aren't any stray pointers
+    // to the removed staff.
+    layout(nullptr, 0, 0);
 }
 
 void

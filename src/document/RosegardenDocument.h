@@ -297,6 +297,9 @@ public:
     void modifyMarker(Marker*);
     void deleteMarker(Marker*);
 
+    void signalNotesTied  (const EventContainer&);
+    void signalNotesUntied(const EventContainer&);
+
     /**
      * returns the composition (the principal constituent of the document)
      */
@@ -614,6 +617,9 @@ signals:
      */
     void docColoursChanged();
     void devicesResyncd();
+
+    void notesTied  (const EventContainer&);
+    void notesUntied(const EventContainer&);
 
 private:
     /**
