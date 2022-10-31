@@ -111,6 +111,7 @@ signals:
 
 public slots:
     void slotPlaying(bool playing);
+    void slotEditAddKeySignature()           ; // public for ChordNameRuler
 
 protected slots:
     /// Remove a segment from our list when it is deleted from the composition
@@ -141,7 +142,6 @@ protected slots:
     void slotClearSelection();
     void slotEscapePressed();
     void slotFilterSelection();
-    void slotEditAddKeySignature();
 
     void slotCurrentSegmentPrior();
     void slotCurrentSegmentNext();
@@ -206,6 +206,11 @@ protected slots:
     void slotPercussionDurations();
     void slotNoteColors();
     void slotNoteColorsAllSegments();
+    void slotNoteNames();
+    void slotChordSpelling();
+    void slotNotesCmajFlats();
+    void slotOffsetMinors();
+    void slotAlternateMinors();
 
     void slotShowContextHelp(const QString &);
 
@@ -297,6 +302,7 @@ private:
     void setShowNoteNames();
     void setShowPercussionDurations();
     void setShowNoteColorTypeAndAll();
+    void setShowNoteNameType();
     void setupActions();
     void setupAddRulerActions();
     void initActionsToolbar();

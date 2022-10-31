@@ -444,6 +444,7 @@ const Key Key::DefaultKey = Key("C major");
 const Key Key::UndefinedKey = Key("undefined");
 
 Key::Key() :
+    m_event(nullptr),
     m_name(DefaultKey.m_name),
     m_accidentalHeights(nullptr)
 {
@@ -452,6 +453,7 @@ Key::Key() :
 
 
 Key::Key(const Event &e) :
+    m_event(&e),
     m_name(""),
     m_accidentalHeights(nullptr)
 {
@@ -471,6 +473,7 @@ Key::Key(const Event &e) :
 }
 
 Key::Key(const std::string &name) :
+    m_event(nullptr),
     m_name(name),
     m_accidentalHeights(nullptr)
 {
@@ -482,6 +485,7 @@ Key::Key(const std::string &name) :
 }
 
 Key::Key(int accidentalCount, bool isSharp, bool isMinor) :
+    m_event(nullptr),
     m_accidentalHeights(nullptr)
 {
     checkMap();
@@ -509,6 +513,7 @@ Key::Key(int accidentalCount, bool isSharp, bool isMinor) :
 // with that signature.  Not quite sure what's the best solution.
 
 Key::Key(int tonicPitch, bool isMinor) :
+    m_event(nullptr),
     m_accidentalHeights(nullptr)
 {
         checkMap();
@@ -531,6 +536,7 @@ Key::Key(int tonicPitch, bool isMinor) :
 
 
 Key::Key(const Key &kc) :
+    m_event(kc.m_event),
     m_name(kc.m_name),
     m_accidentalHeights(nullptr)
 {

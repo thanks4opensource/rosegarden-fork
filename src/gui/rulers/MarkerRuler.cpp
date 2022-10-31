@@ -134,19 +134,18 @@ MarkerRuler::MarkerRuler(RosegardenDocument *doc,
             this,
             &MarkerRuler::slotEditMarker);
 
-#if 1   // t4os
-        // Hack to prevent crash in test_notationview_selection.
-        // Test does not create RosegardenMainWindow, so ::self is null.
-        // Test code should be fixed.
-    if (RosegardenMainWindow::self()) {
-        text = "Manage Markers";
-        m_editAll = new QAction(text, this);
-        m_editAll->setObjectName(text);
-        connect(m_editAll,
-                &QAction::triggered,
-                RosegardenMainWindow::self(),
-                &RosegardenMainWindow::slotEditMarkers);
-    }
+#ifndef BUILD_DEBUG // t4os
+                    // Hack to prevent crash in test_notationview_selection.
+                    // Test does not create RosegardenMainWindow, so
+                    //   RosegardenMainWindow::self is null.
+                    // Test code should be fixed.
+    text = "Manage Markers";
+    m_editAll = new QAction(text, this);
+    m_editAll->setObjectName(text);
+    connect(m_editAll,
+            &QAction::triggered,
+            RosegardenMainWindow::self(),
+            &RosegardenMainWindow::slotEditMarkers);
 #endif
 
     text = "Edit immediately after insert";
@@ -193,10 +192,10 @@ MarkerRuler::updateMenu()
     m_menu->addSeparator();
     m_menu->addAction(m_delete);
     m_menu->addAction(m_edit);
-#if 1   // t4os
-        // hack to prevent crash in test_notationview_selection
-        // See comment at m_editAll in constructor, above
-    if (m_editAll) m_menu->addAction(m_editAll);
+#ifndef BUILD_DEBUG // t4os
+                    // hack to prevent crash in test_notationview_selection
+                    // See comment at m_editAll in constructor, above
+    m_menu->addAction(m_editAll);
 #endif
     m_menu->addSeparator();
     m_menu->addAction(m_editAtAdd);

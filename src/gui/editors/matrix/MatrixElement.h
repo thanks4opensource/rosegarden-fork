@@ -18,6 +18,8 @@
 #ifndef RG_MATRIXELEMENT_H
 #define RG_MATRIXELEMENT_H
 
+#include <QPen>  // for inline outlinePen()
+
 #include "base/ViewElement.h"
 
 class QAbstractGraphicsShapeItem;
@@ -127,6 +129,13 @@ public:
 
 
 protected:
+    // Current vs m_prevShowName decison if expensive getKeyInfo() is necessary
+    enum class ShowName {
+        SKIP  = 0,  // 0 vs non-zero in case have to cast to bool
+        SHOW  = 1,  // "     "   "   "   "    " "  "  "   "   "
+        UNSET = 2,  // "     "   "   "   "    " "  "  "   "   "
+    };
+
     static const unsigned GRAY_RED_COMPONENT   = 200,
                           GRAY_GREEN_COMPONENT = 200,
                           GRAY_BLUE_COMPONENT  = 200;
@@ -139,6 +148,13 @@ protected:
     bool m_drumDisplay;
     bool m_current;
     bool m_selected;
+    ShowName m_prevShowName;
+    timeT m_prevTime;
+    unsigned m_tonic;
+    bool m_sharps;
+    bool m_minor;
+    unsigned m_minorNotesOffset;
+    bool m_alternateMinorNotes;
     QGraphicsRectItem *m_noteItem;
     IsotropicDiamondItem *m_drumItem;
     IsotropicTextItem *m_textItem;
@@ -169,6 +185,11 @@ protected:
     const Segment *m_segment;
 
 
+    // Get key info at time, and set m_prevTime and m_prevShowName
+    // Checking of latter two in reconfigure(...) avoids expensive
+    //   Segment::getKeyAtTime() unless necessary.
+    void getKeyInfo(const ShowName showName, const timeT time);
+
     // Common code used by reconfigure(timeT, timeT, int, int),
     // setCurrent(), and setColor().
     QColor textColor(const QColor noteColor) const;
@@ -179,7 +200,7 @@ protected:
     // Common code used by reconfigure(timeT, timeT, int, int)
     // and setCurrent(bool).
     QColor noteColor() const;
-    QPen outlinePen() const;
+    QPen outlinePen() const { return QPen(Qt::black, 0); };
 
     // Common code used by setSelected() and setCurrent()
     QAbstractGraphicsShapeItem *getActiveItem() const;

@@ -34,108 +34,90 @@ class Event;
 class CompositionTimeSliceAdapter;
 class Quantizer;
 class Composition;
+class ChordAnalyzerImpl;
 
-///////////////////////////////////////////////////////////////////////////
 
-typedef std::string ChordType;
-class ChordLabel;
-
-namespace ChordTypes
+class ChordAnalyzer
 {
-const ChordType
-NoChord = "no-chord",
-    Major = "",
-    Minor = "m",
-    Diminished = "dim",
-    MajorSeventh = "M7",
-    DominantSeventh = "7",
-    MinorSeventh = "m7",
-    HalfDimSeventh = "7b5",
-    DimSeventh = "dim7";
-}
+  public:
+    // Chord name styles
+    static const unsigned MAJOR_BLANK           = 0,
+                          MAJOR_M               = 1,
+                          MAJOR_MAJ             = 2,
 
-///////////////////////////////////////////////////////////////////////////
+                          MINOR_M               = 0,
+                          MINOR_MINUS           = 1,
+                          MINOR_MIN             = 2,
+                          MINOR_MI              = 3,
+                          MINOR_ROMAN_BLANK     = 4,  // internal use only
 
-/**
- * ChordLabel names chords and identifies them from their masks. See
- * ChordLabel::checkMap() for details on what the masks are and
- * AnalysisHelper::labelChords() for an example.
- */
+                          DIMINISHED_DIM        = 0,
+                          DIMINISHED_CIRCLE     = 1,
 
-class ChordLabel
-{
-public:
-    ChordLabel();
-    ChordLabel(Key key, int mask, int bass);
-    ChordLabel(const ChordType& type, int rootPitch, int inversion = 0) :
-        m_data(type, rootPitch, inversion) { };
-    int rootPitch() const;
-    /**
-     * Gives the name of the chord in lead-sheet notation: C, Dm,
-     * G#7b5...
-     */
-    std::string getName(Key key) const;
-    /**
-     * Gives the name of the chord in roman-numeral notation: I, ii,
-     * VMm7...
-     */
-//  std::string getRomanNumeral(Key key);
-    bool isValid() const;
-    bool operator<(const ChordLabel& other) const;
-    // ### I can't believe this is necessary, but the compiler
-    //     is asking for it
-    bool operator==(const ChordLabel& other) const;
+                          AUGMENTED_AUG         = 0,
+                          AUGMENTED_PLUS        = 1,
 
-private:
-    // #### are m_* names appropriate for a struct?
-    //      shouldn't I find a neater way to keep a ChordMap?
-    struct ChordData
-    {
-        ChordData(const ChordType& type, int rootPitch, int inversion = 0) :
-            m_type(type),
-            m_rootPitch(rootPitch),
-            m_inversion(inversion) { };
+                          MAJOR_7TH_M           = 0,
+                          MAJOR_7TH_MAJ         = 1,
+                          MAJOR_7TH_DELTA       = 2,
 
-        ChordData() :
-            m_type(ChordTypes::NoChord),
-            m_rootPitch(0),
-            m_inversion(0) { };
+                          ADD_ADD               = 0,
+                          ADD_PLUS              = 1,
 
-        ChordType m_type;
-        int m_rootPitch;
-        int m_inversion;
-    };
-    ChordData m_data;
-    static void checkMap();
+                          ROMAN_MINOR_UPPERCASE = 0,
+                          ROMAN_MINOR_LOWERCASE = 1;
 
-    typedef std::multimap<int, ChordData> ChordMap;
-    static ChordMap m_chordMap;
+    ChordAnalyzer();
+    ~ChordAnalyzer();
+
+    // Set chord names ("aug" vs "+", etc) to user preferences
+    // See constants, directly above
+    void updateChordNameStyles();
+
+    // Clear and then fill "chordsAndKeys" with chord name and key change
+    //   text events. Also add C major key change at beginning of each
+    //   segment in "segments"  (and "chordsAndKeys") if no key change at
+    //   segment start time.
+    // Clear and fill "roots" map with chord root at each "chordsAndKeys"
+    //   chord time.
+    // Use notes in all "segments" name chords.
+    // Use "currentSegment" for key at chord times.
+    // Set "conflictingKeyChanges" true if different key changes at
+    //   same times in different "segments" (or key change at
+    //   time in one or more and not in one or more others)
+    // Two different chord analysis algorithms:
+    //   If "onePerTimePeriod" true, all notes within "timeWindow"
+    //      period (aligned modulo that time). Includes arpeggiated
+    //      chords.
+    //   Else whenever any note or off, within timeWindow tolerance.
+    void labelChords(Segment                        &chordsAndKeys,
+                     std::map<timeT, int>           &roots,
+                     bool                           &conflictingKeyChanges,
+                     const std::vector<Segment*>     segments,
+                     const Segment                  *currentSegment,
+                     const timeT                     timeWindow,
+                     bool                            onePerTimePeriod);
+
+  protected:
+    // Private implemenation, to keep large amount of code and
+    // static data exlusively in .cpp file.
+    ChordAnalyzerImpl   *m_impl;
+
 };
 
-///////////////////////////////////////////////////////////////////////////
 
-class AnalysisHelper
+
+// All following is very old code, not exposed in user interface
+//   at ther time of this (ChordAnalyzer class above, etc) rewrite.
+// Potentially contains more sophisticated (context-sensitive)
+//   chord/key analysis algorithms.
+namespace AnalysisHelper
 {
-public:
-    AnalysisHelper() {};
-
-    /**
-     * Returns the key in force during a given event.
-     */
-    static Key getKeyForEvent(Event *e, Segment &s);
-
-    /**
-     * Inserts in the given Segment labels for all of the chords found in
-     * the timeslice in the given CompositionTimeSliceAdapter.
-     */
-    void labelChords(CompositionTimeSliceAdapter &c, Segment &s,
-                     const Quantizer *quantizer);
-
     /**
      * Returns a time signature that is probably reasonable for the
      * given timeslice.
      */
-    TimeSignature guessTimeSignature(CompositionTimeSliceAdapter &c);
+     TimeSignature guessTimeSignature(CompositionTimeSliceAdapter &c);
 
     /**
      * Returns a guess at the starting key of the given timeslice,
@@ -147,15 +129,13 @@ public:
      * Returns a guess at the appropriate key at time t, based on
      * existing key signatures.  May fall back to guessKey.
      */
-    static Key
-        guessKeyAtTime(Composition &comp, timeT t,
+    Key guessKeyAtTime(Composition &comp, timeT t,
                        const Segment *segmentToSkip);
 
     /**
      * Returns a guess at the appropriate key for segment s at time t.
      */
-    static Key
-        guessKeyForSegment(timeT t, const Segment *s);
+    Key guessKeyForSegment(timeT t, const Segment *s);
 
     /**
      * Like labelChords, but the algorithm is more complicated. This tries
@@ -164,74 +144,8 @@ public:
      */
     void guessHarmonies(CompositionTimeSliceAdapter &c, Segment &s);
 
-protected:
-    // ### THESE NAMES ARE AWFUL. MUST GREP THEM OUT OF EXISTENCE.
-    typedef std::pair<double, ChordLabel> ChordPossibility;
-    typedef std::vector<ChordPossibility> HarmonyGuess;
-    typedef std::vector<std::pair<timeT, HarmonyGuess> > HarmonyGuessList;
-    struct cp_less : public std::binary_function<ChordPossibility, ChordPossibility, bool>
-    {
-        bool operator()(ChordPossibility l, ChordPossibility r);
-    };
+}  // namespace AnalysisHelper
 
-    /// For use by guessHarmonies
-    void makeHarmonyGuessList(CompositionTimeSliceAdapter &c,
-                              HarmonyGuessList &l);
-
-    /// For use by guessHarmonies
-    void refineHarmonyGuessList(CompositionTimeSliceAdapter &c,
-                                HarmonyGuessList& l,
-                                Segment &);
-
-    /// For use by guessHarmonies (makeHarmonyGuessList)
-    class PitchProfile
-    {
-    public:
-        PitchProfile();
-        double& operator[](int i);
-        const double& operator[](int i) const;
-        double distance(const PitchProfile &other);
-        double dotProduct(const PitchProfile &other) const;
-        double productScorer(const PitchProfile &other) const;
-        PitchProfile normalized();
-        PitchProfile& operator*=(double d);
-        PitchProfile& operator+=(const PitchProfile &d);
-    private:
-        double m_data[12];
-    };
-
-    /// For use by guessHarmonies (makeHarmonyGuessList)
-    typedef std::vector<std::pair<PitchProfile, ChordLabel> > HarmonyTable;
-    static HarmonyTable m_harmonyTable;
-
-    /// For use by guessHarmonies (makeHarmonyGuessList)
-    void checkHarmonyTable();
-
-    /// For use by guessHarmonies (refineHarmonyGuessList)
-    // #### grep ProgressionMap to something else
-    struct ChordProgression {
-        ChordProgression(const ChordLabel& first_,
-                         const ChordLabel& second_ = ChordLabel(),
-                         const Key& key_ = Key());
-        ChordLabel first;
-        ChordLabel second;
-        Key homeKey;
-        // double commonness...
-        bool operator<(const ChordProgression& other) const;
-        };
-    typedef std::set<ChordProgression> ProgressionMap;
-    static ProgressionMap m_progressionMap;
-
-    /// For use by guessHarmonies (refineHarmonyGuessList)
-    static void checkProgressionMap();
-
-    /// For use by checkProgressionMap
-    static void addProgressionToMap(Key k,
-                                    int firstChordNumber,
-                                    int secondChordNumber);
-
-};
-
-}
+}  // namespace Rosegarden
 
 #endif

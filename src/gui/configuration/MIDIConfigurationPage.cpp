@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -64,6 +64,11 @@ MIDIConfigurationPage::MIDIConfigurationPage(QWidget *parent):
 
     int row = 0;
 
+    m_baseOctaveNumber = new QSpinBox;
+    m_baseOctaveNumber->setMinimum(-10);
+    m_baseOctaveNumber->setMaximum(10);
+    m_baseOctaveNumber->setValue(Preferences::midiOctaveNumberOffset.get());
+
     QSettings settings;
     settings.beginGroup(GeneralOptionsConfigGroup);
 
@@ -72,11 +77,6 @@ MIDIConfigurationPage::MIDIConfigurationPage(QWidget *parent):
             new QLabel(tr("Base octave number for MIDI pitch display")),
             row, 0, 1, 2);
 
-    m_baseOctaveNumber = new QSpinBox;
-    m_baseOctaveNumber->setMinimum(-10);
-    m_baseOctaveNumber->setMaximum(10);
-    m_baseOctaveNumber->setValue(
-            settings.value("midipitchoctave", -2).toInt());
     connect(m_baseOctaveNumber,
                 static_cast<void(QSpinBox::*)(int)>(&QSpinBox::valueChanged),
             this, &MIDIConfigurationPage::slotModified);
@@ -347,7 +347,7 @@ MIDIConfigurationPage::MIDIConfigurationPage(QWidget *parent):
             this, &MIDIConfigurationPage::slotModified);
 
     layout->addWidget(m_midiMachineControlMode, row, 1);
-    
+
     ++row;
 
     // MIDI Time Code mode
@@ -454,10 +454,12 @@ MIDIConfigurationPage::apply()
 
     // *** General tab
 
+    Preferences::midiOctaveNumberOffset.set(m_baseOctaveNumber->value());
+    RosegardenMainWindow::self()->emitMidiOctaveOffsetChanged();
+
     QSettings settings;
     settings.beginGroup(GeneralOptionsConfigGroup);
 
-    settings.setValue("midipitchoctave", m_baseOctaveNumber->value());
     settings.setValue("alwaysusedefaultstudio",
                       m_useDefaultStudio->isChecked());
     settings.setValue("external_controller",

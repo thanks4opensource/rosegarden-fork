@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -144,6 +144,20 @@ GeneralConfigurationPage::GeneralConfigurationPage(QWidget *parent) :
                 static_cast<void(QComboBox::*)(int)>(&QComboBox::activated),
             this, &GeneralConfigurationPage::slotModified);
     layout->addWidget(m_autoSaveInterval, row, 1, 1, 2);
+
+    ++row;
+
+    layout->addWidget(new QLabel(tr("Save .rg files uncompressed"),
+                                 frame), row, 0);
+    m_saveUncompressed = new QCheckBox(frame);
+    m_saveUncompressed->setChecked(Preferences::
+                                   getPreference("General_Options",
+                                                 "save_uncompressed",
+                                                 false));
+    connect(m_saveUncompressed, &QCheckBox::stateChanged,
+            this, &GeneralConfigurationPage::slotModified);
+
+    layout->addWidget(m_saveUncompressed, row, 1, row- row+1, 2);
 
     ++row;
 
@@ -582,6 +596,9 @@ void GeneralConfigurationPage::apply()
 
     Preferences::setStopAtEnd(m_stopPlaybackAtEnd->isChecked());
     Preferences::setAutoChannels(m_autoChannels->isChecked());
+    Preferences::setPreference("General_Options",
+                               "save_uncompressed",
+                               m_saveUncompressed->isChecked());
 
     settings.beginGroup(SequencerOptionsConfigGroup);
     settings.setValue("loopentiresong", m_loopSong->isChecked());

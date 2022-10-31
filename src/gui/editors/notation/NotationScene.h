@@ -50,6 +50,7 @@ class RosegardenDocument;
 class Segment;
 class ViewSegment;
 class RulerScale;
+class ChordNameRuler;
 
 typedef std::map<int, int> TrackIntMap;
 
@@ -217,6 +218,8 @@ public:
     void updateRefreshStatuses(TrackId track, timeT time);
 
     void updatePageSize();
+
+    void copyRulerChords(const ChordNameRuler*);
 
     /// YG: Only for debug
     void dumpVectors();

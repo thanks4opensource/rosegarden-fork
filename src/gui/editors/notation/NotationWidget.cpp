@@ -20,6 +20,7 @@
 
 #include "NotationWidget.h"
 #include "NotationScene.h"
+#include "NotationView.h"
 #include "NotationToolBox.h"
 #include "NoteRestInserter.h"
 #include "ClefInserter.h"
@@ -50,6 +51,7 @@
 #include "base/ColourMap.h"
 #include "base/Segment.h"
 
+#include "document/CommandHistory.h"
 #include "document/RosegardenDocument.h"
 
 #include "gui/application/RosegardenMainWindow.h"
@@ -93,7 +95,8 @@
 namespace Rosegarden
 {
 
-NotationWidget::NotationWidget() :
+NotationWidget::NotationWidget(NotationView *notationView) :
+    m_notationView(notationView),
     m_document(nullptr),
     m_view(nullptr),
     m_scene(nullptr),
@@ -531,7 +534,21 @@ NotationWidget::setSegments(RosegardenDocument *document,
     m_chordNameRuler = new ChordNameRuler(m_referenceScale,
                                           document,
                                           segments,
+                                          true,    // key change insert enabled
+                                          true,    // enable copy chords to text
                                           24);     // height
+    connect(CommandHistory::getInstance(),
+            &CommandHistory::commandExecuted,
+            m_chordNameRuler,
+            &ChordNameRuler::slotRecalculateAll);
+    connect(m_chordNameRuler,
+            &ChordNameRuler::insertKeyChange,
+            m_notationView,
+            &NotationView::slotEditAddKeySignature);
+    connect(m_chordNameRuler,
+            &ChordNameRuler::copyChords,
+            this,
+            &NotationWidget::slotCopyRulerChords);
 
     m_rawNoteRuler = new RawNoteRuler(m_referenceScale,
                                       segments[0],
@@ -574,8 +591,6 @@ NotationWidget::setSegments(RosegardenDocument *document,
 
     m_topStandardRuler->connectRulerToDocPointer(document);
     m_bottomStandardRuler->connectRulerToDocPointer(document);
-
-    m_chordNameRuler->setReady();
 
     slotUpdateSegmentChangerBackground();
 
@@ -1033,6 +1048,12 @@ void
 NotationWidget::slotTRMouseRelease()
 {
     m_autoScroller.stop();
+}
+
+void
+NotationWidget::slotCopyRulerChords()
+{
+    if (m_scene) m_scene->copyRulerChords(m_chordNameRuler);
 }
 
 void

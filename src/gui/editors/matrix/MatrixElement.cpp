@@ -25,22 +25,25 @@
 #include "IsotropicRectItem.h"
 #include "IsotropicTextItem.h"
 
-#include "misc/Debug.h"
+#include "base/BaseProperties.h"
+#include "base/Event.h"
+#include "base/NotationTypes.h"
 #include "base/RulerScale.h"
+#include "document/RosegardenDocument.h"
+#include "gui/general/GUIPalette.h"
+#include "gui/general/MidiPitchLabel.h"
+#include "gui/rulers/ChordNameRuler.h"
+#include "gui/rulers/DefaultVelocityColour.h"
 #include "misc/ConfigGroups.h"
+#include "misc/Debug.h"
+#include "misc/Preferences.h"
 
 #include <QGraphicsRectItem>
 #include <QBrush>
 #include <QColor>
 #include <QSettings>
 
-#include "base/Event.h"
-#include "base/NotationTypes.h"
-#include "base/BaseProperties.h"
-#include "document/RosegardenDocument.h"
-#include "gui/general/GUIPalette.h"
-#include "gui/rulers/DefaultVelocityColour.h"
-#include "gui/general/MidiPitchLabel.h"
+#include <limits>
 
 namespace Rosegarden
 {
@@ -58,6 +61,13 @@ MatrixElement::MatrixElement(MatrixScene *scene, Event *event,
     m_drumDisplay(drum),
     m_current(true),
     m_selected(false),
+    m_prevShowName(ShowName::UNSET),
+    m_prevTime(std::numeric_limits<timeT>::min()),
+    m_tonic(0),
+    m_sharps(true),
+    m_minor(false),
+    m_minorNotesOffset(0),
+    m_alternateMinorNotes(false),
     m_noteItem(nullptr),
     m_drumItem(nullptr),
     m_textItem(nullptr),
@@ -69,6 +79,9 @@ MatrixElement::MatrixElement(MatrixScene *scene, Event *event,
     if (segment && scene && segment != scene->getCurrentSegment()) {
         m_current = false;
     }
+
+    getKeyInfo(m_prevShowName, m_prevTime);
+
     reconfigure();
 }
 
@@ -237,9 +250,12 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
 
     // Optional note name.
     // But no note names on diamond-shaped percussion notes.
-    bool showName = m_scene->getMatrixWidget()->getShowNoteNames() &&
-                    !m_drumDisplay;
-    if (showName) {
+    ShowName showName =      m_scene->getMatrixWidget()->getShowNoteNames()
+                          && !m_drumDisplay
+                        ? ShowName::SHOW
+                        : ShowName::SKIP;
+
+    if (showName == ShowName::SHOW) {
         if (!m_textItem) m_textItem = m_scene->graphicsTextPool.getFrom();
 
         // Draw text on top of note, see constants in .h file
@@ -251,7 +267,84 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
 
         m_textItem->setBrush(textColor(colour));
 
-        QString noteName = MidiPitchLabel(pitch, "").getQString();
+        QString noteName;
+
+        if (   showName != m_prevShowName
+            || time     != m_prevTime
+            || m_scene->getKeySignaturesChanged())
+            getKeyInfo(showName, time);
+
+        unsigned degree =   (  pitch
+                             + (   m_minor && m_minorNotesOffset
+                                ? 21   // C->A, +9 but make sure always positive
+                                : 12)  // make sure always positive
+                             - m_tonic)
+                          % 12;
+
+        const MatrixWidget *matrixWidget = m_scene->getMatrixWidget();
+
+        switch (matrixWidget->getNoteNameType()) {
+            case MatrixWidget::NoteNameType::OFF:
+                noteName = "";
+                break;
+
+            case MatrixWidget::NoteNameType::CONCERT:
+                noteName = MidiPitchLabel(pitch, "", m_sharps).getQString();
+            break;
+
+            case MatrixWidget::NoteNameType::FIXED_DO:
+                noteName = MidiPitchLabel::fixedSolfege(pitch, m_sharps);
+            break;
+
+            case MatrixWidget::NoteNameType::INTEGER_ABSOLUTE:
+            noteName =  QString("%1:%2")
+                       .arg(pitch % 12)
+                       .arg(  pitch / 12
+                            + Preferences::midiOctaveNumberOffset.get());
+            break;
+
+            case MatrixWidget::NoteNameType::RAW_MIDI:
+                noteName = QString("%1").arg(pitch);
+            break;
+
+            case MatrixWidget::NoteNameType::DEGREE:
+                if (m_minor && !m_minorNotesOffset && m_alternateMinorNotes)
+                    noteName = MidiPitchLabel::scaleDegreeMinorAlt(degree,
+                                                                   m_sharps);
+                else
+                    noteName = MidiPitchLabel::scaleDegreeMajor(degree,
+                                                                m_sharps);
+            break;
+
+            case MatrixWidget::NoteNameType::MOVABLE_DO:
+                noteName = MidiPitchLabel::movableSolfege(degree, m_sharps);
+            break;
+
+            case MatrixWidget::NoteNameType::INTEGER_KEY:
+                noteName = QString("%1").arg(degree);
+            break;
+        }
+
+        const ChordNameRuler *chordNameRuler = matrixWidget->getChordNameRuler();
+        if (      matrixWidget->getChordSpellingType()
+               != MatrixWidget::ChordSpellingType::OFF
+            && chordNameRuler
+            && chordNameRuler->isVisible()) {
+            int rootDegree = chordNameRuler->chordRootPitchAtTime(time);
+            if (rootDegree != -1) {
+                unsigned chordDegree = (pitch + 12 - rootDegree) % 12;
+                if (   m_scene->getMatrixWidget()->getChordSpellingType()
+                    == MatrixWidget::ChordSpellingType::DEGREE)
+                    noteName =  QString("%1(%2)")
+                               .arg(noteName)
+                               .arg(  MidiPitchLabel
+                                    ::scaleDegreeMajor(chordDegree, m_sharps));
+                else
+                    noteName = QString("%1(%2)").arg(noteName)
+                                                .arg(chordDegree);
+            }
+        }
+
         m_textItem->setText(noteName, m_noteItem->rect());
         QFont font;
         font.setPixelSize(resolution);
@@ -294,6 +387,35 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
         else if (m_onceHadToolTips.find(m_noteItem) != m_onceHadToolTips.end())
             m_noteItem->setToolTip(QString());
     }
+}
+
+// See documentation in .h file
+void
+MatrixElement::getKeyInfo(const ShowName showName, const timeT time)
+
+{
+    Rosegarden::Key key = m_segment->getKeyAtTime(time);
+
+    if (key.getAccidentalCount() == 0)
+        m_sharps = !m_scene->getMatrixWidget()->getNoteNamesCmajFlats();
+    else
+        m_sharps = key.isSharp();
+
+    m_tonic = key.getTonicPitch();
+    m_minor = key.isMinor();
+
+    m_minorNotesOffset =     m_scene
+                           ->getMatrixWidget()
+                           ->getNoteNamesOffsetMinors()
+                         ? 9
+                         : 0;
+
+    m_alternateMinorNotes =   m_scene
+                            ->getMatrixWidget()
+                            ->getNoteNamesAlternateMinors();
+
+    m_prevShowName = showName;
+    m_prevTime     = time;
 }
 
 bool
@@ -449,19 +571,6 @@ void MatrixElement::setColor()
         m_drumSelectItem->setBrush(selectionBorderColor(m_drumItem));
 }
 
-QPen MatrixElement::outlinePen() const
-{
-#if 0   // t4os
-    const QColor outlineColor =
-        m_current ?
-        GUIPalette::getColour(GUIPalette::MatrixElementBorder) :
-        GUIPalette::getColour(GUIPalette::MatrixElementLightBorder);
-    return QPen(outlineColor, 0);
-#else
-    return QPen(selectionBorderColor(getActiveItem()), 0);
-#endif
-}
-
 QColor
 MatrixElement::noteColor()
 const
@@ -562,7 +671,8 @@ const
         const QColor result =
                QColor::fromHsv((noteColor.hue() + 240) % 360,
                                mapTo128_255(noteColor.saturation()),
-                               mapTo128_255(noteColor.value()));
+                               mapTo128_255(noteColor.value()),
+                               128);   // t4os -- alpha
 
         return result;
     }

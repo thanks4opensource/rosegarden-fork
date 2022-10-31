@@ -102,10 +102,31 @@ public:
         SEGMENT_AND_VELOCITY
     };
 
+    enum class NoteNameType {
+        OFF,
+        CONCERT,
+        FIXED_DO,
+        INTEGER_ABSOLUTE,
+        RAW_MIDI,
+        DEGREE,
+        MOVABLE_DO,
+        INTEGER_KEY,
+    };
+
+    enum class ChordSpellingType {
+        OFF,
+        DEGREE,
+        INTEGER,
+    };
+
     RosegardenDocument *getDocument() { return m_document; }
     Device *getCurrentDevice();
     MatrixScene *getScene()  { return m_scene; }
-    Panner *getPanner() { return m_panner; }
+#if 0   // t4osDEBUG
+    Panner *getPanner() { return m_panner; }  // unused
+#else
+    Panned *getPanned() { return m_panned; }  // unused
+#endif
 
     /**
      * Show the pointer.  Used by MatrixView upon construction, this ensures
@@ -143,6 +164,8 @@ public:
     /// MatrixScene::setSnap()
     void setSnap(timeT);
 
+    bool chordNameRulerIsVisible() const;
+    ChordNameRuler *getChordNameRuler() const { return m_chordNameRuler; }
     void setChordNameRulerVisible(bool visible);
     void setTempoRulerVisible(bool visible);
 
@@ -186,21 +209,54 @@ public:
     void setSegmentLabelAndChangerColor(const Segment* const segment,
                                         const QColor *segmentColor = nullptr);
 
-    bool getShowNoteNames() const { return m_showNoteNames; }
-    void setShowNoteNames(bool show) { m_showNoteNames = show; }
+
+    bool getShowNoteNames() const          { return m_showNoteNames; }
+    void setShowNoteNames(const bool show) { m_showNoteNames = show; }
+
     bool isDrumMode() const { return m_drumMode; }
-    bool getShowPercussionDurations() const {return m_showPercussionDurations; }
-    void setShowPercussionDurations(bool show) { m_showPercussionDurations =
-                                                 show; }
-    NoteColorType getNoteColorType() const { return m_noteColorType; }
-    void setNoteColorType(NoteColorType colorType) { m_noteColorType =
-                                                        colorType; }
-    bool getNoteColorAllSegments() const { return m_noteColorAllSegments; }
-    void setNoteColorAllSegments(bool all) { m_noteColorAllSegments = all; }
 
-    /// Velocity for new notes.  (And moved notes too.)
+    bool getShowPercussionDurations() const
+         { return m_showPercussionDurations; }
+    void setShowPercussionDurations(const bool show)
+         { m_showPercussionDurations = show; }
+
+    NoteColorType getNoteColorType() const
+                  { return m_noteColorType; }
+    void          setNoteColorType(const NoteColorType colorType)
+                  { m_noteColorType = colorType; }
+
+    bool getNoteColorAllSegments() const
+         { return m_noteColorAllSegments; }
+    void setNoteColorAllSegments(const bool all)
+         { m_noteColorAllSegments = all; }
+
+    NoteNameType getNoteNameType() const
+                 { return m_noteNameType; }
+    void         setNoteNameType(const NoteNameType nameType)
+                 { m_noteNameType = nameType; }
+
+    ChordSpellingType getChordSpellingType() const
+                 { return m_chordSpellingType; }
+    void         setChordSpellingType(const ChordSpellingType nameType)
+                 { m_chordSpellingType = nameType; }
+
+    bool getNoteNamesCmajFlats() const
+         { return m_noteNamesCmajFlats; }
+    void setNoteNamesCmajFlats(const bool flats)
+         { m_noteNamesCmajFlats = flats; }
+
+    bool getNoteNamesOffsetMinors() const
+         { return m_noteNamesOffsetMinors; }
+    void setNoteNamesOffsetMinors(const bool offset)
+         { m_noteNamesOffsetMinors = offset; }
+
+    bool getNoteNamesAlternateMinors() const
+         { return m_noteNamesAlternateMinors; }
+    void setNoteNamesAlternateMinors(const bool alternate)
+         { m_noteNamesAlternateMinors = alternate; }
+
+    /// Velocity for new notes (and moved notes, too).
     int getCurrentVelocity() const { return m_currentVelocity; }
-
 
     // Interface for MatrixView menu commands
 
@@ -368,6 +424,12 @@ private slots:
     /// Instrument is being destroyed
     void slotInstrumentGone();
 
+    // Command has executed, update ruler and possibly note labels
+    void slotUpdateChordNameRuler();
+
+    // User has changed chord name ruler segments (to analzyze)
+    void slotChordNameRulerSegmentsUpdated();
+
 private:
     MatrixView* const m_view;
 
@@ -483,6 +545,11 @@ private:
     bool m_showPercussionDurations;
     NoteColorType m_noteColorType;
     bool m_noteColorAllSegments;
+    NoteNameType m_noteNameType;
+    ChordSpellingType m_chordSpellingType;
+    bool m_noteNamesCmajFlats;
+    bool m_noteNamesOffsetMinors;
+    bool m_noteNamesAlternateMinors;
 
     // Tools
     MatrixToolBox *m_toolBox; // I own this

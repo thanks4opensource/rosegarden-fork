@@ -19,6 +19,9 @@
 #include <QVariant>
 #include <QString>
 
+#include "misc/ConfigGroups.h"
+
+
 namespace Rosegarden
 {
 
@@ -79,6 +82,96 @@ namespace Preferences
         return qv.value<T>();
     }
 
+    void init();
+
+
+    // Special case: Too performance-critical (once per note label in
+    //   MatrixElement::reconfigure()) to use map lookup in
+    //   Preferences::setPreference() and getPreference() template functions
+    // Used to map MIDI octave (pitch number (0-127) modulo 12) to one of
+    //   several commonly used but not unified/standardized octave numbers,
+    //   typically middle C == 4 or 5 (offset == -1 or 0 respectively)
+    class MidiOctaveNumberOffset {
+      public:
+        MidiOctaveNumberOffset()
+        :   m_isCurrent(false),
+            m_offset(-2)  // Should be -1 for middle C == C4
+        {}
+
+        // Make sure initted so get() doesn't have to check
+        void init()
+        {
+            if (!m_isCurrent) {
+                  m_offset
+                = Preferences::getPreference(GeneralOptionsConfigGroup,
+                                             "midipitchoctave",
+                                             -2);
+                m_isCurrent = true;
+            }
+        }
+
+        int get() const { return m_offset; }
+
+        void set(const int offset)
+        {
+            m_offset    = offset;
+            m_isCurrent = true;
+            Preferences::setPreference(GeneralOptionsConfigGroup,
+                                       "midipitchoctave",
+                                       offset);
+        }
+
+      protected:
+        bool m_isCurrent;
+        int  m_offset;
+    };
+    extern MidiOctaveNumberOffset midiOctaveNumberOffset;
+
+
+    // Special case: Too performance-critical (once per chord in
+    // ChordLabel::ChordLabel() in AnalysisTypes.cpp) to use
+    // map lookup in Preferences::setPreference() and
+    // getPreference() template functions.
+    class NonDiatonicChords {
+      public:
+        NonDiatonicChords()
+        :   m_isCurrent(false),
+            m_nonDiatonicChords(false)
+        {}
+
+        // Make sure initted so get() doesn't have to check
+        void init()
+        {
+            if (!m_isCurrent) {
+                  m_nonDiatonicChords
+                = Preferences::getPreference(ChordAnalysisGroup,
+                                             "non_diatonic_chords",
+                                             false);
+                m_isCurrent = true;
+            }
+        }
+
+        int get() const { return m_nonDiatonicChords; }
+
+        void set(const bool include )
+        {
+            m_nonDiatonicChords = include;
+            m_isCurrent = true;
+            Preferences::setPreference(ChordAnalysisGroup,
+                                       "non_diatonic_chords",
+                                       include);
+        }
+
+      protected:
+        bool m_isCurrent;
+        int  m_nonDiatonicChords;
+    };
+    extern NonDiatonicChords nonDiatonicChords;
+
+
+    // The following should all go away, replaced by use of generic
+    // setPreference() and getPreference() template functions, above
+
     void setSendProgramChangesWhenLooping(bool value);
     bool getSendProgramChangesWhenLooping();
 
@@ -106,7 +199,6 @@ namespace Preferences
     QString getCustomAudioLocation();
 
     // Experimental
-    bool getChordRulerNonDiatonicChords();
     bool getBug1623();
 
     void setAutoChannels(bool value);

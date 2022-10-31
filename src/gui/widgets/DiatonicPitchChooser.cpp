@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -139,11 +139,11 @@ DiatonicPitchChooser::DiatonicPitchChooser(QString title,
 int
 DiatonicPitchChooser::getPitch() const
 {
-    return 12 * m_octave->currentIndex() + scale_Cmajor[m_step->currentIndex()] + 
-    	(m_accidental->currentIndex() - 2);
+    return 12 * m_octave->currentIndex() + scale_Cmajor[m_step->currentIndex()] +
+        (m_accidental->currentIndex() - 2);
 }
 
-int 
+int
 DiatonicPitchChooser::getAccidental()
 {
     return m_accidental->currentIndex() - 2;
@@ -159,13 +159,13 @@ DiatonicPitchChooser::slotSetPitch(int pitch)
 
     int step = steps_Cmajor[pitch % 12];
     m_step->setCurrentIndex(step);
-    
+
     int pitchChange = (pitch % 12) - scale_Cmajor[step];
-    
+
     m_accidental->setCurrentIndex(pitchChange + 2);
 
     m_pitchLabel->setText(QString("%1").arg(pitch));
-    
+
     update();
 }
 
@@ -174,7 +174,7 @@ DiatonicPitchChooser::slotSetStep(int step)
 {
     if (m_step->currentIndex() != step)
        m_step->setCurrentIndex(step);
-    std::cout << "slot_step called" << std::endl;
+    // std::cout << "slot_step called" << std::endl;
     setLabelsIfNeeded();
     update();
 }
@@ -219,7 +219,7 @@ DiatonicPitchChooser::slotSetNote(int pitch, int octave, int step)
 
     m_octave->setCurrentIndex(octave);
     m_step->setCurrentIndex(step);
-    
+
     int pitchOffset = pitch - (octave * 12 + scale_Cmajor[step]);
     m_accidental->setCurrentIndex(pitchOffset + 2);
 

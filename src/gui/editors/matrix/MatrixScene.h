@@ -84,7 +84,7 @@ public:
     MatrixScene();
     ~MatrixScene() override;
 
-    enum HighlightType { HT_BlackKeys, HT_Triads };
+    enum HighlightType { HT_BlackKeys, HT_Triads, HT_Key };
 
     void setMatrixWidget(MatrixWidget *w) { m_widget = w; };
     MatrixWidget *getMatrixWidget() { return m_widget; };
@@ -148,6 +148,12 @@ public:
 
     /// just colors of notes
     void updateAllSegmentsColors();
+
+    /// just names of notes
+    void updateAllSegmentsNames();
+
+    /// just in one segment
+    void updateCurrentSegmentNames();
 
     void recreatePitchHighlights();
 
@@ -218,6 +224,11 @@ public:
     GraphicsItemPool<IsotropicRectItem>     graphicsIsotropicRectPool;
     GraphicsItemPool<IsotropicDiamondItem>  graphicsIsotropicDiamondPool;
 
+    bool getKeySignaturesChanged() const
+        { return m_keySignaturesChanged; }
+    void setKeySignaturesChanged(bool changed)
+        { m_keySignaturesChanged = changed; }
+
 signals:
 #if 0   // SIGNAL_SLOT_ABUSE
     void mousePressed(const MatrixMouseEvent *e);
@@ -247,10 +258,11 @@ public slots:
     void slotNotesTied  (const EventContainer &notes);
     void slotNotesUntied(const EventContainer &notes);
 
-#if 0   // Experimental. Respond to finer-grained notifications instead
+    void slotKeySignaturesChanged();
+
+// t4os -- see comment in constructor implemementation
 protected slots:
     void slotCommandExecuted();
-#endif
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent *) override;
@@ -307,6 +319,8 @@ private:
 
     HighlightType m_highlightType;
 
+    bool m_keySignaturesChanged;
+
     // These are the background items -- the grid lines and the shadings
     // used to highlight the first, third and fifth in the current key
     std::vector<QGraphicsLineItem *> m_horizontals;
@@ -323,6 +337,8 @@ private:
     void setMouseEventElement(const QPointF &scenePos,
                               MatrixMouseEvent &mme) const;
     void recreateLines();
+    void recreatePercussionHighlights();
+    void recreateKeyHighlights();
     void recreateTriadHighlights();
     void recreateBlackkeyHighlights();
     void updateCurrentSegment(bool isCurrent);

@@ -92,22 +92,22 @@ namespace Accidentals
 
     typedef std::vector<Accidental> AccidentalList;
 
-	/**
-	 * When no accidental is specified for a pitch, there are several
-	 * strategies to determine what accidental to display for an
-	 * out-of-key pitch
-	 */
-	enum NoAccidentalStrategy {
-		/** always use sharps */
-		UseSharps,
-		/** always use flats */
-		UseFlats,
-		/** always use sharps or always use flats depending on of what
-		 * type of accidentals the current key is made up */
-		UseKeySharpness,
-		/** use the most likely accidental for this key */
-		UseKey
-	};
+        /**
+         * When no accidental is specified for a pitch, there are several
+         * strategies to determine what accidental to display for an
+         * out-of-key pitch
+         */
+        enum NoAccidentalStrategy {
+                /** always use sharps */
+                UseSharps,
+                /** always use flats */
+                UseFlats,
+                /** always use sharps or always use flats depending on of what
+                 * type of accidentals the current key is made up */
+                UseKeySharpness,
+                /** use the most likely accidental for this key */
+                UseKey
+        };
 
     /**
      * Get the predefined accidentals (i.e. the ones listed above)
@@ -495,6 +495,8 @@ public:
         return Key(m_keyDetailMap[m_name].m_equivalence);
     }
 
+    const Event *getEvent() const { return m_event;}
+
     /**
      * Return the name of the key, in a human-readable form
      * also suitable for passing to the Key constructor.
@@ -578,6 +580,7 @@ public:
     Key transpose(int pitchDelta, int heightDelta);
 
 private:
+    const Event* const m_event;
     std::string m_name;
     mutable std::vector<int> *m_accidentalHeights;
 

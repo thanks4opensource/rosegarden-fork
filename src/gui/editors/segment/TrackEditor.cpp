@@ -140,6 +140,8 @@ TrackEditor::init(RosegardenMainViewWidget *mainViewWidget)
 
     m_chordNameRuler = new ChordNameRuler(m_rulerScale,
                                           m_doc,
+                                          false,  // no key change support
+                                          false,  // no copying chords to text
                                           20,
                                           this);
     grid->addWidget(m_chordNameRuler, 0, 1);

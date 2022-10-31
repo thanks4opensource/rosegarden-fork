@@ -242,6 +242,8 @@ BasicCommand::execute()
 
     m_segment->signalChanged(updateStartTime, m_modifiedEventsEnd);
 
+    postExecute();
+
     RG_DEBUG << getName() << "after execute";
     RG_DEBUG << getName() << "segment" <<
                 m_segment->getStartTime() << m_segment->getEndTime();
@@ -312,6 +314,8 @@ BasicCommand::unexecute()
              << updateStartTime << " -> " << m_modifiedEventsEnd;
 
     m_segment->signalChanged(updateStartTime, m_modifiedEventsEnd);
+
+    postUnexecute();
 
     RG_DEBUG << "unexecute() end.";
     RG_DEBUG << getName() << "after unexecute";
@@ -505,5 +509,8 @@ BasicCommand::calculateModifiedStartEnd()
     RG_DEBUG << "calculateModifiedStartEnd: " << m_modifiedEventsStart <<
         m_modifiedEventsEnd;
 }
+
+void BasicCommand::postExecute() {}
+void BasicCommand::postUnexecute() {}
 
 }

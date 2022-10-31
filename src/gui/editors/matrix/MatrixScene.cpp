@@ -31,32 +31,37 @@
 #include "IsotropicRectItem.h"
 #include "IsotropicTextItem.h"
 
-#include "gui/application/RosegardenMainWindow.h"
-#include "document/RosegardenDocument.h"
-#include "document/CommandHistory.h"
-#include "misc/ConfigGroups.h"
-
-#include "misc/Debug.h"
-#include "base/RulerScale.h"
-#include "base/SnapGrid.h"
-
-#include "gui/general/GUIPalette.h"
-#include "gui/studio/StudioControl.h"
-#include "gui/widgets/Panned.h"
-#include "gui/widgets/Panner.h"
-
 #include "base/BaseProperties.h"
 #include "base/NotationRules.h"
+#include "base/RulerScale.h"
+#include "base/Selection.h"
+#include "base/SnapGrid.h"
+
+#include "commands/edit/EraseCommand.h"
+
+#include "document/Command.h"
+#include "document/CommandHistory.h"
+#include "document/RosegardenDocument.h"
+
+#include "gui/application/RosegardenMainWindow.h"
+#include "gui/dialogs/CheckableListDialog.h"
+#include "gui/general/GUIPalette.h"
+#include "gui/rulers/ChordNameRuler.h"
+#include "gui/studio/StudioControl.h"
+#include "gui/widgets/Panned.h"
+
+#include "misc/ConfigGroups.h"
+#include "misc/Debug.h"
 
 #include "sequencer/RosegardenSequencer.h"
 
-#include <QGraphicsSceneMouseEvent>
 #include <QGraphicsLineItem>
+#include <QGraphicsSceneMouseEvent>
 #include <QGuiApplication>
 #include <QKeyEvent>
-#include <QSettings>
 #include <QPointF>
 #include <QRectF>
+#include <QSettings>
 
 #if 0  // Failed experiments to use Alt or Tab for alternate tool switching
 // Not defined in any Qt header file.
@@ -64,6 +69,8 @@ void qt_set_sequence_auto_mnemonic(bool b);
 #endif
 
 #include <algorithm>  // for std::sort
+#include <numeric>    // for std::iota
+
 
 //#define DEBUG_MOUSE
 
@@ -87,13 +94,15 @@ MatrixScene::MatrixScene() :
     m_snapGrid(nullptr),
     m_resolution(8),
     m_selection(nullptr),
-    m_highlightType(HT_BlackKeys)
+    m_highlightType(HT_BlackKeys),
+    m_keySignaturesChanged(true)
 {
-#if 0   // Experimental. Respond to finer-grained notifications instead
+#if 1   // t4os
     connect(CommandHistory::getInstance(), &CommandHistory::commandExecuted,
             this, &MatrixScene::slotCommandExecuted);
-#endif
-
+#else  // Respond to finer-grained signals instead.
+       // Canonical problem is that then need individual signals for every
+       //   command of interest.
     connect(RosegardenDocument::currentDocument,
             &RosegardenDocument::notesTied,
             this,
@@ -102,6 +111,21 @@ MatrixScene::MatrixScene() :
             &RosegardenDocument::notesUntied,
             this,
             &MatrixScene::slotNotesUntied);
+#endif
+
+    connect(RosegardenMainWindow::self(),
+            &RosegardenMainWindow::midiOctaveOffsetChanged,
+            this,
+            [this](){updateAllSegments(false);});
+
+    // Still need this even if connecting generic slotCommandExecuted()
+    // because checkUpdate() only updates notes in segments that are
+    // in modified time range. This eventually calls
+    // MatrixElement::reconfigure() twice for those, but unavoidable.
+    connect(RosegardenDocument::currentDocument,
+            &RosegardenDocument::keySignaturesChanged,
+            this,
+            &MatrixScene::slotKeySignaturesChanged);
 
 #if 0  // Failed experiments to use Alt or Tab for alternate tool switching
     qt_set_sequence_auto_mnemonic(false);
@@ -285,8 +309,14 @@ MatrixScene::getCurrentSegment()
 void
 MatrixScene::setCurrentSegment(const Segment* const segment)
 {
+    // t4os -- why does this have to be done?
     // Unset old current segment
     updateCurrentSegment(false);  // !isCurrent
+
+    if (m_widget && m_widget->getChordNameRuler())
+          m_widget
+        ->getChordNameRuler()
+        ->setCurrentSegment(segment, false);  // false == recalc only if needed
 
     for (int i = 0; i < int(m_segments.size()); ++i) {
         if (m_segments[i] == segment) {
@@ -412,8 +442,13 @@ MatrixScene::recreateLines()
     //   is resized. Only way around would be something like
     //   IsotropicXyzItem classes (see respective .h files).
     QPen barPen (Qt::black,             0.0, Qt::SolidLine),
+#if 0   // t4os
          beatPen(QColor(200, 200, 200), 0.0, Qt::SolidLine),
          gridPen(QColor(200, 200, 200), 0.0, Qt:: DashLine);
+#else
+         beatPen(QColor(160, 160, 160), 0.0, Qt::SolidLine),
+         gridPen(QColor(160, 160, 160), 0.0, Qt:: DashLine);
+#endif
 #endif
     // Draw Vertical Lines
     i = 0;
@@ -509,10 +544,151 @@ MatrixScene::recreateLines()
 }
 
 void
+MatrixScene::recreatePercussionHighlights()
+{
+    Segment *segment = getCurrentSegment();
+    if (!segment) return;
+
+    m_widget->getPanned()->setBackgroundBrush(Qt::white);
+
+    timeT k0 = segment->getClippedStartTime();
+    timeT k1 = segment->getEndMarkerTime();
+
+    int i = 0;
+
+    double x0 = m_scale->getXForTime(k0);
+    double x1 = m_scale->getXForTime(k1);
+
+    for (int pitch = 0 ; pitch < 128 ; pitch += 2) {
+        QGraphicsRectItem *rect;
+
+        if (i < (int)m_highlights.size()) {
+            rect = m_highlights[i];
+        } else {
+            rect = new QGraphicsRectItem;
+            rect->setZValue(MatrixElement::HIGHLIGHT_Z);
+            rect->setPen(Qt::NoPen);
+            addItem(rect);
+            m_highlights.push_back(rect);
+        }
+        ++i;
+
+        rect->setBrush(GUIPalette::getColour
+                       (GUIPalette::MatrixPitchHighlight));
+
+        rect->setRect(0, 0, x1 - x0, m_resolution + 1);
+        rect->setPos(x0, (127 - pitch) * (m_resolution + 1));
+        rect->show();
+    }
+
+    while (i < (int)m_highlights.size()) {
+        m_highlights[i]->hide();
+        ++i;
+    }
+}
+
+void
+MatrixScene::recreateKeyHighlights()
+{
+    Segment *segment = getCurrentSegment();
+    if (!segment) return;
+
+    m_widget->getPanned()->setBackgroundBrush(QColor(128, 128, 128));
+
+    timeT k0 = segment->getClippedStartTime();
+    timeT k1 = segment->getClippedStartTime();
+
+    int i = 0;
+
+    while (k0 < segment->getEndMarkerTime()) {
+        Rosegarden::Key key = segment->getKeyAtTime(k0);
+
+        // offset the highlights according to how far this key's tonic pitch is
+        // from C major (0)
+        int offset = key.getTonicPitch();
+
+        // correct for segment transposition, moving representation the opposite
+        // of pitch to cancel it out (C (MIDI pitch 0) in Bb (-2) is concert
+        // Bb (10), so 0 -1 == 11 -1 == 10, we have to go +1 == 11 +1 == 0)
+        int correction = segment->getTranspose(); // eg. -2
+        correction *= -1;                         // eg.  2
+
+        // key is Bb for Bb instrument, getTonicPitch() returned 10, correction
+        // is +2
+        offset -= correction;
+        offset += 12;
+        offset %= 12;
+
+        if (!segment->getNextKeyTime(k0, k1)) k1 = segment->getEndMarkerTime();
+
+        if (k0 == k1) {
+            RG_WARNING << "WARNING: MatrixScene::recreatePitchHighlights: k0 == k1 ==" << k0;
+            break;
+        }
+
+        double x0 = m_scale->getXForTime(k0);
+        double x1 = m_scale->getXForTime(k1);
+
+        // calculate the highlights relative to C major, plus offset
+        // (I think this enough to do the job.  It passes casual tests.)
+        static const int HCOUNT = 7;
+        static const int majorSteps[HCOUNT] = {0, 2, 4, 5, 7, 9, 11};
+        static const int minorSteps[HCOUNT] = {0, 2, 3, 5, 7, 8, 10};
+        static const QColor colors [HCOUNT] = {QColor(255, 255, 255),
+                                               QColor(224, 224, 224),
+                                               QColor(224, 224, 224),
+                                               QColor(224, 224, 224),
+                                               QColor(224, 224, 224),
+                                               QColor(224, 224, 224),
+                                               QColor(224, 224, 224)};
+
+        const int *hsteps = key.isMinor() ? minorSteps : majorSteps;
+
+        for (int j = 0; j < HCOUNT; ++j) {
+            int pitch = hsteps[j] + offset;
+            QColor color(colors[j]);
+
+            while (pitch < 128) {
+                QGraphicsRectItem *rect;
+
+                if (i < (int)m_highlights.size())
+                    rect = m_highlights[i];
+                else {
+                    rect = new QGraphicsRectItem;
+                    rect->setZValue(MatrixElement::HIGHLIGHT_Z);
+                    rect->setPen(Qt::NoPen);
+                    addItem(rect);
+                    m_highlights.push_back(rect);
+                }
+
+                rect->setBrush(color);
+
+             // rect->setRect(0.5, 0.5, x1 - x0, m_resolution + 1);
+                rect->setRect(0, 0, x1 - x0, m_resolution + 1);
+                rect->setPos(x0, (127 - pitch) * (m_resolution + 1));
+                rect->show();
+
+                pitch += 12;
+
+                ++i;
+            }
+        }
+        k0 = k1;
+    }
+
+    while (i < (int)m_highlights.size()) {
+        m_highlights[i]->hide();
+        ++i;
+    }
+}
+
+void
 MatrixScene::recreateTriadHighlights()
 {
     Segment *segment = getCurrentSegment();
     if (!segment) return;
+
+    m_widget->getPanned()->setBackgroundBrush(Qt::white);
 
     timeT k0 = segment->getClippedStartTime();
     timeT k1 = segment->getClippedStartTime();
@@ -612,6 +788,8 @@ MatrixScene::recreateBlackkeyHighlights()
     Segment *segment = getCurrentSegment();
     if (!segment) return;
 
+    m_widget->getPanned()->setBackgroundBrush(Qt::white);
+
     timeT k0 = segment->getClippedStartTime();
     timeT k1 = segment->getEndMarkerTime();
 
@@ -675,6 +853,7 @@ MatrixScene::recreatePitchHighlights()
         settings.value("highlight_type", HT_BlackKeys).toInt());
     settings.endGroup();
 
+#if 0   // t4os -- no longer needed??
     // Need to do this regardless if new highlight type is same
     // or different than old, because will be called when changing
     // active segment, and new vs previous active segments might
@@ -685,6 +864,8 @@ MatrixScene::recreatePitchHighlights()
         m_highlights[i]->setBrush(GUIPalette::getColour
                                   (GUIPalette::SegmentCanvas));
     }
+#endif
+
     // Force update to repaint before possibly hiding some highlights
     // that won't be reset to new type/time/pitch
     update();
@@ -697,10 +878,24 @@ MatrixScene::recreatePitchHighlights()
         m_highlightType = chosenHighlightType;
     }
 
-    switch (chosenHighlightType) {
-        case HT_BlackKeys: recreateBlackkeyHighlights(); break;
-        case HT_Triads:    recreateTriadHighlights();    break;
-    }
+    // t4os: pass segment to recreateXyzHighlights() and
+    // remove checks there
+
+    TrackId trackId = segment->getTrack();
+    Composition &composition = m_document->getComposition();
+    Track *track = composition.getTrackById(trackId);
+    Instrument *instr = m_document->
+                        getStudio()
+                        .getInstrumentById(track->getInstrument());
+
+    if (instr->getKeyMapping())
+        recreatePercussionHighlights();
+    else
+        switch (chosenHighlightType) {
+            case HT_BlackKeys: recreateBlackkeyHighlights(); break;
+            case HT_Triads:    recreateTriadHighlights();    break;
+            case HT_Key:       recreateKeyHighlights();      break;
+        }
 
     update();
 }
@@ -1058,13 +1253,11 @@ MatrixScene::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *e)
 #endif
 }
 
-#if 0   // Experimental. Respond to finer-grained notifications instead
 void
 MatrixScene::slotCommandExecuted()
 {
     checkUpdate();
 }
-#endif
 
 void
 MatrixScene::checkUpdate()
@@ -1120,6 +1313,9 @@ MatrixScene::segmentRemoved(const Composition *, Segment *removedSegment)
     if (removedSegmentIndex == -1)
         return;
 
+    if (m_widget && m_widget->getChordNameRuler())
+        m_widget->getChordNameRuler()->removeSegment(removedSegment);
+
     // If we're about to remove the one they are looking at and
     // there is another to switch to...
     if (removedSegmentIndex == static_cast<int>(m_currentSegmentIndex) &&
@@ -1132,8 +1328,8 @@ MatrixScene::segmentRemoved(const Composition *, Segment *removedSegment)
         // No next, go with the previous.
         if (newSegmentIndex == m_segments.size())
             newSegmentIndex = m_currentSegmentIndex - 1;
-
         setCurrentSegment(m_segments[newSegmentIndex]);
+
         if (m_widget) {
             // true == set instrument playback override
             m_widget->updateToCurrentSegment(true);
@@ -1515,11 +1711,43 @@ const EventContainer &notes)
 }
 
 void
+MatrixScene::slotKeySignaturesChanged()
+{
+    m_keySignaturesChanged = true;
+    updateAllSegments();
+    m_keySignaturesChanged = false;
+}
+
+void
 MatrixScene::updateAllSegmentsColors()
 {
     for (std::vector<MatrixViewSegment *>::iterator i = m_viewSegments.begin();
          i != m_viewSegments.end(); ++i) {
         (*i)->updateAllColors();
+    }
+}
+
+void
+MatrixScene::updateAllSegmentsNames()
+{
+    setKeySignaturesChanged(true);
+
+    for (std::vector<MatrixViewSegment *>::iterator i = m_viewSegments.begin();
+         i != m_viewSegments.end(); ++i) {
+        (*i)->updateAll();
+    }
+
+    setKeySignaturesChanged(false);
+}
+
+
+void
+MatrixScene::updateCurrentSegmentNames()
+{
+    if (!m_viewSegments.empty()) {
+        setKeySignaturesChanged(true);
+        m_viewSegments[m_currentSegmentIndex]->updateAll();
+        setKeySignaturesChanged(false);
     }
 }
 

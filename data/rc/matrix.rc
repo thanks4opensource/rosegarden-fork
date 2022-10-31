@@ -34,20 +34,67 @@
     <Menu name="Notes">
       <text>Notes</text>
       <Action name="show_note_names" text="Show note names" checked="false" />
+      <Menu name="NoteNames">
+        <text>Note names</text>
+        <Action name="note_names_off"
+                text="Note names off"
+                checked="false" />
+        <Action name="concert_pitch_names"
+                text="Concert pitch w/octave: C4, C♯4/D♭4, D4, ... A♯4/B♭4, B4, C5"
+                checked="true" />
+        <Action name="fixed_do_solfege"
+                text="Fixed-do solfège w/octave: Do4, Do♯4/Re♭4, Re4, ... La♯4/Ti♭4, Ti4, Do5"
+                checked="false" />
+        <Action name="absolute_integer_names"
+                text="Integer w/octave: 0(4), 1(4), 2(4), ... 10(4), 11(4), 0(5)"
+                checked="false" />
+        <Action name="midi_pitches"
+                text="MIDI note number"
+                checked="false" />
+        <Action name="degree_names"
+                text="In-key scale degree: 1, ♯1/♭2, 2, ... ♯6/♭7, 7"
+                checked="false" />
+        <Action name="movable_do_solfege"
+                text="Movable-do solfège: Do, Di/Ra, Re, ... Li/Ta, Ti"
+                checked="false" />
+        <Action name="key_integer_names"
+                text="In-key integers key: 0, 1, 2, ... 10, 11"
+                checked="false" />
+	<Separator/>
+        <Action name="chord_spelling_off"
+                text="Chord voicings off"
+                checked="true" />
+        <Action name="chord_spelling_degree"
+                text="Scale degree chord voicings: 1, ♭3, 5, etc."
+                checked="false" />
+        <Action name="chord_spelling_integer"
+                text="Integer chord voicings: 0, 3, 7, etc."
+                checked="false" />
+	<Separator/>
+        <Action name="c_major_flats" text="C major flats: C, D♭, D, E♭, ...A, B♭, B"
+		checked="true" />
+        <Action name="offset_minor_keys"
+		text="Relative in-key major: 6, ♯6/♭7, 7, ... ♯5/♭6 --- La-based solfège --- 9, 10, 11, 0, ... 7, 8"
+		checked="false" />
+        <Action name="alternate_minor_keys"
+		text="Alternate in-key minor diatonics: 3,6,7 vs ♭3,♭6,♭7"
+		checked="false" />
+      </Menu>
       <Action name="show_percussion_durations" text="Show percussion durations" checked="false" />
       <Menu name="Color">
-	<text>Color</text>
+        <text>Color</text>
         <Action name="velocity_color" text="Velocity" checked="true" />
         <Action name="segment_color" text="Segment" checked="false" />
         <Action name="segment_velocity_color" text="Segment+velocity" checked="false" />
         <Separator/>
-	<Action name="color_only_active" text="Only active" checked="true" />
+        <Action name="color_only_active" text="Only active" checked="true" />
       </Menu>
     </Menu>
     <Menu name="Highlight">
       <text>&amp;Highlight</text>
-      <Action name="highlight_black_notes" text="Highlight black notes" checked="false" />
-      <Action name="highlight_triads" text="Highlight triads" checked="false" />
+      <Action name="highlight_black_notes" text="Piano keys" checked="false" />
+      <Action name="highlight_triads" text="Triads" checked="false" />
+      <Action name="highlight_key" text="In-key/accidental" checked="false" />
     </Menu>
     <Menu name="Grid">
       <text>&amp;Grid</text>

@@ -64,5 +64,6 @@ namespace Rosegarden
     const QString UserShortcutsConfigGroup = "UserShortcuts";
     const QString ShortcutKeyboardConfigGroup = "ShortcutKeyboard";
     const QString ExperimentalConfigGroup = "Experimental";
+    const char* const ChordAnalysisGroup = "ChordAnalysis";
 
 }

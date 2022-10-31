@@ -71,6 +71,7 @@ namespace Rosegarden
     extern const QString UserShortcutsConfigGroup;
     extern const QString ShortcutKeyboardConfigGroup;
     extern const QString ExperimentalConfigGroup;
+    extern const char* const ChordAnalysisGroup;
 
 }
 

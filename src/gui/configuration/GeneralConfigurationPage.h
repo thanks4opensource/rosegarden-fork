@@ -52,7 +52,7 @@ public:
     };
 
     enum NoteNameStyle
-    { 
+    {
         American,
         Local
     };
@@ -109,6 +109,7 @@ private:
     QCheckBox *m_stopPlaybackAtEnd;
     QCheckBox *m_loopSong;
     QCheckBox *m_autoChannels;
+    QCheckBox *m_saveUncompressed;
 
     // Presentation tab
     QCheckBox *m_Thorn;

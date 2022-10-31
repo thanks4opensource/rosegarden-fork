@@ -1846,7 +1846,13 @@ RosegardenMainViewWidget::slotExternalController(const MappedEvent *event)
 void
 RosegardenMainViewWidget::initChordNameRuler()
 {
-    getTrackEditor()->getChordNameRuler()->setReady();
+    // This really needs to have a finer-grained signal, emitted only
+    // when notes are added/deleted/changed and/or key changes
+    // inserted/removed, etc.
+    connect(CommandHistory::getInstance(),
+            &CommandHistory::commandExecuted,
+            getTrackEditor()->getChordNameRuler(),
+            &ChordNameRuler::slotRecalculateAll);
 }
 
 EventView *

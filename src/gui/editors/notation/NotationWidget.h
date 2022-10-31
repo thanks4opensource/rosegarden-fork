@@ -44,6 +44,7 @@ class Device;
 class RosegardenDocument;
 class Segment;
 class NotationScene;
+class NotationView;
 class Note;
 class NotationToolBox;
 class NotationTool;
@@ -67,7 +68,7 @@ class NotationWidget : public QWidget,
     Q_OBJECT
 
 public:
-    NotationWidget();
+    NotationWidget(NotationView *notationView);
     ~NotationWidget() override;
 
     // Delete and zero the pointer members if they are allocated.  For
@@ -83,6 +84,7 @@ public:
     Panned *getView() { return m_view; }
     ControlRulerWidget *getControlsWidget()
         { return m_controlRulerWidget; }
+    ChordNameRuler *getChordNameRuler() const { return m_chordNameRuler; }
 
     EventSelection *getSelection() const override;
     void setSelection(EventSelection* s, bool preview) override;
@@ -231,6 +233,9 @@ private slots:
     void slotTRMousePress();
     void slotTRMouseRelease();
 
+    // ChordNameRuler
+    void slotCopyRulerChords();
+
     void slotZoomInFromPanner();
     void slotZoomOutFromPanner();
 
@@ -279,6 +284,7 @@ signals :
     void currentSegmentNext();
 
 private:
+    NotationView *m_notationView; // I do not own this
     RosegardenDocument *m_document; // I do not own this
     Panned *m_view; // I own this
     Panner *m_hpanner; // I own this

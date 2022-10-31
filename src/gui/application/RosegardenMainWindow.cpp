@@ -3420,9 +3420,8 @@ RosegardenMainWindow::slotHarmonizeSelection()
     CompositionTimeSliceAdapter adapter(&RosegardenDocument::currentDocument->getComposition(),
                                         &selection);
 
-    AnalysisHelper helper;
     Segment *segment = new Segment;
-    helper.guessHarmonies(adapter, *segment);
+    AnalysisHelper::guessHarmonies(adapter, *segment);
 
     //!!! do nothing with the results yet
     delete segment;
@@ -4338,8 +4337,7 @@ RosegardenMainWindow::createDocumentFromMIDIFile(QString file)
         if (firstKeyTime > segment.getStartTime()) {
             CompositionTimeSliceAdapter adapter
                 (comp, timeT(0), firstKeyTime);
-            AnalysisHelper helper;
-            segment.insert(helper.guessKey(adapter).getAsEvent
+            segment.insert(AnalysisHelper::guessKey(adapter).getAsEvent
                            (segment.getStartTime()));
         }
     }
@@ -4384,9 +4382,7 @@ RosegardenMainWindow::createDocumentFromMIDIFile(QString file)
 
     if (comp->getTimeSignatureCount() == 0) {
         CompositionTimeSliceAdapter adapter(comp);
-        AnalysisHelper analysisHelper;
-        TimeSignature timeSig =
-            analysisHelper.guessTimeSignature(adapter);
+        TimeSignature timeSig = AnalysisHelper::guessTimeSignature(adapter);
         comp->addTimeSignature(0, timeSig);
     }
 
@@ -8812,6 +8808,12 @@ RosegardenMainWindow::customEvent(QEvent *event)
         slotNextMarker();
         return;
     }
+}
+
+void
+RosegardenMainWindow::emitMidiOctaveOffsetChanged()
+{
+    emit midiOctaveOffsetChanged();
 }
 
 

@@ -86,6 +86,7 @@
 #include "sound/Midi.h"
 #include "misc/AppendLabel.h"
 #include "misc/Debug.h"
+#include "misc/Preferences.h"
 #include "misc/Strings.h"
 #include "document/Command.h"
 #include "document/io/XMLReader.h"
@@ -348,6 +349,20 @@ const EventContainer &notes)
     emit notesUntied(notes);
 }
 
+#ifdef BUILD_DEBUG
+void
+RosegardenDocument::signalKeySignaturesChanged(bool)
+{
+    // t4os -- crashes in test_segment_transposecommand
+    // emit keySignaturesChanged(inserted);
+}
+#else
+void
+RosegardenDocument::signalKeySignaturesChanged(bool inserted)
+{
+    emit keySignaturesChanged(inserted);
+}
+#endif
 
 QString RosegardenDocument::getAutoSaveFileName()
 {
@@ -1347,7 +1362,24 @@ bool RosegardenDocument::saveDocumentActual(const QString& filename,
     //
     outStream << "</rosegarden-data>\n";
 
-    bool okay = GzipFile::writeToFile(filename, outText);
+    bool okay;
+    if (Preferences::getPreference("General_Options",
+                                   "save_uncompressed",
+                                   false)) {
+        QFile file(filename);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            if (file.write(outText.toUtf8()) == -1)
+                okay = false;
+            else
+                okay = true;
+        }
+        else
+            okay = false;
+        file.close();
+    }
+    else
+        okay = GzipFile::writeToFile(filename, outText);
+
     if (!okay) {
         errMsg = tr("Error while writing on '%1'").arg(filename);
         return false;

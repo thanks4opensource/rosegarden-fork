@@ -29,6 +29,7 @@
 #include "MatrixViewSegment.h"
 #include "PianoKeyboard.h"
 
+#include "document/CommandHistory.h"
 #include "document/RosegardenDocument.h"
 
 #include "gui/application/RosegardenMainWindow.h"
@@ -137,6 +138,12 @@ MatrixWidget::MatrixWidget(MatrixView *matrixView) :
     m_highlightVisible(true),
     m_showNoteNames(false),
     m_showPercussionDurations(false),
+    m_noteColorType(NoteColorType::VELOCITY),
+    m_noteColorAllSegments(true),
+    m_noteNameType(NoteNameType::CONCERT),
+    m_noteNamesCmajFlats(true),
+    m_noteNamesOffsetMinors(false),
+    m_noteNamesAlternateMinors(false),
     m_toolBox(nullptr),
     m_currentVelocity(100),
     m_lastZoomWasHV(true),
@@ -210,7 +217,6 @@ MatrixWidget::MatrixWidget(MatrixView *matrixView) :
     // the panner
     m_panner = new Panner;
     m_panner->setMaximumHeight(60);
-    m_panner->setBackgroundBrush(Qt::white);
     m_panner->setOptimizationFlag(QGraphicsView::DontAdjustForAntialiasing, true);
 
     pannerLayout->addWidget(m_panner);
@@ -501,7 +507,23 @@ MatrixWidget::setSegments(RosegardenDocument *document,
     m_chordNameRuler = new ChordNameRuler(m_referenceScale,
                                           document,
                                           segments,
-                                          24);     // height
+                                          true,  // key change insert enabled
+                                          false, // no copying chords to text
+                                          24);   // height
+    connect(m_chordNameRuler,
+            &ChordNameRuler::insertKeyChange,
+            m_view,
+            &MatrixView::slotEditAddKeySignature);
+    connect(CommandHistory::getInstance(),
+            &CommandHistory::commandExecuted,  // Should really be signal
+                                               // emitted only when note(s)
+                                               // change, not any command.
+            this,
+            &MatrixWidget::slotUpdateChordNameRuler);
+    connect(m_chordNameRuler,
+            &ChordNameRuler::analysisSegmentsChange,
+            this,
+            &MatrixWidget::slotChordNameRulerSegmentsUpdated);
 
     m_layout->addWidget(m_topStandardRuler, TOPRULER_ROW, MAIN_COL, 1, 1);
     m_layout->addWidget(m_bottomStandardRuler, BOTTOMRULER_ROW, MAIN_COL, 1, 1);
@@ -540,8 +562,6 @@ MatrixWidget::setSegments(RosegardenDocument *document,
 
     connect(m_document, &RosegardenDocument::pointerPositionChanged,
             this, &MatrixWidget::slotPointerPositionChanged);
-
-    m_chordNameRuler->setReady();
 
     updateToCurrentSegment(true);  // true == set instrument playback override
 
@@ -1287,13 +1307,26 @@ MatrixWidget::setTempoRulerVisible(bool visible)
         m_tempoRuler->hide();
 }
 
+bool
+MatrixWidget::chordNameRulerIsVisible() const
+{
+    return m_chordNameRuler->isVisible();
+}
+
 void
 MatrixWidget::setChordNameRulerVisible(bool visible)
 {
-    if (visible)
+    if (visible) {
+        m_chordNameRuler->setCurrentSegment(m_view->getCurrentSegment(),
+                                            true);  // true == force recalc
         m_chordNameRuler->show();
-    else
+        m_chordNameRuler->slotRecalculateAll();
+        m_scene->updateAllSegmentsNames();
+    }
+    else {
         m_chordNameRuler->hide();
+        m_scene->updateAllSegmentsNames();
+    }
 }
 
 void
@@ -1753,6 +1786,21 @@ void
 MatrixWidget::slotInstrumentGone()
 {
     m_instrument = nullptr;
+}
+
+void
+MatrixWidget::slotUpdateChordNameRuler()
+{
+    m_chordNameRuler->slotRecalculateAll();
+    if (m_chordSpellingType != ChordSpellingType::OFF)
+        m_scene->updateCurrentSegmentNames();
+}
+
+void
+MatrixWidget::slotChordNameRulerSegmentsUpdated()
+{
+    if (m_chordSpellingType != ChordSpellingType::OFF)
+        m_scene->updateCurrentSegmentNames();
 }
 
 void

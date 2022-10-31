@@ -170,7 +170,11 @@ public:
      */
     Composition *getComposition() const {
         if (isTmp()) {
-            return getRealSegment()->getComposition();
+            const Segment *realSegment = getRealSegment();
+            if (realSegment)
+                return realSegment->getComposition();
+            else
+                return m_composition;
         } else {
             return m_composition;
         }
@@ -208,6 +212,7 @@ public:
     // Colour information
     void setColourIndex(const unsigned int input);
     unsigned int getColourIndex() const { return m_colourIndex; }
+    QColor getColour() const;
     /// Get a high-contrast color to use for segment previews
     QColor getPreviewColour() const;
 
@@ -251,6 +256,8 @@ public:
     /**
      * Return the start time of the Segment.  For a non-audio
      * Segment, this is the start time of the first event in it.
+     *
+     * t4os: No, is true start time of segment, regardless of events.
      */
     timeT getStartTime() const { return m_startTime; }
 

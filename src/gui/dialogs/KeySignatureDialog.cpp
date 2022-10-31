@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -181,7 +181,11 @@ KeySignatureDialog::KeySignatureDialog(QWidget *parent,
             new QRadioButton(tr("Apply to all segments at this time"),
                              buttonFrame);
         buttonFrameLayout->addWidget(m_applyToAllButton);
+#if 0   // t4os
         applyToOneButton->setChecked(true);
+#else
+        m_applyToAllButton->setChecked(true);
+#endif
         m_noPercussionCheckBox =
             new QCheckBox(tr("Exclude percussion segments"), buttonFrame);
         buttonFrameLayout->addWidget(m_noPercussionCheckBox);
@@ -369,6 +373,8 @@ KeySignatureDialog::regenerateKeyCombo()
         }
     }
 
+    m_keyCombo->setMaxVisibleItems(keys.size());
+
     if (!textSet) {
         m_keyCombo->setEditText(currentText);
     }
@@ -457,8 +463,8 @@ void
 KeySignatureDialog::setValid(bool valid)
 {
     m_valid = valid;
-	//enableButton( Ok, m_valid);	//&&& which button to enable here ????
-	//m_valid.setEnabled(true);
+        //enableButton( Ok, m_valid);   //&&& which button to enable here ????
+        //m_valid.setEnabled(true);
 }
 
 std::string

@@ -255,6 +255,9 @@ public:
 
     void setHaveRange(bool haveRange);
 
+    // Trampoline for MIDIConfigurationPage preference
+    void emitMidiOctaveOffsetChanged();
+
 
 protected:
 
@@ -489,6 +492,8 @@ signals:
     /// emitted when a plugin dialog (un)bypasses a plugin
     void pluginBypassed(InstrumentId, int, bool);
 
+    /// emitted when preference changes
+    void midiOctaveOffsetChanged();
 
 public slots:
 

@@ -44,14 +44,16 @@ public:
     RosegardenApplication(int &argc, char **argv);
 
     virtual void saveState(QSessionManager&);
-    
+
+    void initPreferences();
+
     //!!!
     //@@@ Need session manager commitData() call
 
 signals:
     // connect this to RosegardenMainWindow
     void aboutToSaveState();
-    
+
 protected:
 
     bool notify(QObject * receiver, QEvent * event) override;

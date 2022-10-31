@@ -22,9 +22,29 @@
 namespace Rosegarden
 {
 
-namespace Preferences {
-    std::map<std::pair<const char*, const char*>, QVariant> preferences;
+namespace Preferences
+{
+
+std::map<std::pair<const char*, const char*>, QVariant> preferences;
+
+
+void init()
+{
+    midiOctaveNumberOffset.init();
+    nonDiatonicChords     .init();
 }
+
+
+
+    MidiOctaveNumberOffset midiOctaveNumberOffset;
+
+    NonDiatonicChords nonDiatonicChords;
+
+}  // namespace Preferences
+
+
+// The following should all go away, replaced by use of generic
+// Preferences::setPreference() and getPreference() template functions
 
 namespace
 {
@@ -39,7 +59,6 @@ namespace
     int afldLocation = 0;
     QString afldCustomLocation;
 
-    bool chordRulerNonDiatonicChords = false;
     bool bug1623 = false;
     bool autoChannels = false;
 }
@@ -230,26 +249,6 @@ QString Preferences::getCustomAudioLocation()
     }
 
     return afldCustomLocation;
-}
-
-bool Preferences::getChordRulerNonDiatonicChords()
-{
-    static bool firstGet = true;
-
-    if (firstGet) {
-        firstGet = false;
-
-        QSettings settings;
-        settings.beginGroup(ExperimentalConfigGroup);
-        chordRulerNonDiatonicChords = settings.value(
-                                        "chordRulerNonDiatonicChords",
-                                        "false").toBool();
-        // Write it back out so we can find it if it wasn't there.
-        settings.setValue("chordRulerNonDiatonicChords",
-                          chordRulerNonDiatonicChords);
-    }
-
-    return chordRulerNonDiatonicChords;
 }
 
 bool Preferences::getBug1623()

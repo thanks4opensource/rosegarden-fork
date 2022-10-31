@@ -35,13 +35,23 @@ class MidiPitchLabel
     Q_DECLARE_TR_FUNCTIONS(Rosegarden::MidiPitchLabel)
 
 public:
-    MidiPitchLabel(int pitch, const char *separator = " ");
+    MidiPitchLabel(int pitch, const char *separator = " ", bool sharps = true);
 
-    std::string getString() const;
-    QString getQString() const;
+    std::string getString() const { return
+                                    std::string(m_midiNote.toUtf8().data()); }
+    QString getQString() const {return m_midiNote; }
+
+    static QString scaleDegreeMajor   (int pitch, bool isSharpKey);
+    static QString scaleDegreeMinorAlt(int pitch, bool isSharpKey);
+
+    static QString fixedSolfege  (int pitch, bool isSharpKey);
+    static QString movableSolfege(int pitch, bool isSharpKey);
+
+
 
 private:
     QString m_midiNote;
+    QString m_scaleDegree;
 };
 
 

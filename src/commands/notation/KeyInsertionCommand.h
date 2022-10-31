@@ -57,7 +57,7 @@ public:
                         bool shouldConvert,
                         bool shouldTranspose,
                         bool shouldTransposeKey,
-			bool shouldIgnorePercussion);
+                        bool shouldIgnorePercussion);
     ~KeyInsertionCommand() override;
 
     static QString getGlobalName(Key *key = nullptr) {
@@ -70,6 +70,10 @@ public:
 
     EventSelection *getSubsequentSelection() override;
     Event *getLastInsertedEvent() { return m_lastInsertedEvent; }
+
+    void postExecute() override;
+    void postUnexecute() override;
+
 
 protected:
     void modifySegment() override;

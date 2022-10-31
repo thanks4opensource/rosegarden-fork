@@ -106,6 +106,7 @@ signals:
 
 public slots:
     void slotPlaying(bool playing);
+    void slotEditAddKeySignature();   // public for ChordNameRuler
 
 protected:
     void readOptions() override;
@@ -134,7 +135,6 @@ protected slots:
     void slotEditGeneralPaste();
     void slotEditAddClef();
     void slotEditAddClefLinkOnly();
-    void slotEditAddKeySignature();
     void slotEditAddSustainDown();
     void slotEditAddSustainUp();
     void slotEditAddSustain(bool down);

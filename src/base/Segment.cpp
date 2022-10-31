@@ -1646,6 +1646,16 @@ Segment::setColourIndex(const unsigned int input)
 }
 
 QColor
+Segment::getColour() const
+{
+    if (!m_composition) {
+        return Qt::black;
+    }
+
+    return m_composition->getSegmentColourMap().getColour(m_colourIndex);
+}
+
+QColor
 Segment::getPreviewColour() const
 {
     // Select a preview colour for best visibility against the segment's
@@ -1656,12 +1666,7 @@ Segment::getPreviewColour() const
     // in a more central location.  Like the unused
     // Colour::getContrastingColour().
 
-    if (!m_composition) {
-        return Qt::black;
-    }
-
-    QColor segmentColour =
-            m_composition->getSegmentColourMap().getColour(m_colourIndex);
+    QColor segmentColour = getColour();
 
     int intensity = qGray(segmentColour.rgb());
 

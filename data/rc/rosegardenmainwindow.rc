@@ -7,7 +7,7 @@
     <text>&amp;File</text>
     <Action name="file_new" text="&amp;New" icon="filenew" shortcut="Ctrl+N" />
     <!-- these two would like to be open_merge, but that sticks them at
-	 the very bottom in older KDE3 versions: -->
+         the very bottom in older KDE3 versions: -->
     <Menu name="import" append="new_merge">
       <text>&amp;Import</text>
       <Action name="file_import_project" text="Import Rosegarden &amp;Project File..." />
@@ -26,7 +26,7 @@
       <Action name="file_merge_musicxml" text="Merge MusicXM&amp;L File..." />
     </Menu>
     <!-- this one would like to be save_merge, but that sticks it at
-	 the very bottom in older KDE3 versions: -->
+         the very bottom in older KDE3 versions: -->
     <Menu name="export" append="new_merge">
       <text>&amp;Export</text>
       <Action name="file_export_project" text="Export Rosegarden &amp;Project File..." />
@@ -103,7 +103,7 @@
       <Action name="color_only_selected" text="Only selected" checked="false"
        tooltip="Only affected selected segments." />
       <Menu name="segment_color_display">
-	<text>Display</text>
+        <text>Display</text>
         <Action name="segment_color_dark" text="Selected dark" checked="true" />
         <Action name="segment_color_bright" text="Selected bright" checked="false" />
       </Menu>
@@ -343,7 +343,7 @@
 <Separator/>
   <Action name="mute_all_tracks" />
   <Action name="unmute_all_tracks" />
-<!--	<Separator/>
+<!--    <Separator/>
   <Action name="show_previews" />
   <Action name="show_segment_labels" />
   <Action name="show_tracklabels"/>  -->
@@ -502,7 +502,7 @@
 <State name="got_audio">
   <enable>
     <Action name="audio_manager"/>
-	<Action name="audio_mixer"/>
+        <Action name="audio_mixer"/>
   </enable>
 </State>
 

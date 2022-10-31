@@ -146,6 +146,8 @@ set(rg_CPPS
   gui/dialogs/ShortcutDialog.cpp
   gui/dialogs/ShortcutDelegate.cpp
   gui/dialogs/ShortcutWarnDialog.cpp
+  gui/dialogs/CheckableListDialog.cpp
+  gui/dialogs/ChordNameStylesDialog.cpp
   gui/widgets/IconStackedWidget.cpp
   gui/widgets/TristateCheckBox.cpp
   gui/widgets/FileDialog.cpp

@@ -21,6 +21,7 @@
 #include "NotationScene.h"
 
 #include "base/BaseProperties.h"
+#include "base/NotationTypes.h"
 #include "base/Profiler.h"
 #include "base/Segment.h"
 #include "base/SegmentLinker.h"
@@ -39,6 +40,7 @@
 #include "document/CommandHistory.h"
 #include "document/RosegardenDocument.h"
 
+#include "gui/rulers/ChordNameRuler.h"
 #include "gui/studio/StudioControl.h"
 #include "gui/widgets/Panned.h"
 
@@ -264,6 +266,11 @@ NotationScene::setCurrentStaff(NotationStaff *staff)
                 emit currentStaffChanged();
                 emit currentViewSegmentChanged(staff);
                 m_widget->setTrackInstrumentOverride();
+                if (m_widget->getChordNameRuler())
+                    m_widget->getChordNameRuler()
+                            ->setCurrentSegment(&staff->getSegment(),
+                                                false);  // false == recalc
+                                                         //   only if needed
             }
             return;
         }
@@ -2266,6 +2273,54 @@ void
 NotationScene::updatePageSize()
 {
     layout(nullptr, 0, 0);
+}
+
+void
+NotationScene::copyRulerChords(
+const ChordNameRuler *ruler)
+{
+    const Segment *chordNames = ruler->chordNamesSegment();
+    Segment *textSegment = getCurrentSegment();
+
+    for (Event *chordName : *chordNames) {
+        // Shouldn't be anything but chords, but check anyway.
+        // In ruler is Text::ChordName, not Text::Chord
+        if (    chordName->getType() != Text::EventType
+            || !chordName->has(Text::TextPropertyName)
+            || !chordName->has(Text::TextTypePropertyName)
+            ||  chordName->getAsString(Text::TextTypePropertyName) !=
+                    Text::ChordName)
+            continue;
+
+        // Don't copy over existing chord name at time (might be user-edited)
+        timeT time = chordName->getAbsoluteTime();
+        Segment::const_iterator iter = textSegment->findTimeConst(time);
+        bool existing = false;
+
+        // In normal segment is Text::Chord, not Text::ChordName
+        while (    iter != textSegment->end()
+               && (*iter)->getAbsoluteTime() == time) {
+            if (   (*iter)->getType() == Text::EventType
+                && (*iter)->has(Text::TextPropertyName)
+                && (*iter)->has(Text::TextTypePropertyName)
+                && (*iter)->getAsString(Text::TextTypePropertyName) ==
+                    Text::Chord) {
+                existing = true;
+                break;
+            }
+            if (existing) break;
+            ++iter;
+        }
+
+        if (existing) continue;
+
+        // Normal segments have Text::Chord, not Text::ChordName
+        Text copy(chordName->getAsString(Text::TextPropertyName), Text::Chord);
+
+        textSegment->insert(copy.getAsEvent(time));
+    }
+
+    checkUpdate();
 }
 
 ///YG: Only for debug

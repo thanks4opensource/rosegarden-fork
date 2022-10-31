@@ -19,15 +19,17 @@
 
 #include "KeyInsertionCommand.h"
 
-#include "misc/Debug.h"
+#include "base/BaseProperties.h"
 #include "base/Event.h"
 #include "base/NotationTypes.h"
 #include "base/Segment.h"
 #include "base/SegmentNotationHelper.h"
+#include "base/Selection.h"
 #include "base/Studio.h"
 #include "document/BasicCommand.h"
-#include "base/BaseProperties.h"
-#include "base/Selection.h"
+#include "document/RosegardenDocument.h"
+#include "misc/Debug.h"
+
 #include <QString>
 
 
@@ -260,6 +262,16 @@ KeyInsertionCommand::modifySegment()
             }
         }
     }
+}
+
+void KeyInsertionCommand::postExecute()
+{
+    RosegardenDocument::currentDocument->signalKeySignaturesChanged(true);
+}
+
+void KeyInsertionCommand::postUnexecute()
+{
+    RosegardenDocument::currentDocument->signalKeySignaturesChanged(false);
 }
 
 }

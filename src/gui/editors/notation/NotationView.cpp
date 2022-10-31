@@ -234,7 +234,7 @@ NotationView::NotationView(RosegardenDocument *doc,
     m_oldPointerPosition(0),
     m_cursorPosition(0)
 {
-    m_notationWidget = new NotationWidget();
+    m_notationWidget = new NotationWidget(this);
     setCentralWidget(m_notationWidget);
 
     m_notationWidget->suspendLayoutUpdates();
@@ -3826,8 +3826,7 @@ NotationView::slotAddTimeSignature()
 
         CompositionTimeSliceAdapter adapter
                 (composition, insertionTime, endTime);
-        AnalysisHelper helper;
-        TimeSignature timeSig = helper.guessTimeSignature(adapter);
+        TimeSignature timeSig = AnalysisHelper::guessTimeSignature(adapter);
 
         dialog = new TimeSignatureDialog
                 (this, composition, insertionTime, timeSig, false,

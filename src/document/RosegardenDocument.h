@@ -300,6 +300,8 @@ public:
     void signalNotesTied  (const EventContainer&);
     void signalNotesUntied(const EventContainer&);
 
+    void signalKeySignaturesChanged(bool inserted);
+
     /**
      * returns the composition (the principal constituent of the document)
      */
@@ -620,6 +622,8 @@ signals:
 
     void notesTied  (const EventContainer&);
     void notesUntied(const EventContainer&);
+
+    void keySignaturesChanged(bool inserted);
 
 private:
     /**

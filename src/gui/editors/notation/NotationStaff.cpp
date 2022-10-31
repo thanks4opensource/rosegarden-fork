@@ -55,6 +55,7 @@
 #include "misc/ConfigGroups.h"
 #include "misc/Debug.h"
 #include "misc/Strings.h"
+#include "misc/Preferences.h"
 
 #include <QApplication>
 #include <QSettings>
@@ -433,11 +434,7 @@ NotationStaff::getNoteNameAtSceneCoords(double x, int y,
     ::Rosegarden::Key key;
     getClefAndKeyAtSceneCoords(x, y, clef, key);
 
-    QSettings settings;
-    settings.beginGroup( GeneralOptionsConfigGroup );
-
-    int baseOctave = settings.value("midipitchoctave", -2).toInt() ;
-    settings.endGroup();
+    const int baseOctave = Preferences::midiOctaveNumberOffset.get();
 
     Pitch p(getHeightAtSceneCoords(x, y), clef, key);
 
