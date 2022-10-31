@@ -1,4 +1,3 @@
-
 /* -*- c-basic-offset: 4 indent-tabs-mode: nil -*- vi:set ts=8 sts=4 sw=4: */
 
 /*
@@ -16,50 +15,33 @@
     COPYING included with this distribution for more information.
 */
 
-#ifndef RG_PASTENOTATIONDIALOG_H
-#define RG_PASTENOTATIONDIALOG_H
+#ifndef RG_OUTOFPROCESSORPOWER_H
+#define RG_OUTOFPROCESSORPOWER_H
 
-#include "commands/edit/PasteEventsCommand.h"
 #include <QDialog>
-#include <vector>
 
-
-class QWidget;
-class QRadioButton;
 class QCheckBox;
+class QWidget;
 
 
 namespace Rosegarden
 {
 
 
-
-class PasteNotationDialog : public QDialog
+class OutOfProcessorPower : public QDialog
 {
     Q_OBJECT
 
 public:
-    explicit PasteNotationDialog(QWidget *parent);
-
-    PasteEventsCommand::PasteType getPasteType() const;
-    static PasteEventsCommand::PasteType getSavedPasteType();
+    OutOfProcessorPower(QWidget *parent);
 
 public slots:
-    void slotPasteTypeChanged();
-    void slotHelpRequested();
+    virtual void accept() override;
 
-protected:
-    bool setAsDefault() const;
-    void accept() override;
+private:
+    QCheckBox *m_dontShow;
 
-    //--------------- Data members ---------------------------------
-
-    std::vector<QRadioButton *> m_pasteTypeButtons;
-    QCheckBox *m_setAsDefaultButton;
-
-    PasteEventsCommand::PasteType m_defaultType;
 };
-
 
 
 }

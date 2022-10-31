@@ -41,6 +41,7 @@
 #include "document/CommandHistory.h"
 #include "gui/dialogs/AudioManagerDialog.h"
 #include "gui/dialogs/CountdownDialog.h"
+#include "gui/dialogs/OutOfProcessorPower.h"
 #include "gui/application/RosegardenMainWindow.h"
 #include "gui/widgets/StartupLogo.h"
 #include "gui/studio/StudioControl.h"
@@ -54,6 +55,7 @@
 #include "sound/MappedEventList.h"
 #include "sound/MappedEvent.h"
 #include "sound/MappedInstrument.h"
+#include "misc/Preferences.h"
 
 #include "rosegarden-version.h"  // for VERSION
 
@@ -149,6 +151,10 @@ SequenceManager::setDocument(RosegardenDocument *doc)
     connect(CommandHistory::getInstance(), &CommandHistory::commandExecuted,
             this, &SequenceManager::update);
 
+    // Connect for loop changes.
+    connect(m_doc, &RosegardenDocument::loopChanged,
+            this, &SequenceManager::slotLoopChanged);
+
     if (doc->isSoundEnabled()) {
         resetCompositionMapper();
         populateCompositionMapper();
@@ -198,7 +204,7 @@ SequenceManager::play()
     RealTime startPos = comp.getElapsedRealTime(comp.getPosition());
 
     // If we're looping then jump to loop start
-    if (comp.isLooping())
+    if (comp.getLoopMode() == Composition::LoopOn)
         startPos = comp.getElapsedRealTime(comp.getLoopStart());
 
     int result = RosegardenSequencer::getInstance()->play(startPos);
@@ -514,7 +520,7 @@ punchin:
         // if we're not take off the number of count-in bars and start
         // recording.
         //
-        if (comp.isLooping())
+        if (comp.getLoopMode() == Composition::LoopOn)
             m_doc->slotSetPointerPosition(comp.getLoopStart());
         else {
             if (m_transportStatus != RECORDING_ARMED && punchIn == false) {
@@ -791,18 +797,14 @@ SequenceManager::processAsynchronousMidi(const MappedEventList &mC,
                             dynamic_cast<QWidget*>(m_doc->parent())->parentWidget(), "",
                             tr("The JACK Audio subsystem has stopped Rosegarden from processing audio, probably because of a processing overload.\nAn attempt to restart the audio service has been made, but some problems may remain.\nQuitting other running applications may improve Rosegarden's performance."));
 
-                    } else if ((*i)->getData1() == MappedEvent::FailureCPUOverload) {
-
-#define REPORT_CPU_OVERLOAD 1
-#ifdef REPORT_CPU_OVERLOAD
+                    } else if ((*i)->getData1()
+                            == MappedEvent::FailureCPUOverload) {
 
                         stop();
 
-                        QMessageBox::critical(
-                            dynamic_cast<QWidget*>(m_doc->parent())->parentWidget(), "",
-                            tr("Out of processor power for real-time audio processing.  Cannot continue."));
-
-#endif
+                        OutOfProcessorPower outOfProcessorPower(
+                                RosegardenMainWindow::self());
+                        outOfProcessorPower.exec();
 
                     } else {
 
@@ -1037,34 +1039,44 @@ SequenceManager::fastForwardToEnd()
     m_doc->slotSetPointerPosition(comp.getEndMarker());
 }
 
-void
-SequenceManager::setLoop(const timeT &lhs, const timeT &rhs)
+void SequenceManager::slotLoopChanged()
 {
-    // !!!  So who disabled the following, why?  Are loops with JACK transport
-    //      sync no longer hideously broken?
-    //
-    // do not set a loop if JACK transport sync is enabled, because this is
-    // completely broken, and apparently broken due to a limitation of JACK
-    // transport itself.  #1240039 - DMM
-    //    QSettings settings;
-    //    settings.beginGroup( SequencerOptionsConfigGroup );
-    // 
+    // ??? It's likely that we will be called, but there is no actual
+    //     change to the looping parameters.  Should we cache and
+    //     detect?  I suspect this routine is called rarely, so there's
+    //     no need for optimization.
 
-    //    if ( qStrToBool( settings.value("jacktransport", "false" ) ) )
-    //    {
-    //	// !!! message box should go here to inform user of why the loop was
-    //	//     not set, but I can't add it at the moment due to to the pre-release
-    //	//     freeze - DMM
-    //    settings.endGroup();
-    //	return;
-    //    }
+    Composition &composition = m_doc->getComposition();
 
-    RealTime loopStart =
-        m_doc->getComposition().getElapsedRealTime(lhs);
-    RealTime loopEnd =
-        m_doc->getComposition().getElapsedRealTime(rhs);
+    if (composition.getLoopMode() == Composition::LoopOff) {
+        // Turn off the loop.
+        RosegardenSequencer::getInstance()->setLoop(
+                RealTime::zeroTime, RealTime::zeroTime,
+                false);
+        return;
+    }
 
-    RosegardenSequencer::getInstance()->setLoop(loopStart, loopEnd);
+    if (composition.getLoopMode() == Composition::LoopOn) {
+        const RealTime loopStart = composition.getElapsedRealTime(
+                composition.getLoopStart());
+        const RealTime loopEnd = composition.getElapsedRealTime(
+                composition.getLoopEnd());
+        RosegardenSequencer::getInstance()->setLoop(
+                loopStart, loopEnd,
+                Preferences::getJumpToLoop());
+        return;
+    }
+
+    if (composition.getLoopMode() == Composition::LoopAll) {
+        const RealTime loopStart = composition.getElapsedRealTime(
+                composition.getStartMarker());
+        const RealTime loopEnd = composition.getElapsedRealTime(
+                composition.getDuration(true));
+        RosegardenSequencer::getInstance()->setLoop(
+                loopStart, loopEnd,
+                false);
+        return;
+    }
 }
 
 bool SequenceManager::inCountIn(const RealTime &time) const
@@ -1335,14 +1347,23 @@ bool SequenceManager::event(QEvent *e)
 
 void SequenceManager::update()
 {
+    // This is called on every command.
+
     //RG_DEBUG << "update()";
+
     // schedule a refresh-status check for the next event loop
     QEvent *e = new QEvent(QEvent::User);
+
     // Let the handler know we want a refresh().
     // ??? But we always want a refresh().  When wouldn't we?  Are
     //     we getting QEvent::User events from elsewhere?
     m_refreshRequested = true;
     QApplication::postEvent(this, e);
+
+    // Make sure the range for LoopAll is maintained.
+    Composition &composition = m_doc->getComposition();
+    if (composition.getLoopMode() == Composition::LoopAll)
+        slotLoopChanged();
 }
 
 void SequenceManager::refresh()
@@ -1444,9 +1465,7 @@ SequenceManager::segmentModified(Segment* s)
 {
     RG_DEBUG << "segmentModified(" << s << ")";
 
-    bool sizeChanged = m_compositionMapper->segmentModified(s);
-
-    RG_DEBUG << "segmentModified() : size changed = " << sizeChanged;
+    m_compositionMapper->segmentModified(s);
 
     RosegardenSequencer::getInstance()->segmentModified
         (m_compositionMapper->getMappedEventBuffer(s));
@@ -1706,9 +1725,18 @@ void SequenceManager::tempoChanged(const Composition *c)
     m_timeSigSegmentMapper->refresh();
     m_tempoSegmentMapper->refresh();
 
-    if (c->isLooping())
-        setLoop(c->getLoopStart(), c->getLoopEnd());
-    else if (m_transportStatus == PLAYING) {
+    if (c->getLoopMode() == Composition::LoopOn) {
+
+        // Adjust the loop position because the sequencer keeps track of
+        // position in real time (seconds) and we want to maintain the same
+        // position in musical time (bars/beats).
+
+        slotLoopChanged();
+
+    } else if (m_transportStatus == PLAYING) {
+
+        // ??? "else if" seems wrong here.  We probably want to adjust
+        //     the PPP regardless of whether looping is on?
 
         // Tempo has changed during playback.
 

@@ -213,7 +213,7 @@ namespace Rosegarden
 using namespace Accidentals;
 
 NotationView::NotationView(RosegardenDocument *doc,
-                           std::vector<Segment *> segments,
+                           const std::vector<Segment *>& segments,
                            QWidget *parent) :
     EditViewBase(segments, parent),
     m_document(doc),
@@ -395,6 +395,12 @@ NotationView::NotationView(RosegardenDocument *doc,
 
     m_notationWidget->resumeLayoutUpdates();
 
+    connect(RosegardenDocument::currentDocument,
+                &RosegardenDocument::loopChanged,
+            this, &NotationView::slotLoopChanged);
+    // Make sure we are in sync.
+    slotLoopChanged();
+
     // Connection to update the "Show staff headers" check box in the menu
     // (Must be done before setting the initial visibility of the headers)
     connect(m_notationWidget, &NotationWidget::headersVisibilityChanged,
@@ -437,8 +443,8 @@ NotationView::NotationView(RosegardenDocument *doc,
     const bool followPlayback =
             RosegardenDocument::currentDocument->getComposition().
             getEditorFollowPlayback();
-    RG_DEBUG << "set toggle_tracking checked" << followPlayback;
-    findAction("toggle_tracking")->setChecked(followPlayback);
+    RG_DEBUG << "set scroll_to_follow checked" << followPlayback;
+    findAction("scroll_to_follow")->setChecked(followPlayback);
 }
 
 NotationView::~NotationView()
@@ -961,7 +967,8 @@ NotationView::setupActions()
     createAction("playback_pointer_start", SIGNAL(rewindPlaybackToBeginning()));
     createAction("playback_pointer_end", SIGNAL(fastForwardPlaybackToEnd()));
     createAction("toggle_solo", SLOT(slotToggleSolo()));
-    createAction("toggle_tracking", SLOT(slotToggleTracking()));
+    createAction("scroll_to_follow", SLOT(slotScrollToFollow()));
+    createAction("loop", SLOT(slotLoop()));
     createAction("panic", SIGNAL(panic()));
 
     //"insert_note_actionmenu" coded below.
@@ -1993,10 +2000,27 @@ void
 NotationView::slotPreviewSelection()
 {
     if (!getSelection())
-        return ;
+        return;
 
-    RosegardenDocument::currentDocument->slotSetLoop(getSelection()->getStartTime(),
-                               getSelection()->getEndTime());
+    Composition &composition = m_document->getComposition();
+
+    composition.setLoopMode(Composition::LoopOn);
+    composition.setLoopStart(getSelection()->getStartTime());
+    composition.setLoopEnd(getSelection()->getEndTime());
+    emit m_document->loopChanged();
+}
+
+void
+NotationView::slotClearLoop()
+{
+    // ??? Not sure why there is a Move > Clear Loop.  The LoopRuler
+    //     is available.  One has full control of looping from there.
+
+    Composition &composition = m_document->getComposition();
+
+    // Less destructive.  Just turn it off.
+    composition.setLoopMode(Composition::LoopOff);
+    emit m_document->loopChanged();
 }
 
 void
@@ -2175,12 +2199,6 @@ NotationView::slotPlaceControllers()
                                     instrument,
                                     cp);
     CommandHistory::getInstance()->addCommand(command);
-}
-
-void
-NotationView::slotClearLoop()
-{
-    RosegardenDocument::currentDocument->slotSetLoop(0, 0);
 }
 
 void
@@ -3834,9 +3852,8 @@ NotationView::slotCheckForParallels()
 
     Composition *composition = segment->getComposition();
 
-    CheckForParallelsDialog *dialog = nullptr;
-
-    dialog = new CheckForParallelsDialog(this, m_document, m_notationWidget->getScene(), composition);
+    CheckForParallelsDialog *dialog =
+        new CheckForParallelsDialog(this, m_document, m_notationWidget->getScene(), composition);
 
     dialog->show();
 }
@@ -3855,9 +3872,26 @@ NotationView::slotToggleRawNoteRuler()
 }
 
 void
-NotationView::slotToggleTracking()
+NotationView::slotScrollToFollow()
 {
-    if (m_notationWidget) m_notationWidget->slotTogglePlayTracking();
+    if (m_notationWidget) m_notationWidget->slotScrollToFollow();
+}
+
+void
+NotationView::slotLoop()
+{
+    RosegardenDocument::currentDocument->loopButton(
+            findAction("loop")->isChecked());
+}
+
+void
+NotationView::slotLoopChanged()
+{
+    Composition &composition =
+        RosegardenDocument::currentDocument->getComposition();
+
+    findAction("loop")->setChecked(
+            (composition.getLoopMode() != Composition::LoopOff));
 }
 
 void
@@ -5463,10 +5497,10 @@ NotationView::slotInterpretActivate()
     // Debug output just to make it possible to observe that all the checkable
     // buttons are working correctly:
     RG_DEBUG << "NotationView::slotInterpretActivate() using flags: "
-             << (flags & InterpretCommand::ApplyTextDynamics ? "[TEXT]" : "[    ]")
-             << (flags & InterpretCommand::ApplyHairpins ? "[HAIR]" : "[    ]")
-             << (flags & InterpretCommand::Articulate ? "[SLUR]" : "[    ]")
-             << (flags & InterpretCommand::StressBeats ? "[BEAT]" : "[    ]");
+             << ((flags & InterpretCommand::ApplyTextDynamics) ? "[TEXT]" : "[    ]")
+             << ((flags & InterpretCommand::ApplyHairpins) ? "[HAIR]" : "[    ]")
+             << ((flags & InterpretCommand::Articulate) ? "[SLUR]" : "[    ]")
+             << ((flags & InterpretCommand::StressBeats) ? "[BEAT]" : "[    ]");
 
     // go straight to the command with the flags pulled from the toolbar as
     // though it were the dialog

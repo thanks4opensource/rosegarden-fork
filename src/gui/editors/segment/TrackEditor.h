@@ -95,7 +95,7 @@ public:
     /// Are we scrolling as we play?
     bool isTracking() const { return m_playTracking; }
     /// Toggle playback scrolling.
-    void toggleTracking();
+    void scrollToFollow();
 
     /// Adjust the canvas size to that required for the composition
     void updateCanvasSize();
@@ -105,9 +105,6 @@ public:
     void deleteSelectedSegments();
     void turnRepeatingSegmentToRealCopies();
     void turnLinkedSegmentsToRealCopies();
-
-    bool reinstateRange();
-    void hideRange();
 
 signals:
     /**
@@ -173,12 +170,6 @@ private slots:
     // TempoRuler mouse press/release for auto-scroll.
     void slotTRMousePress();
     void slotTRMouseRelease();
-
-    /// Show the given loop on the rulers
-    /**
-     * init() connects this to RosegardenDocument::loopChanged().
-     */
-    void slotSetLoop(timeT start, timeT end);
 
     /// Scroll the track buttons along with the segment canvas
     void slotVerticalScrollTrackButtons(int y);

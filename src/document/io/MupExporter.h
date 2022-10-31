@@ -53,19 +53,19 @@ public:
     bool write();
 
 protected:
-    timeT writeBar(std::ofstream &, 
+    timeT writeBar(std::ofstream &,
                                Composition *,
                                Segment *,
                                timeT, timeT,
                                TimeSignature &,
                                TrackId);
     void writeClefAndKey(std::ofstream &, TrackId trackNo);
-    void writeInventedRests(std::ofstream &,
+    static void writeInventedRests(std::ofstream &,
                             TimeSignature &timeSig,
                             timeT offset,
                             timeT duration);
     void writePitch(std::ofstream &, TrackId, Event *event);
-    void writeDuration(std::ofstream &, timeT duration);
+    static void writeDuration(std::ofstream &, timeT duration);
 
     typedef std::pair<Clef, Rosegarden::Key> ClefKeyPair;
     typedef std::map<TrackId, ClefKeyPair> ClefKeyMap;

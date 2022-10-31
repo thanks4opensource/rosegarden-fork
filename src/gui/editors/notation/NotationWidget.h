@@ -74,7 +74,7 @@ public:
     // 2-stage deletion.
     void clearAll();
 
-    void setSegments(RosegardenDocument *document, 
+    void setSegments(RosegardenDocument *document,
                      std::vector<Segment *> segments);
 
     void scrollToTopLeft();
@@ -85,7 +85,7 @@ public:
         { return m_controlRulerWidget; }
 
     EventSelection *getSelection() const override;
-    void setSelection(EventSelection* s, bool preview) override;
+    void setSelection(EventSelection* selection, bool preview) override;
     EventSelection *getRulerSelection() const;
 
     timeT getInsertionTime(bool allowEndTime = false) const;
@@ -102,7 +102,7 @@ public:
     unsigned int getUntupledCount() const { return  m_untupledCount;}
     void setGraceMode(bool state = true) { m_graceMode = state; }
 
-    bool getPlayTracking() const { return m_playTracking; }
+    bool getPlayTracking() const { return m_scrollToFollow; }
 
     NotationToolBox *getToolBox() { return m_toolBox; }
     NotationTool *getCurrentTool() const;
@@ -141,13 +141,13 @@ public:
 
     void updateSegmentChangerBackground();
     void updatePointerPosition(bool moveView = false);
-    
+
     void dispatchMousePress(const NotationMouseEvent *);
     void dispatchMouseRelease(const NotationMouseEvent *);
     void dispatchMouseMove(const NotationMouseEvent *);
     void dispatchMouseDoubleClick(const NotationMouseEvent *);
     void dispatchWheelTurned(int, const NotationMouseEvent *);
-    
+
     //  Valid or inhibit scrolling to kept the cursor in the view
     void setScroll(bool scroll) { m_noScroll = !scroll; }
 
@@ -187,8 +187,7 @@ public slots:
     void slotSetMultiPageMode();
     void slotSetFontName(QString);
     void slotSetFontSize(int);
-    void slotSetPlayTracking(bool);
-    void slotTogglePlayTracking();
+    void slotScrollToFollow();
     void slotSetSymbolInserter();
     void slotSetInsertedSymbol(Symbol type);
 
@@ -199,6 +198,7 @@ public slots:
     void slotRegenerateHeaders();
 
 private:
+    void setScrollToFollow(bool);
     void showEvent(QShowEvent * event) override;
     void hideOrShowRulers();
     bool linearMode() const;   // Return true when notation page layout is linear
@@ -276,7 +276,7 @@ private:
     int m_leftGutter;
     NotationToolBox *m_toolBox;
     NotationTool *m_currentTool;
-    bool m_playTracking;
+    bool m_scrollToFollow;
 
     double m_hZoomFactor;
     double m_vZoomFactor;
@@ -354,7 +354,7 @@ private:
     QTimer *m_resizeTimer;
 
     bool m_updatesSuspended;
-    
+
     bool m_noScroll;    // If true, don't scroll to keep the cursor in the view
 
     void locatePanner(bool vertical);
@@ -398,5 +398,3 @@ private slots:
 }
 
 #endif
-
-    

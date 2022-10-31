@@ -362,12 +362,6 @@ public:
     void prepareAudio();
 
     /**
-     * Cause the loopChanged signal to be emitted and any
-     * associated internal work in the document to happen
-     */
-    void setLoop(timeT, timeT);
-
-    /**
      * Cause the document to use the given time as the origin
      * when inserting any subsequent recorded data
      */
@@ -483,6 +477,9 @@ public:
 
     void stealLockFile(RosegardenDocument *other);
 
+    /// Consistent loop button behavior across all windows.
+    void loopButton(bool checked);
+
 public slots:
     /**
      * calls repaint() on all views connected to the document object
@@ -513,8 +510,6 @@ public slots:
     void slotAutoSave();
 
     void slotSetPointerPosition(timeT);
-
-    void slotSetLoop(timeT s, timeT e) {setLoop(s,e);}
 
     void slotDocColoursChanged();
 
@@ -561,7 +556,10 @@ signals:
     void audioFileFinalized(Segment*);
 
     void playPositionChanged(timeT);
-    void loopChanged(timeT, timeT);
+
+    /// Emitted whenever the Composition loop fields change.
+    void loopChanged();
+
     /**
      * We probably want to keep this notification as a special case.
      * The reason being that to detect a change to the color list will

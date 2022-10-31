@@ -284,7 +284,7 @@ protected:
         } layoutData;
 
         BarData(NotationElementList::iterator i,
-                bool correct, TimeSignature timeSig, bool newTimeSig) {
+                bool correct, const TimeSignature& timeSig, bool newTimeSig) {
             basicData.start = i;
             basicData.correct = correct;
             basicData.timeSignature = timeSig;
@@ -303,7 +303,7 @@ protected:
         }
 
         /// YG: Only for debug
-        void dump(std::string indent);
+        void dump(const std::string& indent);
     };
 
     typedef std::map<int, BarData> BarDataList;
@@ -324,9 +324,10 @@ protected:
         TimeSignature timeSignature;
 
         TrackTimeSig(const TrackId & track,
-                     const TimeSignature & timeSig) {
-          trackId = track;
-          timeSignature = timeSig;
+                     const TimeSignature & timeSig) :
+        trackId(track),
+        timeSignature(timeSig)
+        {
         }
 
         bool operator<(const TrackTimeSig &tts) const {
@@ -366,7 +367,7 @@ protected:
      * staff has been preparsed since the last reset
      */
     BarDataList& getBarData(ViewSegment &staff);
-    const BarDataList& getBarData(ViewSegment &staff) const;
+    const BarDataList& getBarDataConst(ViewSegment &staff) const;
 
     /// Find the staff in which bar "barNo" is widest
     ViewSegment *getViewSegmentWithWidestBar(int barNo);

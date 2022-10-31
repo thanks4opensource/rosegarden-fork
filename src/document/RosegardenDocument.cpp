@@ -89,6 +89,7 @@
 #include "document/Command.h"
 #include "document/io/XMLReader.h"
 #include "misc/ConfigGroups.h"
+#include "misc/Preferences.h"
 
 #include "rosegarden-version.h"
 
@@ -281,6 +282,8 @@ void RosegardenDocument::slotDocumentModified()
 {
     m_modified = true;
     m_autoSaved = false;
+
+    m_composition.invalidateDurationCache();
 
     emit documentModified(true);
 }
@@ -1115,7 +1118,7 @@ void RosegardenDocument::setSequenceManager(SequenceManager *sm)
 //
 int RosegardenDocument::FILE_FORMAT_VERSION_MAJOR = 1;
 int RosegardenDocument::FILE_FORMAT_VERSION_MINOR = 6;
-int RosegardenDocument::FILE_FORMAT_VERSION_POINT = 8;
+int RosegardenDocument::FILE_FORMAT_VERSION_POINT = 9;
 
 bool RosegardenDocument::saveDocument(const QString& filename,
                                     QString& errMsg,
@@ -2466,15 +2469,6 @@ RosegardenDocument::slotSetPointerPosition(timeT t)
 }
 
 void
-RosegardenDocument::setLoop(timeT t0, timeT t1)
-{
-    RG_DEBUG << "setLoop" << t0 << t1;
-    m_composition.setLoopStart(t0);
-    m_composition.setLoopEnd(t1);
-    emit loopChanged(t0, t1);
-}
-
-void
 RosegardenDocument::addRecordMIDISegment(TrackId tid)
 {
     RG_DEBUG << "RosegardenDocument::addRecordMIDISegment(" << tid << ")";
@@ -3009,5 +3003,32 @@ void RosegardenDocument::release()
     delete m_lockFile;
     m_lockFile = nullptr;
 }
+
+void
+RosegardenDocument::loopButton(bool checked)
+{
+    const bool loop = (m_composition.getLoopStart() != m_composition.getLoopEnd());
+
+    if (Preferences::getAdvancedLooping()) {
+        // Menu item checked?
+        if (checked) {
+            if (loop)
+                m_composition.setLoopMode(Composition::LoopOn);
+            else
+                m_composition.setLoopMode(Composition::LoopAll);
+        } else {  // Button unpressed, turn looping off.
+            m_composition.setLoopMode(Composition::LoopOff);
+        }
+    } else {
+        // If a loop range is set, and the menu item is checked...
+        if (loop  &&  checked)
+            m_composition.setLoopMode(Composition::LoopOn);
+        else
+            m_composition.setLoopMode(Composition::LoopOff);
+    }
+
+    emit loopChanged();
+}
+
 
 }

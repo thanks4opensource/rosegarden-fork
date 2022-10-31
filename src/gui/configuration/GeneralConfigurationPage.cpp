@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -241,7 +241,7 @@ GeneralConfigurationPage::GeneralConfigurationPage(QWidget *parent) :
             settings.value("jacktransport", false).toBool());
     connect(m_useJackTransport, &QCheckBox::stateChanged,
             this, &GeneralConfigurationPage::slotModified);
-    layout->addWidget(m_useJackTransport, row, 1, row- row+1, 2);
+    layout->addWidget(m_useJackTransport, row, 1, 1, 2);
 
     ++row;
 
@@ -251,11 +251,33 @@ GeneralConfigurationPage::GeneralConfigurationPage(QWidget *parent) :
     layout->addWidget(new QLabel(tr("Stop playback at end of last segment"),
                                  frame), row, 0);
     m_stopPlaybackAtEnd = new QCheckBox(frame);
-    m_stopPlaybackAtEnd->setChecked(Preferences::getStopAtEnd());
+    m_stopPlaybackAtEnd->setChecked(Preferences::getStopAtSegmentEnd());
     connect(m_stopPlaybackAtEnd, &QCheckBox::stateChanged,
             this, &GeneralConfigurationPage::slotModified);
 
-    layout->addWidget(m_stopPlaybackAtEnd, row, 1, row- row+1, 2);
+    layout->addWidget(m_stopPlaybackAtEnd, row, 1, 1, 2);
+
+    ++row;
+
+    layout->addWidget(new QLabel(tr("Jump to loop"),
+                                 frame), row, 0);
+    m_jumpToLoop = new QCheckBox(frame);
+    m_jumpToLoop->setChecked(Preferences::getJumpToLoop());
+    connect(m_jumpToLoop, &QCheckBox::stateChanged,
+            this, &GeneralConfigurationPage::slotModified);
+
+    layout->addWidget(m_jumpToLoop, row, 1, 1, 2);
+
+    ++row;
+
+    layout->addWidget(new QLabel(tr("Advanced Looping (beta)"),
+                                 frame), row, 0);
+    m_advancedLooping = new QCheckBox(frame);
+    m_advancedLooping->setChecked(Preferences::getAdvancedLooping());
+    connect(m_advancedLooping, &QCheckBox::stateChanged,
+            this, &GeneralConfigurationPage::slotModified);
+
+    layout->addWidget(m_advancedLooping, row, 1, 1, 2);
 
     ++row;
 
@@ -266,23 +288,7 @@ GeneralConfigurationPage::GeneralConfigurationPage(QWidget *parent) :
     connect(m_autoChannels, &QCheckBox::stateChanged,
             this, &GeneralConfigurationPage::slotModified);
 
-    layout->addWidget(m_autoChannels, row, 1, row- row+1, 2);
-
-    ++row;
-
-    settings.beginGroup(SequencerOptionsConfigGroup);
-
-    layout->addWidget(new QLabel(tr("Advanced Looping (experimental)"),
-                                 frame), row, 0);
-    m_loopSong = new QCheckBox(frame);
-    m_loopSong->setChecked(
-        settings.value("loopentiresong", false).toBool());
-    connect(m_loopSong, &QCheckBox::stateChanged,
-            this, &GeneralConfigurationPage::slotModified);
-
-    layout->addWidget(m_loopSong, row, 1, row- row+1, 2);
-
-    settings.endGroup();
+    layout->addWidget(m_autoChannels, row, 1, 1, 2);
 
     ++row;
 
@@ -580,12 +586,10 @@ void GeneralConfigurationPage::apply()
 #endif // HAVE_LIBJACK
 
 
-    Preferences::setStopAtEnd(m_stopPlaybackAtEnd->isChecked());
+    Preferences::setStopAtSegmentEnd(m_stopPlaybackAtEnd->isChecked());
+    Preferences::setJumpToLoop(m_jumpToLoop->isChecked());
+    Preferences::setAdvancedLooping(m_advancedLooping->isChecked());
     Preferences::setAutoChannels(m_autoChannels->isChecked());
-
-    settings.beginGroup(SequencerOptionsConfigGroup);
-    settings.setValue("loopentiresong", m_loopSong->isChecked());
-    settings.endGroup();
 
     // Presentation tab
 

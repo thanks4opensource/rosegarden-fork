@@ -166,7 +166,7 @@ NotationScene::getFontName() const
 }
 
 void
-NotationScene::setFontName(QString name)
+NotationScene::setFontName(const QString& name)
 {
     if (name == getFontName()) return;
     setNotePixmapFactories(name, getFontSize());
@@ -809,9 +809,8 @@ NotationScene::setupMouseEvent(QPointF scenePos, Qt::MouseButtons buttons,
         // seconds) -- adjust x-coord for shifted note head
 
         double cx = element->getSceneX();
-        int nbw = 10;
 
-        nbw = m_notePixmapFactory->getNoteBodyWidth();
+        int nbw = m_notePixmapFactory->getNoteBodyWidth();
         bool shifted = false;
 
         if (element->event()->get<Bool>
@@ -1985,12 +1984,12 @@ NotationScene::setSingleSelectedEvent(NotationStaff *staff,
 }
 
 void
-NotationScene::setSingleSelectedEvent(Segment *seg,
+NotationScene::setSingleSelectedEvent(Segment *segment,
                                       Event *e,
                                       bool preview)
 {
-    if (!seg || !e) return;
-    EventSelection *s = new EventSelection(*seg);
+    if (!segment || !e) return;
+    EventSelection *s = new EventSelection(*segment);
     s->addEvent(e);
     setSelection(s, preview);
 }

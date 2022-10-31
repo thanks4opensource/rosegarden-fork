@@ -48,6 +48,8 @@ class QDialog;
 namespace Rosegarden
 {
 
+
+class RosegardenDocument;
 class TimeSignature;
 class RealTime;
 class MappedEvent;
@@ -57,7 +59,7 @@ class TransportDialog : public QDialog
 {
     Q_OBJECT
 public:
-    TransportDialog(QWidget *parent = nullptr);
+    explicit TransportDialog(QWidget *parent = nullptr);
     ~TransportDialog() override;
 
     enum TimeDisplayMode { RealMode, SMPTEMode, BarMode, BarMetronomeMode, FrameMode };
@@ -82,7 +84,6 @@ public:
     // RosegardenTransport member accessors
     QPushButton* MetronomeButton()   { return ui->MetronomeButton; }
     QPushButton* SoloButton()        { return ui->SoloButton; }
-    QPushButton* LoopButton()        { return ui->LoopButton; }
     QPushButton* PlayButton()        { return ui->PlayButton; }
     QPushButton* StopButton()        { return ui->StopButton; }
     QPushButton* FfwdButton()        { return ui->FfwdButton; }
@@ -120,6 +121,7 @@ protected:
     void displayTime();
 
 public slots:
+    void slotDocumentLoaded(RosegardenDocument *doc);
 
     // These two slots are activated by QTimers
     //
@@ -132,8 +134,6 @@ public slots:
     void slotChangeTimeDisplay();
     void slotChangeToEnd();
 
-    void slotLoopButtonClicked();
-
     void slotPanelOpenButtonClicked();
     void slotPanelCloseButtonClicked();
 
@@ -144,13 +144,11 @@ public slots:
     void setBackgroundColor(QColor color);
     void slotResetBackground();
 
-    void slotSetStartLoopingPointAtMarkerPos();
-    void slotSetStopLoopingPointAtMarkerPos();
 
     // Connected to SequenceManager
     void slotTempoChanged(tempoT);
-    void slotMidiInLabel(const MappedEvent *event); // show incoming MIDI events on the Transport
-    void slotMidiOutLabel(const MappedEvent *event); // show outgoing  MIDI events on the Transport
+    void slotMidiInLabel(const MappedEvent *mE); // show incoming MIDI events on the Transport
+    void slotMidiOutLabel(const MappedEvent *mE); // show outgoing  MIDI events on the Transport
     void slotPlaying(bool checked);
     void slotRecording(bool checked);
     void slotMetronomeActivated(bool checked);
@@ -158,18 +156,20 @@ public slots:
 signals:
     void closed();
 
-    // Set and unset the loop at the RosegardenMainWindow
-    //
-    void setLoop();
-    void unsetLoop();
-    void setLoopStartTime();
-    void setLoopStopTime();
-
     void editTempo(QWidget *);
     void editTimeSignature(QWidget *);
     void editTransportTime(QWidget *);
     //void scrollTempo(int);
     void panic();
+
+private slots:
+
+    // Loop Widgets.
+    void slotLoopButtonClicked();
+    void slotSetStartLoopingPointAtMarkerPos();
+    void slotSetStopLoopingPointAtMarkerPos();
+    /// From RosegardenDocument.
+    void slotLoopChanged();
 
 private:
     void loadPixmaps();
@@ -237,7 +237,7 @@ private:
     std::map<std::string, TimeDisplayMode> m_modeMap;
 };
 
- 
+
 
 
 

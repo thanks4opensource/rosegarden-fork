@@ -125,9 +125,9 @@ namespace Rosegarden
 
 
 MatrixView::MatrixView(RosegardenDocument *doc,
-                 std::vector<Segment *> segments,
-                 bool drumMode,
-                 QWidget *parent) :
+                       const std::vector<Segment *>& segments,
+                       bool drumMode,
+                       QWidget *parent) :
     EditViewBase(segments, parent),
     m_quantizations(BasicQuantizer::getStandardQuantizations()),
     m_drumMode(drumMode),
@@ -190,9 +190,9 @@ MatrixView::MatrixView(RosegardenDocument *doc,
         MATRIX_DEBUG << "newest state for action '" << toolAction->objectName() << "' is " << toolAction->isChecked();
     }
 
-    m_tracking = m_document->getComposition().getEditorFollowPlayback();
-    findAction("toggle_tracking")->setChecked(m_tracking);
-    m_matrixWidget->setScrollToFollowPlayback(m_tracking);
+    m_scrollToFollow = m_document->getComposition().getEditorFollowPlayback();
+    findAction("scroll_to_follow")->setChecked(m_scrollToFollow);
+    m_matrixWidget->setScrollToFollowPlayback(m_scrollToFollow);
 
     slotUpdateWindowTitle();
     connect(m_document, &RosegardenDocument::documentModified,
@@ -271,6 +271,12 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     enableAutoRepeat("Transport Toolbar", "playback_pointer_forward_bar");
     enableAutoRepeat("Transport Toolbar", "cursor_back");
     enableAutoRepeat("Transport Toolbar", "cursor_forward");
+
+    connect(RosegardenDocument::currentDocument,
+                &RosegardenDocument::loopChanged,
+            this, &MatrixView::slotLoopChanged);
+    // Make sure we are in sync.
+    slotLoopChanged();
 
     // Show the pointer as soon as matrix editor opens (update pointer position,
     // but don't scroll)
@@ -402,7 +408,8 @@ MatrixView::setupActions()
     createAction("cursor_prior_segment", SLOT(slotCurrentSegmentPrior()));
     createAction("cursor_next_segment", SLOT(slotCurrentSegmentNext()));
     createAction("toggle_solo", SLOT(slotToggleSolo()));
-    createAction("toggle_tracking", SLOT(slotToggleTracking()));
+    createAction("scroll_to_follow", SLOT(slotScrollToFollow()));
+    createAction("loop", SLOT(slotLoop()));
     createAction("panic", SIGNAL(panic()));
     createAction("preview_selection", SLOT(slotPreviewSelection()));
     createAction("clear_loop", SLOT(slotClearLoop()));
@@ -1217,18 +1224,28 @@ MatrixView::slotCurrentSegmentNext()
 void
 MatrixView::slotPreviewSelection()
 {
-    if (!getSelection()) {
+    if (!getSelection())
         return;
-    }
 
-    m_document->slotSetLoop(getSelection()->getStartTime(),
-                            getSelection()->getEndTime());
+    Composition &composition = m_document->getComposition();
+
+    composition.setLoopMode(Composition::LoopOn);
+    composition.setLoopStart(getSelection()->getStartTime());
+    composition.setLoopEnd(getSelection()->getEndTime());
+    emit m_document->loopChanged();
 }
 
 void
 MatrixView::slotClearLoop()
 {
-    m_document->slotSetLoop(0, 0);
+    // ??? Not sure why there is a Move > Clear Loop.  The LoopRuler
+    //     is available.  One has full control of looping from there.
+
+    Composition &composition = m_document->getComposition();
+
+    // Less destructive.  Just turn it off.
+    composition.setLoopMode(Composition::LoopOff);
+    emit m_document->loopChanged();
 }
 
 void
@@ -1319,11 +1336,28 @@ MatrixView::slotSetCurrentVelocityFromSelection()
 }
 
 void
-MatrixView::slotToggleTracking()
+MatrixView::slotScrollToFollow()
 {
-    m_tracking = !m_tracking;
-    m_matrixWidget->setScrollToFollowPlayback(m_tracking);
-    m_document->getComposition().setEditorFollowPlayback(m_tracking);
+    m_scrollToFollow = !m_scrollToFollow;
+    m_matrixWidget->setScrollToFollowPlayback(m_scrollToFollow);
+    m_document->getComposition().setEditorFollowPlayback(m_scrollToFollow);
+}
+
+void
+MatrixView::slotLoop()
+{
+    RosegardenDocument::currentDocument->loopButton(
+            findAction("loop")->isChecked());
+}
+
+void
+MatrixView::slotLoopChanged()
+{
+    Composition &composition =
+        RosegardenDocument::currentDocument->getComposition();
+
+    findAction("loop")->setChecked(
+            (composition.getLoopMode() != Composition::LoopOff));
 }
 
 void

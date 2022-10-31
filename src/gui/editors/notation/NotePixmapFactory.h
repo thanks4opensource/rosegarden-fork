@@ -65,7 +65,7 @@ class NotePixmapFactory
 public:
     static const int NO_GRACE_SIZE = -1;
 
-    NotePixmapFactory(QString fontName = "", int size = -1, int graceSize = NO_GRACE_SIZE);
+    NotePixmapFactory(const QString& fontName = "", int size = -1, int graceSize = NO_GRACE_SIZE);
     NotePixmapFactory(const NotePixmapFactory &);
     NotePixmapFactory &operator=(const NotePixmapFactory &);
     ~NotePixmapFactory();
@@ -123,15 +123,15 @@ public:
 
     // Display methods -- create graphics items:
 
-    QGraphicsItem *makeNote(const NotePixmapParameters &parameters);
-    QGraphicsItem *makeRest(const NotePixmapParameters &parameters);
+    QGraphicsItem *makeNote(const NotePixmapParameters &params);
+    QGraphicsItem *makeRest(const NotePixmapParameters &params);
 
-    QGraphicsPixmapItem *makeNotePixmapItem(const NotePixmapParameters &parameters);
+    QGraphicsPixmapItem *makeNotePixmapItem(const NotePixmapParameters &params);
 
-    void getNoteDimensions(const NotePixmapParameters &parameters,
+    void getNoteDimensions(const NotePixmapParameters &params,
                            NoteItemDimensions &dimensions);
 
-    void drawNoteForItem(const NotePixmapParameters &parameters,
+    void drawNoteForItem(const NotePixmapParameters &params,
                          const NoteItemDimensions &dimensions,
                          NoteItem::DrawMode mode,
                          QPainter *painter);
@@ -166,13 +166,13 @@ public:
                                        int x, int y);
     QGraphicsPixmapItem *makeTrillLine(int length);
 
-    QGraphicsPixmapItem *makeNoteHalo(const NotePixmapParameters &parameters);
+    QGraphicsPixmapItem *makeNoteHalo(const NotePixmapParameters &params);
 
     // Printing methods -- draw direct to a paint device:
 
-    void drawNote(const NotePixmapParameters &parameters,
+    void drawNote(const NotePixmapParameters &params,
                   QPainter &painter, int x, int y);
-    void drawRest(const NotePixmapParameters &parameters,
+    void drawRest(const NotePixmapParameters &params,
                   QPainter &painter, int x, int y);
     void drawHairpin(int length, bool isCrescendo,
                      QPainter &painter, int x, int y);
@@ -213,7 +213,8 @@ public:
                           Note::Crotchet) const;
 
     int getAccidentalWidth (const Accidental &,
-                            int shift = 0, bool extra = false) const;
+                            int shift = 0,
+                            bool extraShift = false) const;
     int getAccidentalHeight(const Accidental &) const;
 
     int getLineSpacing()        const;
@@ -261,11 +262,11 @@ public:
      */
     QString getOneLine(QString &text, int width);
 
-    QFont getTrackHeaderFont() { return m_trackHeaderFont; }
-    QFontMetrics getTrackHeaderFontMetrics() { return m_trackHeaderFontMetrics; }
+    QFont getTrackHeaderFont() const { return m_trackHeaderFont; }
+    QFontMetrics getTrackHeaderFontMetrics() const { return m_trackHeaderFontMetrics; }
 
-    QFont getTrackHeaderBoldFont() { return m_trackHeaderBoldFont; }
-    QFontMetrics getTrackHeaderBoldFontMetrics() {
+    QFont getTrackHeaderBoldFont() const { return m_trackHeaderBoldFont; }
+    QFontMetrics getTrackHeaderBoldFontMetrics() const {
         return m_trackHeaderBoldFontMetrics;
     }
 
@@ -280,17 +281,18 @@ protected:
     void init(QString fontName, int size);
     void initMaybe() { if (!m_font) init("", -1); }
 
-    void calculateNoteDimensions(const NotePixmapParameters &parameters);
-    void sketchNoteTiny(const NotePixmapParameters &parameters,
+    void calculateNoteDimensions(const NotePixmapParameters &params);
+    void sketchNoteTiny(const NotePixmapParameters &params,
                         const NoteItemDimensions &dimensions,
                         QPainter *painter);
-    void drawNoteAux(const NotePixmapParameters &parameters,
+    void drawNoteAux(const NotePixmapParameters &params,
                      QPainter *painter, int x, int y);
-    void drawRestAux(const NotePixmapParameters &parameters, QPoint &hotspot,
+    void drawRestAux(const NotePixmapParameters &params, QPoint &hotspot,
                      QPainter *painter, int x, int y);
     void drawHairpinAux(int length, bool isCrescendo,
                         QPainter *painter, int x, int y);
-    void drawSlurAux(int length, int dy, bool above, bool smooth, bool tie, bool phrasing,
+    void drawSlurAux(int length, int dy, bool above, bool smooth,
+                     bool flat, bool phrasing,
                      QPoint &hotspot,
                      QPainter *painter, int x, int y);
     void drawOttavaAux(int length, int octavesUp,
@@ -312,11 +314,11 @@ protected:
 
     void makeRoomForStemAndFlags(int flagCount, int stemLength,
                                  const NotePixmapParameters &params,
-                                 QPoint &startPoint, QPoint &endPoint);
+                                 QPoint &s0, QPoint &s1);
     void drawFlags(int flagCount, const NotePixmapParameters &params,
-                   const QPoint &startPoint, const QPoint &endPoint);
+                   const QPoint &s0, const QPoint &s1);
     void drawStem(const NotePixmapParameters &params,
-                  const QPoint &startPoint, const QPoint &endPoint,
+                  const QPoint &s0, const QPoint &s1,
                   int shortening);
 
     void makeRoomForBeams(const NotePixmapParameters &params);
@@ -371,7 +373,7 @@ protected:
     bool m_haveGrace;
 
     int m_graceSize;
-    
+
     NoteItemDimensions m_nd;
 
     QFont m_tupletCountFont;
@@ -406,7 +408,7 @@ protected:
     int m_generatedWidth;
     int m_generatedHeight;
     bool m_inPrinterMethod;
-    
+
     NotePixmapPainter *m_p;
 
     typedef std::map<std::string, QFont> TextFontCache;

@@ -87,7 +87,7 @@ const char* const NotePixmapFactory::defaultSerifFontFamily = "Bitstream Vera Se
 const char* const NotePixmapFactory::defaultSansSerifFontFamily = "Bitstream Vera Sans";
 const char* const NotePixmapFactory::defaultTimeSigFontFamily = "Bitstream Vera Serif";
 
-NotePixmapFactory::NotePixmapFactory(QString fontName, int size, int graceSize) :
+NotePixmapFactory::NotePixmapFactory(const QString& fontName, int size, int graceSize) :
     m_selected(false),
     m_shaded(false),
     m_haveGrace(graceSize != NO_GRACE_SIZE),
@@ -119,9 +119,11 @@ NotePixmapFactory::NotePixmapFactory(QString fontName, int size, int graceSize) 
     init(fontName, size);
 }
 
+// cppcheck-suppress uninitMemberVar
 NotePixmapFactory::NotePixmapFactory(const NotePixmapFactory &npf) :
     m_selected(false),
     m_shaded(false),
+    m_haveGrace(false),
     m_graceSize(npf.m_graceSize),
     m_tupletCountFont(npf.m_tupletCountFont),
     m_tupletCountFontMetrics(m_tupletCountFont),
@@ -156,6 +158,7 @@ NotePixmapFactory::operator=(const NotePixmapFactory &npf)
     if (&npf != this) {
         m_selected = npf.m_selected;
         m_shaded = npf.m_shaded;
+        m_haveGrace = npf.m_haveGrace;
         m_timeSigFont = npf.m_timeSigFont;
         m_timeSigFontMetrics = QFontMetrics(m_timeSigFont);
         m_bigTimeSigFont = npf.m_bigTimeSigFont;
@@ -174,6 +177,11 @@ NotePixmapFactory::operator=(const NotePixmapFactory &npf)
         m_trackHeaderFontMetrics = QFontMetrics(m_trackHeaderFont);
         m_trackHeaderBoldFont = npf.m_trackHeaderBoldFont;
         m_trackHeaderBoldFontMetrics = QFontMetrics(m_trackHeaderBoldFont);
+        m_generatedPixmap = nullptr;
+        m_generatedWidth = -1;
+        m_generatedHeight = -1;
+        m_inPrinterMethod = false;
+        m_p = nullptr;
         init(npf.m_font->getName(), npf.m_font->getSize());
         m_textFontCache.clear();
     }
@@ -739,13 +747,12 @@ NotePixmapFactory::getStemLength(const NotePixmapParameters &params) const
         stemLength += getLineSpacing() * (flagCount - 2);
     }
 
-    int width = 0, height = 0;
-
     if (flagCount > 0) {
 
         if (!stemUp)
             stemLength += nbh / 2;
 
+        int width = 0, height = 0;
         if (m_font->getDimensions(m_style->getFlagCharName(flagCount),
                                   width, height)) {
 
@@ -843,10 +850,10 @@ NotePixmapFactory::drawAccidental(const NotePixmapParameters &params)
 
     Accidental a = params.m_accidental;
     bool cautionary = params.m_cautionary;
-        
+
     // use the full font for this unless a grace size was supplied in ctor
     NoteFont *font = (m_haveGrace ? m_graceFont : m_font);
-    
+
     NoteCharacter ac;
     if (params.m_forceColor) {
         ac = getCharacter
@@ -1378,7 +1385,7 @@ NotePixmapFactory::drawFlags(int flagCount,
                                     PlainColour,
                                     !params.m_stemGoesUp);
         }
-        
+
         foundOne = flagCount > 1 ? foundOne : false;
 
 
@@ -1453,7 +1460,7 @@ NotePixmapFactory::drawStem(const NotePixmapParameters &params,
 
     if (params.m_forceColor) {
         m_p->painter().restore();
-    } 
+    }
 }
 
 void
@@ -2192,7 +2199,7 @@ NotePixmapFactory::makeClefDisplayPixmap(const Clef &clef,
     QColor lines;
     switch (colourType) {
     case PlainColourLight:
-        lines = Qt::white;    
+        lines = Qt::white;
         break;
     case ConflictColour:
     case HighlightedColour:
@@ -2260,7 +2267,7 @@ NotePixmapFactory::makeKeyDisplayPixmap(const Key &key, const Clef &clef,
 
     switch (colourType) {
     case PlainColourLight:
-        kuller = Qt::white;    
+        kuller = Qt::white;
         break;
     case ConflictColour:
     case HighlightedColour:
@@ -2394,7 +2401,7 @@ NotePixmapFactory::makePitchDisplayPixmap(int p, const Clef &clef,
 
     switch (colourType) {
     case PlainColourLight:
-        kuller = Qt::white;    
+        kuller = Qt::white;
         break;
     case ConflictColour:
     case HighlightedColour:
@@ -2497,7 +2504,7 @@ NotePixmapFactory::makePitchDisplayPixmap(int p, const Clef &clef,
 
     switch (colourType) {
     case PlainColourLight:
-        kuller = Qt::white;    
+        kuller = Qt::white;
         break;
     case ConflictColour:
     case HighlightedColour:
@@ -2734,6 +2741,7 @@ NotePixmapFactory::drawSlurAux(int length, int dy, bool above,
         noteLengths = 1;
 
     my = int(0 - nbh * sqrt(noteLengths) / 2);
+    // ??? I assume "flat" style means a "tie" without slope?
     if (flat) my = my * 2 / 3;
     else if (phrasing) my = my * 3 / 4;
     if (!above) my = -my;
@@ -3012,8 +3020,8 @@ NotePixmapFactory::drawTrillLineAux(int length, QPainter *painter, int x, int y)
     // increment x so we start drawing after the tr; 3 is an arbitrary figure
     // that seems about right, but I'm only testing with one font at one size
     x += character.getWidth() + gap;
-    
- 
+
+
     // make a character for the /\/\/\/ bit, and keep drawing it at spaced
     // increments until one glyph width just before running out of space, to
     // avoid clipping the last glyph
@@ -3237,17 +3245,17 @@ NotePixmapFactory::makeTimeSig(const TimeSignature& sig)
     }
 }
 
-int NotePixmapFactory::getTimeSigWidth(const TimeSignature &sig) const
+int NotePixmapFactory::getTimeSigWidth(const TimeSignature &timesig) const
 {
-    if (sig.isCommon()) {
+    if (timesig.isCommon()) {
 
         QRect r(m_bigTimeSigFontMetrics.boundingRect("c"));
         return r.width() + 2;
 
     } else {
 
-        int numerator = sig.getNumerator(),
-            denominator = sig.getDenominator();
+        int numerator = timesig.getNumerator(),
+            denominator = timesig.getDenominator();
 
         QString numS, denomS;
 
@@ -3317,7 +3325,7 @@ NotePixmapFactory::getTextFont(const Text &text) const
         serif = false;
         tiny = true;
     }
-    
+
     QSettings settings;
     //@@@ JAS Check here first for errors.  Added .beginGroup()
     settings.beginGroup( NotationViewConfigGroup );
@@ -3353,7 +3361,7 @@ NotePixmapFactory::getTextFont(const Text &text) const
 
     NOTATION_DEBUG << "NotePixmapFactory::getTextFont: requested size " << size
      		   << " for type " << type;
-    
+
     NOTATION_DEBUG << "NotePixmapFactory::getTextFont: returning font '"
                    << textFont.toString() << "' for type " << type.c_str()
                    << " text : " << text.getText().c_str();
@@ -3407,7 +3415,7 @@ NotePixmapFactory::makeGuitarChord(const Guitar::Fingering &fingering,
         m_p->painter().setPen(QColor(Qt::black));
         m_p->painter().setBrush(QColor(Qt::black));
     }
-    
+
     Guitar::NoteSymbols ns(Guitar::Fingering::DEFAULT_NB_STRINGS, FingeringBox::DEFAULT_NB_DISPLAYED_FRETS);
     Guitar::NoteSymbols::drawFingeringPixmap(fingering, ns, &(m_p->painter()));
 
@@ -3643,7 +3651,7 @@ NotePixmapFactory::getCharacter(CharName name, NoteCharacter &ch,
     switch (type) {
 
     case PlainColour:
-        return font->getCharacter(name, ch, charType, inverted);
+        return font->getCharacter(name, ch, inverted);
 
     case QuantizedColour:
         return font->getCharacterColoured
@@ -3686,7 +3694,7 @@ NotePixmapFactory::getCharacter(CharName name, NoteCharacter &ch,
             (name,
              h,
              v,
-             ch, charType, inverted, s);  
+             ch, charType, inverted, s);
 
     case ConflictColour:
         red.getHsv(&h, &s, &v);
@@ -3705,7 +3713,7 @@ NotePixmapFactory::getCharacter(CharName name, NoteCharacter &ch,
              ch, charType, inverted, s);
     }
 
-    return font->getCharacter(name, ch, charType, inverted);
+    return font->getCharacter(name, ch, inverted);
 }
 
 NoteCharacter
@@ -3771,7 +3779,8 @@ int NotePixmapFactory::getLineSpacing() const
 }
 
 int NotePixmapFactory::getAccidentalWidth(const Accidental &a,
-                                          int shift, bool extraShift) const
+                                          int shift,
+                                          bool extraShift) const
 {
     if (a == Accidentals::NoAccidental)
         return 0;
