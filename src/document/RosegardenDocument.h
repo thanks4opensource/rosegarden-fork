@@ -523,6 +523,11 @@ public:
 
     void stealLockFile(RosegardenDocument *other);
 
+#if 0  // t4os: master version looping
+    /// Consistent loop button behavior across all windows.
+    void loopButton(bool checked);
+#endif
+
 public slots:
     /**
      * calls repaint() on all views connected to the document object
@@ -599,6 +604,7 @@ signals:
     void audioFileFinalized(Segment*);
 
     void playPositionChanged(timeT);
+
     void loopRangeStartEndChanged(timeT start, timeT end);
     void loopRangeActiveChanged();
     void loopingModeChanged(bool continuous);
@@ -606,6 +612,11 @@ signals:
     void markerAdded   (Marker*);
     void markerDeleted (Marker*);
     void markerModified(Marker*);
+
+#if 0  // t4os: master version looping
+    /// Emitted whenever the Composition loop fields change.
+    void loopChanged();
+#endif
 
     /**
      * We probably want to keep this notification as a special case.

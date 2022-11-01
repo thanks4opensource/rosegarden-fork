@@ -284,6 +284,10 @@ public slots:
     void rewindToBeginning();
     void fastForwardToEnd();
 
+#if 0  // t4os: master looping version
+    void slotLoopChanged();
+#endif
+
 signals:
     /// A program change was received.
     /**
@@ -484,9 +488,8 @@ private:
 
     /// Used by setTempo() to detect tempo changes.
     tempoT m_tempo;
+
 };
-
-
 
 
 }

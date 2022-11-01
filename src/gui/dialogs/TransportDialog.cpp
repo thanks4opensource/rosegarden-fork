@@ -18,6 +18,7 @@
 #define RG_MODULE_STRING "[TransportDialog]"
 
 #include "TransportDialog.h"
+
 #include "base/Composition.h"
 #include "base/NotationTypes.h"
 #include "base/RealTime.h"
@@ -35,6 +36,12 @@
 #include "gui/widgets/Label.h"
 #include "sound/MappedEvent.h"
 #include "misc/ConfigGroups.h"
+#if 0  // t4os: master looping version
+#include "document/RosegardenDocument.h"
+#include "base/Composition.h"
+#include "gui/application/RosegardenMainWindow.h"
+#include "misc/Preferences.h"
+#endif
 
 #include <QSettings>
 #include <QColor>
@@ -138,17 +145,6 @@ TransportDialog::TransportDialog(QWidget *parent):
     ui->PlayButton->setCheckable(true);
     ui->RecordButton->setCheckable(true);
 
-// Disable the loop button if JACK transport enabled, because this
-// causes a nasty race condition, and it just seems our loops are not JACK compatible
-// #1240039 - DMM
-//    QSettings settings ; // was: mainWindow->config()
-//    settings.beginGroup(SequencerOptionsConfigGroup);
-//    if ( qStrToBool( settings.value("jacktransport", "false" ) ) )
-//    {
-//        ui->LoopButton->setEnabled(false);
-//    }
-//      settings.endGroup();
-
     // fix and hold the size of the dialog
     //
 //!!! this probably won't work -- need sizeHint() after widget is realised
@@ -189,7 +185,8 @@ TransportDialog::TransportDialog(QWidget *parent):
     connect(ui->PanelCloseButton, &QAbstractButton::clicked,
             this, &TransportDialog::slotPanelCloseButtonClicked);
 
-    connect(ui->PanicButton, &QAbstractButton::clicked, this, &TransportDialog::panic);
+    connect(ui->PanicButton, &QAbstractButton::clicked,
+            this, &TransportDialog::panic);
 /*
     const QPixmap *p = ui->PanelOpenButton->pixmap();
     if (p) m_panelOpen = *p;
@@ -291,6 +288,12 @@ TransportDialog::TransportDialog(QWidget *parent):
     //       ThornStyle.cpp.
 
     loadGeo();
+
+#if 0  // t4os: master looping version
+    connect(RosegardenMainWindow::self(),
+                &RosegardenMainWindow::documentLoaded,
+            this, &TransportDialog::slotDocumentLoaded);
+#endif
 
     // Performance Testing
 
@@ -1007,23 +1010,38 @@ TransportDialog::closeEvent(QCloseEvent * /*e*/)
 void
 TransportDialog::slotLoopButtonClicked()
 {
-    // disable if JACK transport has been set #1240039 - DMM
-    //    QSettings settings;
-    //    settings.beginGroup( SequencerOptionsConfigGroup );
-    //
-    //    if ( qStrToBool( settings.value("jacktransport", "false" ) ) )
-    //    {
-    //    //!!! - this will fail silently
-    //    ui->LoopButton->setEnabled(false);
-    //    ui->LoopButton->setOn(false);
-    //        return;
-    //    }
-    //    settings.endGroup();
-
-    qDebug() << "TransportDialog::slotLoopButtonClicked()";
-
     RosegardenDocument::currentDocument->toggleLoopingMode();
+#if 0  // t4os: master looping version
+    RosegardenDocument::currentDocument->loopButton(
+            ui->LoopButton->isChecked());
+#endif
 }
+
+#if 0  // t4os: master looping version
+void
+TransportDialog::slotSetStartLoopingPointAtMarkerPos()
+{
+    RosegardenDocument *document = RosegardenDocument::currentDocument;
+    Composition &composition = document->getComposition();
+
+    const timeT loopStart = composition.getPosition();
+    timeT loopEnd = composition.getLoopEnd();
+
+    // Turn a backwards loop into an empty loop.
+    if (loopStart > loopEnd)
+        loopEnd = loopStart;
+
+    if (loopStart != loopEnd)
+        composition.setLoopMode(Composition::LoopOn);
+    else
+        composition.setLoopMode(Composition::LoopOff);
+
+    composition.setLoopStart(loopStart);
+    composition.setLoopEnd(loopEnd);
+
+    emit document->loopChanged();
+}
+#endif
 
 void
 TransportDialog::slotSetLoopingMode(bool continuous)
@@ -1044,6 +1062,28 @@ TransportDialog::slotSetStartLoopingPointAtMarkerPos()
         doc->setLoopRange(m_loopStart, m_loopEnd = comp.getLoopEnd());
     else
         doc->setLoopRangeIsActive(false);
+
+#if 0  // t4os: master looping version
+    RosegardenDocument *document = RosegardenDocument::currentDocument;
+    Composition &composition = document->getComposition();
+
+    timeT loopStart = composition.getLoopStart();
+    const timeT loopEnd = composition.getPosition();
+
+    // Turn a backwards loop into an empty loop.
+    if (loopEnd < loopStart)
+        loopStart = loopEnd;
+
+    if (loopStart != loopEnd)
+        composition.setLoopMode(Composition::LoopOn);
+    else
+        composition.setLoopMode(Composition::LoopOff);
+
+    composition.setLoopStart(loopStart);
+    composition.setLoopEnd(loopEnd);
+
+    emit document->loopChanged();
+#endif
 }
 
 void
@@ -1060,6 +1100,27 @@ TransportDialog::slotSetStopLoopingPointAtMarkerPos()
     else
         doc->setLoopRangeIsActive(false);
 }
+
+#if 0  // t4os: master looping version
+void
+TransportDialog::slotLoopChanged()
+{
+    RosegardenDocument *document = RosegardenDocument::currentDocument;
+    Composition &composition = document->getComposition();
+
+    ui->LoopButton->setChecked(
+            (composition.getLoopMode() != Composition::LoopOff));
+}
+#endif
+
+#if 0  // t4os: master looping version
+void
+TransportDialog::slotDocumentLoaded(RosegardenDocument *doc)
+{
+    connect(doc, &RosegardenDocument::loopChanged,
+            this, &TransportDialog::slotLoopChanged);
+}
+#endif
 
 void TransportDialog::slotTempoChanged(tempoT tempo)
 {

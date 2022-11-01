@@ -207,20 +207,10 @@ RosegardenMainViewWidget::RosegardenMainViewWidget(bool showTrackLabels,
     connect(&ExternalController::self(),
                 &ExternalController::externalControllerRMVW,
             this, &RosegardenMainViewWidget::slotExternalController);
-
-    if (doc) {
-        /* signal no longer exists
-                connect(doc, SIGNAL(recordingSegmentUpdated(Segment *,
-                                                            timeT)),
-                        this, SLOT(slotUpdateRecordingSegment(Segment *,
-                                                              timeT)));
-        */
-
-        connect(CommandHistory::getInstance(),
-                    &CommandHistory::commandExecuted,
-                m_trackEditor->getCompositionView(),
-                    &CompositionView::slotUpdateAll);
-    }
+    connect(CommandHistory::getInstance(),
+            &CommandHistory::commandExecuted,
+            m_trackEditor->getCompositionView(),
+            &CompositionView::slotUpdateAll);
 }
 
 RosegardenMainViewWidget::~RosegardenMainViewWidget()
@@ -376,13 +366,13 @@ void RosegardenMainViewWidget::slotEditSegmentNotation(Segment *p)
     slotEditSegmentsNotation(segmentsToEdit);
 }
 
-void RosegardenMainViewWidget::slotEditSegmentsNotation(std::vector<Segment *> segmentsToEdit)
+void RosegardenMainViewWidget::slotEditSegmentsNotation(const std::vector<Segment *>& segmentsToEdit)
 {
     createNotationView(segmentsToEdit);
 }
 
 void
-RosegardenMainViewWidget::createNotationView(std::vector<Segment *> segmentsToEdit)
+RosegardenMainViewWidget::createNotationView(const std::vector<Segment *>& segmentsToEdit)
 {
     NotationView *notationView =
         new NotationView(RosegardenDocument::currentDocument, segmentsToEdit, this);
@@ -516,7 +506,7 @@ void RosegardenMainViewWidget::slotEditSegmentPitchTracker(Segment *p)
     slotEditSegmentsPitchTracker(segmentsToEdit);
 }
 
-void RosegardenMainViewWidget::slotEditSegmentsPitchTracker(std::vector<Segment *> segmentsToEdit)
+void RosegardenMainViewWidget::slotEditSegmentsPitchTracker(const std::vector<Segment *>& segmentsToEdit)
 {
     PitchTrackerView *view = createPitchTrackerView(segmentsToEdit);
     if (view) {
@@ -529,7 +519,7 @@ void RosegardenMainViewWidget::slotEditSegmentsPitchTracker(std::vector<Segment 
 }
 
 PitchTrackerView *
-RosegardenMainViewWidget::createPitchTrackerView(std::vector<Segment *> segmentsToEdit)
+RosegardenMainViewWidget::createPitchTrackerView(const std::vector<Segment *>& segmentsToEdit)
 {
     PitchTrackerView *pitchTrackerView =
         new PitchTrackerView(RosegardenDocument::currentDocument, segmentsToEdit, this);
@@ -671,13 +661,13 @@ void RosegardenMainViewWidget::slotEditSegmentMatrix(Segment* p)
     slotEditSegmentsMatrix(segmentsToEdit);
 }
 
-void RosegardenMainViewWidget::slotEditSegmentsMatrix(std::vector<Segment *> segmentsToEdit)
+void RosegardenMainViewWidget::slotEditSegmentsMatrix(const std::vector<Segment *>& segmentsToEdit)
 {
     createMatrixView(segmentsToEdit);
 }
 
 void
-RosegardenMainViewWidget::createMatrixView(std::vector<Segment *> segmentsToEdit)
+RosegardenMainViewWidget::createMatrixView(const std::vector<Segment *>& segmentsToEdit)
 {
     MatrixView *matrixView = new MatrixView(RosegardenDocument::currentDocument,
                                                   segmentsToEdit,
@@ -787,10 +777,10 @@ void RosegardenMainViewWidget::slotEditSegmentEventList(Segment *p)
     slotEditSegmentsEventList(segmentsToEdit);
 }
 
-void RosegardenMainViewWidget::slotEditSegmentsEventList(std::vector<Segment *> segmentsToEdit)
+void RosegardenMainViewWidget::slotEditSegmentsEventList(const std::vector<Segment *>& segmentsToEdit)
 {
     int count = 0;
-    for (std::vector<Segment *>::iterator i = segmentsToEdit.begin();
+    for (std::vector<Segment *>::const_iterator i = segmentsToEdit.begin();
             i != segmentsToEdit.end(); ++i) {
         std::vector<Segment *> tmpvec;
         tmpvec.push_back(*i);
@@ -968,15 +958,8 @@ void RosegardenMainViewWidget::slotSelectTrackSegments(int trackId)
 
     SegmentSelection segments;
 
-    // Control key added to match common non-RG UI standards.
-    // Needs further work: Control should add/remove single track,
-    //   shift should add/remove range of segments between last one
-    //   previously selected and current click.
-    if (QApplication::keyboardModifiers() != Qt::ShiftModifier &&
-        QApplication::keyboardModifiers() != Qt::ControlModifier) {
-
-        // Neither shift nor control key is pressed :
-
+    if (QApplication::keyboardModifiers() != Qt::ShiftModifier) {
+        // Shift key is not pressed :
         // Select all segments on the current track
         // (all the other segments will be deselected)
         for (Composition::iterator i =
@@ -1370,9 +1353,9 @@ void RosegardenMainViewWidget::slotShowSegmentLabels(bool v)
 }
 
 void RosegardenMainViewWidget::addTrack(
-        InstrumentId id, int pos)
+        InstrumentId instrument, int position)
 {
-    m_trackEditor->addTrack(id, pos);
+    m_trackEditor->addTrack(instrument, position);
 }
 
 void RosegardenMainViewWidget::slotDeleteTracks(

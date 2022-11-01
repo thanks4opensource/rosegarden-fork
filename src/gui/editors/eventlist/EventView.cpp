@@ -4,10 +4,10 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -92,7 +92,7 @@ namespace Rosegarden
 
 
 EventView::EventView(RosegardenDocument *doc,
-                     std::vector<Segment *> segments,
+                     const std::vector<Segment *>& segments,
                      QWidget *parent):
         ListEditView(segments, 2, parent),
         m_eventFilter(Note | Text | SystemExclusive | Controller |
@@ -155,7 +155,7 @@ EventView::EventView(RosegardenDocument *doc,
     m_grid->addWidget(m_filterGroup, 2, 0);
 
     m_eventList = new QTreeWidget(getCentralWidget());
-    
+
     //m_eventList->setItemsRenameable(true); //&&& use item->setFlags( Qt::ItemIsSelectable | Qt::ItemIsEditable );
 
     m_grid->addWidget(m_eventList, 2, 1);
@@ -208,7 +208,7 @@ EventView::EventView(RosegardenDocument *doc,
         layout->addWidget(adjust, 3, 1, 1, 2);
         adjust->addItem(tr("As stored"));
         adjust->addItem(tr("Truncate if longer than note"));
-        adjust->addItem(tr("End at same time as note")); 
+        adjust->addItem(tr("End at same time as note"));
         adjust->addItem(tr("Stretch or squash segment to note duration"));
 
         std::string timing = rec->getDefaultTimeAdjust();
@@ -225,7 +225,7 @@ EventView::EventView(RosegardenDocument *doc,
         connect(adjust,
                     static_cast<void(QComboBox::*)(int)>(&QComboBox::activated),
                 this, &EventView::slotTriggerTimeAdjustChanged);
-            
+
         QCheckBox *retune = new QCheckBox(tr("Adjust pitch to trigger note by default"), frame);
         retune->setChecked(rec->getDefaultRetune());
         connect(retune, SIGNAL(clicked()), this, SLOT(slotTriggerRetuneChanged()));
@@ -268,9 +268,9 @@ EventView::EventView(RosegardenDocument *doc,
     sl << tr("Type (Data1)  ");
     sl << tr("Type (Data1)  ");
     sl << tr("Value (Data2)  ");
-    
+
     m_eventList->setHeaderLabels ( sl );
-    
+
 //    for (int col = 0; col < m_eventList->columns(); ++col)
 //        m_eventList->setRenameable(col, true); //&&& use item->setFlags( Qt::ItemIsSelectable |
 
@@ -285,7 +285,7 @@ EventView::EventView(RosegardenDocument *doc,
     // That took an astonishing amount of time to work out.
     //
     //
-    connect(m_noteCheckBox, &QCheckBox::stateChanged, this, &EventView::slotModifyFilter);              
+    connect(m_noteCheckBox, &QCheckBox::stateChanged, this, &EventView::slotModifyFilter);
     connect(m_programCheckBox, &QCheckBox::stateChanged, this, &EventView::slotModifyFilter);
     connect(m_controllerCheckBox, &QCheckBox::stateChanged, this, &EventView::slotModifyFilter);
     connect(m_pitchBendCheckBox, &QCheckBox::stateChanged, this, &EventView::slotModifyFilter);
@@ -363,21 +363,20 @@ EventView::applyLayout()
     // of the view.
     //
     if (m_listSelection.size() == 0) {
-        
+
         QList<QTreeWidgetItem*> selection = m_eventList->selectedItems();
-        
+
         if( selection.count() ){
-            QTreeWidgetItem *listItem;
-            
+
             for( int i=0; i< selection.count(); i++ ) {
-                
-                listItem = selection.at(i);
+
+                QTreeWidgetItem *listItem = selection.at(i);
                 m_listSelection.push_back( m_eventList->indexOfTopLevelItem(listItem) );
-                
+
             }
         }// end if selection.count()
     }// end if m_listSel..
-    
+
     // *** Create the event list.
 
     // ??? Why is this routine called applyLayout() if it is primarily
@@ -606,7 +605,7 @@ EventView::applyLayout()
             << velyStr
             << data1Str
             << data2Str;
-            
+
             new EventViewItem(m_segments[i],
                               *it,
                               m_eventList,
@@ -626,7 +625,7 @@ EventView::applyLayout()
         m_eventList->setSelectionMode(QTreeWidget::NoSelection);
         leaveActionState("have_selection");
     } else {
-        
+
         m_eventList->setSelectionMode(QAbstractItemView::ExtendedSelection);
 
         // If no selection then select the first event
@@ -639,10 +638,9 @@ EventView::applyLayout()
     // Set a selection from a range of indexes
     //
     std::vector<int>::iterator sIt = m_listSelection.begin();
-    int index = 0;
 
     for (; sIt != m_listSelection.end(); ++sIt) {
-        index = *sIt;
+        int index = *sIt;
 
         while (index > 0 && !m_eventList->topLevelItem(index))        // was itemAtIndex
             index--;
@@ -795,7 +793,7 @@ void
 EventView::slotEditTriggerName()
 {
     bool ok = false;
-    QString newLabel = InputDialog::getText(this, 
+    QString newLabel = InputDialog::getText(this,
                                             tr("Segment label"),
                                             tr("Label:"),
                                             LineEdit::Normal,
@@ -903,17 +901,15 @@ EventView::slotEditCut()
     << selection.count() << " items";
 
 //    QPtrListIterator<QTreeWidgetItem> it(selection);
-    QTreeWidgetItem *listItem;
-    EventViewItem *item;
     EventSelection *cutSelection = nullptr;
     int itemIndex = -1;
 
 //    while ((listItem = it.current()) != 0) {
     for( int i=0; i< selection.size(); i++ ){
-        listItem = selection.at(i);
-    
+        QTreeWidgetItem *listItem = selection.at(i);
+
 //        item = dynamic_cast<EventViewItem*>((*it));
-        item = dynamic_cast<EventViewItem*>(listItem);
+        EventViewItem *item = dynamic_cast<EventViewItem*>(listItem);
 
         if (itemIndex == -1)
             itemIndex = m_eventList->indexOfTopLevelItem(listItem);
@@ -952,8 +948,6 @@ EventView::slotEditCopy()
     << selection.count() << " items";
 
 //    QPtrListIterator<QTreeWidgetItem> it(selection);
-    QTreeWidgetItem *listItem;
-    EventViewItem *item;
     EventSelection *copySelection = nullptr;
 
     // clear the selection for post modification updating
@@ -962,10 +956,10 @@ EventView::slotEditCopy()
 
 //    while ((listItem = it.current()) != 0) {
     for( int i=0; i< selection.size(); i++ ){
-        listItem = selection.at(i);
-        
+        QTreeWidgetItem *listItem = selection.at(i);
+
 //         item = dynamic_cast<EventViewItem*>((*it));
-        item = dynamic_cast<EventViewItem*>(listItem);
+        EventViewItem *item = dynamic_cast<EventViewItem*>(listItem);
 
 //         m_listSelection.push_back(m_eventList->itemIndex(*it));
         m_listSelection.push_back(m_eventList->indexOfTopLevelItem(listItem));
@@ -999,7 +993,7 @@ EventView::slotEditPaste()
     timeT insertionTime = 0;
 
     QList<QTreeWidgetItem*> selection = m_eventList->selectedItems();
-    
+
     if (selection.count()) {
         EventViewItem *item = dynamic_cast<EventViewItem*>(selection.at(0));
 
@@ -1011,12 +1005,11 @@ EventView::slotEditPaste()
         m_listSelection.clear();
 
 //        QPtrListIterator<QTreeWidgetItem> it(selection);
-        QTreeWidgetItem *listItem;
 
 //        while ((listItem = it.current()) != 0) {
         for( int i=0; i< selection.size(); i++ ){
-            listItem = selection.at(i);
-            
+            QTreeWidgetItem *listItem = selection.at(i);
+
             m_listSelection.push_back(m_eventList->indexOfTopLevelItem(listItem));
 //             ++it;
         }
@@ -1047,17 +1040,15 @@ EventView::slotEditDelete()
     << selection.count() << " items";
 
 //    QPtrListIterator<QTreeWidgetItem> it(selection);
-    QTreeWidgetItem *listItem;
-    EventViewItem *item;
     EventSelection *deleteSelection = nullptr;
     int itemIndex = -1;
 
 //    while ((listItem = it.current()) != 0) {
     for( int i=0; i< selection.size(); i++ ){
-        listItem = selection.at(i);
-            
+        QTreeWidgetItem *listItem = selection.at(i);
+
 //         item = dynamic_cast<EventViewItem*>((*it));
-        item = dynamic_cast<EventViewItem*>(listItem);
+        EventViewItem *item = dynamic_cast<EventViewItem*>(listItem);
 
         if (itemIndex == -1)
             itemIndex = m_eventList->indexOfTopLevelItem(listItem);
@@ -1324,7 +1315,7 @@ EventView::readOptions()
 
     EditViewBase::readOptions();
     m_eventFilter = settings.value("event_list_filter", m_eventFilter).toInt();
-    
+
     QByteArray qba = settings.value(EventViewLayoutConfigGroupName).toByteArray();
     m_eventList->restoreGeometry(qba);
 
@@ -1378,9 +1369,9 @@ EventView::slotModifyFilter()
     if (m_textCheckBox->isChecked()) m_eventFilter |= EventView::Text;
 
     if (m_generatedRegionCheckBox->isChecked()) m_eventFilter |= EventView::GeneratedRegion;
-    
+
     if (m_segmentIDCheckBox->isChecked()) m_eventFilter |= EventView::SegmentID;
-    
+
     if (m_otherCheckBox->isChecked()) m_eventFilter |= EventView::Other;
 
     applyLayout();
@@ -1508,7 +1499,7 @@ void
 EventView::slotPopupMenu(const QPoint& pos)
 {
     QTreeWidgetItem *item = m_eventList->itemAt(pos);
-    
+
     if (!item)
         return ;
 
@@ -1529,6 +1520,7 @@ EventView::slotPopupMenu(const QPoint& pos)
 void
 EventView::createMenu()
 {
+    // cppcheck-suppress publicAllocationError
     m_menu = new QMenu(this);
 
     QAction *eventEditorAction =
@@ -1646,7 +1638,7 @@ EventView::updateWindowTitle(bool m)
 
     } else {
         if (m_segments.size() == 1) {
-            
+
             // Fix bug #3007112
             if (!m_segments[0]->getComposition()) {
                 // The segment is no more in the composition.

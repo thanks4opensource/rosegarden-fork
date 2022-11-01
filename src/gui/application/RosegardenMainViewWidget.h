@@ -137,13 +137,13 @@ public:
 public slots:
     void slotEditSegment(Segment*);
     void slotEditSegmentNotation(Segment*);
-    void slotEditSegmentsNotation(std::vector<Segment*>);
+    void slotEditSegmentsNotation(const std::vector<Segment*>&);
     void slotEditSegmentMatrix(Segment*);
-    void slotEditSegmentsMatrix(std::vector<Segment*>);
+    void slotEditSegmentsMatrix(const std::vector<Segment*>&);
     void slotEditSegmentEventList(Segment*);
-    void slotEditSegmentsEventList(std::vector<Segment*>);
+    void slotEditSegmentsEventList(const std::vector<Segment*>&);
     void slotEditSegmentPitchTracker(Segment*);
-    void slotEditSegmentsPitchTracker(std::vector<Segment*>);
+    void slotEditSegmentsPitchTracker(const std::vector<Segment*>&);
     void slotEditTriggerSegment(int);
     void slotEditSegmentAudio(Segment*);
     void slotSegmentAutoSplit(Segment*);
@@ -287,10 +287,10 @@ signals:
 
 private:
 
-    void createNotationView(std::vector<Segment *>);
-    void createMatrixView(std::vector<Segment *>);
+    void createNotationView(const std::vector<Segment *>&);
+    void createMatrixView(const std::vector<Segment *>&);
     EventView *createEventView(std::vector<Segment *>);
-    PitchTrackerView *createPitchTrackerView(std::vector<Segment *>);
+    PitchTrackerView *createPitchTrackerView(const std::vector<Segment *>&);
 
     static bool hasNonAudioSegment(const SegmentSelection &segments);
 

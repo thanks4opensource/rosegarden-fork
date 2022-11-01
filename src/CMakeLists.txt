@@ -148,6 +148,7 @@ set(rg_CPPS
   gui/dialogs/ShortcutWarnDialog.cpp
   gui/dialogs/CheckableListDialog.cpp
   gui/dialogs/ChordNameStylesDialog.cpp
+  gui/dialogs/OutOfProcessorPower.cpp
   gui/widgets/IconStackedWidget.cpp
   gui/widgets/TristateCheckBox.cpp
   gui/widgets/FileDialog.cpp

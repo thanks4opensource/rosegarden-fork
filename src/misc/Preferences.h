@@ -186,6 +186,15 @@ namespace Preferences
     void setStopAtEnd(bool value);
     bool getStopAtEnd();
 
+    void setStopAtSegmentEnd(bool value);
+    bool getStopAtSegmentEnd();
+
+    void setJumpToLoop(bool value);
+    bool getJumpToLoop();
+
+    void setAdvancedLooping(bool value);
+    bool getAdvancedLooping();
+
     // AudioFileLocationDialog settings
 
     void setAudioFileLocationDlgDontShow(bool dontShow);
@@ -197,6 +206,9 @@ namespace Preferences
 
     void setCustomAudioLocation(QString location);
     QString getCustomAudioLocation();
+
+    void setJACKLoadCheck(bool value);
+    bool getJACKLoadCheck();
 
     // Experimental
     bool getBug1623();

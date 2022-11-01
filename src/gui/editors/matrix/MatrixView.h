@@ -64,7 +64,7 @@ class MatrixView : public EditViewBase,
 
 public:
     MatrixView(RosegardenDocument *doc,
-                  std::vector<Segment *> segments,
+                  const std::vector<Segment *>& segments,
                   QWidget *parent = nullptr);
 
     ~MatrixView() override;
@@ -172,7 +172,11 @@ protected slots:
     void slotSetCurrentVelocity(int);
     void slotSetCurrentVelocityFromSelection();
 
-    void slotToggleTracking();
+    void slotScrollToFollow();
+#if 0  // t4os: master version looping
+    void slotLoop();
+    void slotLoopChanged();
+#endif
 
     void slotUpdateMenuStates();
     void slotRulerSelectionUpdate();
@@ -283,7 +287,7 @@ protected slots:
 protected:
     const SnapGrid *getSnapGrid() const;
     void readOptions() override;
-    void insertControllerSequence(const ControlParameter &cp);
+    void insertControllerSequence(const ControlParameter &controlParameter);
 
 private:
     RosegardenDocument *m_document;
@@ -294,7 +298,7 @@ private:
     QComboBox *m_quantizeCombo;
     QComboBox *m_snapGridCombo;
 
-    bool m_tracking;
+    bool m_scrollToFollow;
 
     std::vector<timeT> m_quantizations;
     std::vector<timeT> m_snapValues;

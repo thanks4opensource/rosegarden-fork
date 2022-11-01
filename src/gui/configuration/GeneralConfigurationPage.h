@@ -42,7 +42,7 @@ class GeneralConfigurationPage : public TabbedConfigurationPage
     Q_OBJECT
 
 public:
-    GeneralConfigurationPage(QWidget *parent);
+    explicit GeneralConfigurationPage(QWidget *parent);
 
     enum DoubleClickClient
     {
@@ -107,7 +107,8 @@ private:
     QCheckBox *m_cleanRecentFilesList;
     QCheckBox *m_useJackTransport;
     QCheckBox *m_stopPlaybackAtEnd;
-    QCheckBox *m_loopSong;
+    QCheckBox *m_jumpToLoop;
+    QCheckBox *m_advancedLooping;
     QCheckBox *m_autoChannels;
     QCheckBox *m_saveUncompressed;
 

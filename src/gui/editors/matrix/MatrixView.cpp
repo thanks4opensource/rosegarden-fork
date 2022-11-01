@@ -134,8 +134,8 @@ namespace Rosegarden
 
 
 MatrixView::MatrixView(RosegardenDocument *doc,
-                 std::vector<Segment *> segments,
-                 QWidget *parent) :
+                       const std::vector<Segment *>& segments,
+                       QWidget *parent) :
     EditViewBase(segments, parent),
     m_quantizations(BasicQuantizer::getStandardQuantizations()),
     m_inChordMode(false)
@@ -219,9 +219,9 @@ MatrixView::MatrixView(RosegardenDocument *doc,
         MATRIX_DEBUG << "newest state for action '" << toolAction->objectName() << "' is " << toolAction->isChecked();
     }
 
-    m_tracking = m_document->getComposition().getEditorFollowPlayback();
-    findAction("toggle_tracking")->setChecked(m_tracking);
-    m_matrixWidget->setScrollToFollowPlayback(m_tracking);
+    m_scrollToFollow = m_document->getComposition().getEditorFollowPlayback();
+    findAction("scroll_to_follow")->setChecked(m_scrollToFollow);
+    m_matrixWidget->setScrollToFollowPlayback(m_scrollToFollow);
 
     slotUpdateWindowTitle();
     connect(m_document, &RosegardenDocument::documentModified,
@@ -309,6 +309,14 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     enableAutoRepeat("Transport Toolbar", "playback_pointer_forward_bar");
     enableAutoRepeat("Transport Toolbar", "cursor_back");
     enableAutoRepeat("Transport Toolbar", "cursor_forward");
+
+#if 0   // t4os: master version looping
+    connect(RosegardenDocument::currentDocument,
+                &RosegardenDocument::loopChanged,
+            this, &MatrixView::slotLoopChanged);
+    // Make sure we are in sync.
+    slotLoopChanged();
+#endif
 
     // Show the pointer as soon as matrix editor opens (update pointer position,
     // but don't scroll)
@@ -610,7 +618,10 @@ MatrixView::setupActions()
     createAction("cursor_next_segment", SLOT(slotCurrentSegmentNext()));
     createAction("toggle_loop", SLOT(slotLoopButtonClicked()));
     createAction("toggle_solo", SLOT(slotToggleSolo()));
-    createAction("toggle_tracking", SLOT(slotToggleTracking()));
+    createAction("scroll_to_follow", SLOT(slotScrollToFollow()));
+#if 0  // t4os: master version looping
+    createAction("loop", SLOT(slotLoop()));
+#endif
     createAction("panic", SIGNAL(panic()));
     createAction("toggle_loop_active", SLOT(slotToggleLoopActive()));
     createAction("loop_from_selection", SLOT(slotLoopFromSelection()));
@@ -1645,12 +1656,31 @@ MatrixView::slotSetCurrentVelocityFromSelection()
 }
 
 void
-MatrixView::slotToggleTracking()
+MatrixView::slotScrollToFollow()
 {
-    m_tracking = !m_tracking;
-    m_matrixWidget->setScrollToFollowPlayback(m_tracking);
-    m_document->getComposition().setEditorFollowPlayback(m_tracking);
+    m_scrollToFollow = !m_scrollToFollow;
+    m_matrixWidget->setScrollToFollowPlayback(m_scrollToFollow);
+    m_document->getComposition().setEditorFollowPlayback(m_scrollToFollow);
 }
+
+#if 0  // t4os: master version looping
+void
+MatrixView::slotLoop()
+{
+    RosegardenDocument::currentDocument->loopButton(
+            findAction("loop")->isChecked());
+}
+
+void
+MatrixView::slotLoopChanged()
+{
+    Composition &composition =
+        RosegardenDocument::currentDocument->getComposition();
+
+    findAction("loop")->setChecked(
+            (composition.getLoopMode() != Composition::LoopOff));
+}
+#endif
 
 void
 MatrixView::slotToggleChordsRuler()

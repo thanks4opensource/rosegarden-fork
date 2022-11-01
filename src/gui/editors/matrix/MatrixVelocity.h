@@ -76,6 +76,8 @@ protected:
                                  // scale +-127 1:1 scale ratio
     double m_velocityScale;
 
+    explicit MatrixVelocity(MatrixWidget *);
+
     MatrixElement *m_currentElement;
     /// The Event associated with m_currentElement.
     Event *m_event;

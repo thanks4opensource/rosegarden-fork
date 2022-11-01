@@ -38,10 +38,10 @@ namespace Rosegarden
 
 MatrixViewSegment::MatrixViewSegment(MatrixScene *scene,
                                      Segment *segment,
-                                     bool drum) :
+                                     bool drumMode) :
     ViewSegment(*segment),
     m_scene(scene),
-    m_drum(drum),
+    m_drum(drumMode),
     m_refreshStatusId(segment->getNewRefreshStatusId())
 {
 }
@@ -137,10 +137,10 @@ MatrixViewSegment::labelChanged(const Segment *segment)
 
 // This is invoked via SegmentObserver notifications.
 void
-MatrixViewSegment::endMarkerTimeChanged(const Segment *s, bool shorten)
+MatrixViewSegment::endMarkerTimeChanged(const Segment *segment, bool shorten)
 {
-    ViewSegment::endMarkerTimeChanged(s, shorten);
-    if (m_scene) m_scene->segmentEndMarkerTimeChanged(s, shorten);
+    ViewSegment::endMarkerTimeChanged(segment, shorten);
+    if (m_scene) m_scene->segmentEndMarkerTimeChanged(segment, shorten);
 }
 
 #if 0

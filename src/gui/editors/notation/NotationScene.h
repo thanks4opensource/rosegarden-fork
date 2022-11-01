@@ -138,7 +138,7 @@ public:
     void setPageMode(StaffLayout::PageMode mode);
 
     QString getFontName() const;
-    void setFontName(QString);
+    void setFontName(const QString&);
 
     int getFontSize() const;
     void setFontSize(int);
@@ -357,7 +357,7 @@ private:
     void checkUpdate();
     void positionStaffs();
     void layoutAll();
-    void layout(NotationStaff *singleStaff, timeT start, timeT end);
+    void layout(NotationStaff *singleStaff, timeT startTime, timeT endTime);
 
     NotationStaff *setSelectionElementStatus(EventSelection *, bool set);
     void previewSelection(EventSelection *, EventSelection *oldSelection);

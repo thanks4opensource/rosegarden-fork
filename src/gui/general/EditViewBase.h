@@ -47,7 +47,7 @@ class EditViewBase : public QMainWindow, public ActionFileClient
     Q_OBJECT
 
 public:
-    EditViewBase(std::vector<Segment *> segments,
+    EditViewBase(const std::vector<Segment *>& segments,
                  QWidget *parent);
 
     ~EditViewBase() override;

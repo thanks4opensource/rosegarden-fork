@@ -177,16 +177,16 @@ public:
 
     void openURL(const QUrl &url);
 
-    void exportMIDIFile(QString url);
+    void exportMIDIFile(QString file);
 
     /// export a Csound scorefile
-    void exportCsoundFile(QString url);
+    void exportCsoundFile(QString file);
 
-    void exportMupFile(QString url);
+    void exportMupFile(QString file);
 
-    bool exportLilyPondFile(QString url, bool forPreview = false);
+    bool exportLilyPondFile(QString file, bool forPreview = false);
 
-    void exportMusicXmlFile(QString url);
+    void exportMusicXmlFile(QString file);
 
     SequenceManager *getSequenceManager() { return m_seqManager; }
 
@@ -245,7 +245,7 @@ public:
      * the audio path for validity, and does not create anything if the audio
      * path does not exist.
      */
-    bool testAudioPath(QString op); // and open the dialog to set it if unset
+    bool testAudioPath(QString operation); // and open the dialog to set it if unset
 
     bool haveAudioImporter() const  { return m_haveAudioImporter; }
 
@@ -299,7 +299,7 @@ protected:
      */
     RosegardenDocument *createDocument(
             QString filePath,
-            ImportType type,
+            ImportType importType,
             bool permanent,
             bool lock,
             bool clearHistory);
@@ -314,12 +314,12 @@ protected:
     /**
      * Create document from MIDI file
      */
-    RosegardenDocument *createDocumentFromMIDIFile(QString filePath);
+    RosegardenDocument *createDocumentFromMIDIFile(QString file);
 
     /**
      * Create document from RG21 file
      */
-    RosegardenDocument *createDocumentFromRG21File(QString filePath);
+    RosegardenDocument *createDocumentFromRG21File(QString file);
 
     /**
      * Create document from Hydrogen drum machine file
@@ -329,7 +329,7 @@ protected:
     /**
      * Create document from MusicXML file
      */
-    RosegardenDocument *createDocumentFromMusicXMLFile(QString filePath);
+    RosegardenDocument *createDocumentFromMusicXMLFile(QString file);
 
     /**/
     /**/
@@ -419,7 +419,7 @@ protected:
      * good and that (if it exists) the user agrees to overwrite.
      * Return a null string if the write should not go ahead.
      */
-    QString getValidWriteFileName(QString extension, QString label);
+    QString getValidWriteFileName(QString descriptiveExtension, QString label);
 
     /**
      * Find any non-ASCII strings in a composition that has been
@@ -501,7 +501,7 @@ public slots:
      * document is modified. (I thought we already did this ages ago, but
      * apparenty not.)
      */
-    void slotUpdateTitle(bool m = false);
+    void slotUpdateTitle(bool modified = false);
 
     /**
      * open a URL - used for Dn'D
@@ -1136,6 +1136,16 @@ public slots:
      */
     void slotSetPointerPosition(timeT t);
 
+#if 0  // t4os: master version looping
+    /**
+     * Set the pointer position and start playing (from LoopRuler)
+     */
+    void slotSetPlayPosition(timeT time);
+
+    void slotLoopChanged();
+#endif
+
+
     /**
      * Update the transport with the bar, beat and unit times for
      * a given timeT
@@ -1156,9 +1166,12 @@ public slots:
     void slotRewindToBeginning();
     void slotFastForwardToEnd();
     void slotJumpToTime(RealTime);
-    void slotStartAtTime(RealTime);
+    void slotStartAtTime(const RealTime&);
     void slotRefreshTimeDisplay();
-    void slotToggleTracking();
+#if 0  // t4os: master looping version
+    void slotLoop();
+#endif
+    void slotScrollToFollow();
 
     /**
      * Called when the sequencer auxiliary process exits
@@ -1193,10 +1206,12 @@ public slots:
      */
     void slotToggleSolo(bool);
 
+#if 0  // t4os: master version loopin
     /*
      * Looping buttons
      */
     void slotLoopButtonClicked();
+#endif
     void slotSetLoopingMode(bool continuous);
 
     /**
@@ -1430,31 +1445,31 @@ public slots:
      * raise an exising one.
      */
     void slotShowPluginDialog(QWidget *parent,
-                              InstrumentId instrument,
+                              InstrumentId instrumentId,
                               int index);
 
-    void slotPluginSelected(InstrumentId instrument,
+    void slotPluginSelected(InstrumentId instrumentId,
                             int index, int plugin);
 
     /**
      * An external GUI has requested a port change.
      */
-    void slotChangePluginPort(InstrumentId instrument,
-                              int index, int portIndex, float value);
+    void slotChangePluginPort(InstrumentId instrumentId,
+                              int pluginIndex, int portIndex, float value);
 
     /**
      * Our internal GUI has made a port change -- the
      * PluginPortInstance already contains the new value, but we need
      * to inform the sequencer and update external GUIs.
      */
-    void slotPluginPortChanged(InstrumentId instrument,
-                               int index, int portIndex);
+    void slotPluginPortChanged(InstrumentId instrumentId,
+                               int pluginIndex, int portIndex);
 
     /**
      * An external GUI has requested a program change.
      */
-    void slotChangePluginProgram(InstrumentId instrument,
-                                 int index, QString program);
+    void slotChangePluginProgram(InstrumentId instrumentId,
+                                 int pluginIndex, QString program);
 
     /**
      * Our internal GUI has made a program change -- the
@@ -1462,8 +1477,8 @@ public slots:
      * need to inform the sequencer, update external GUIs, and update
      * the port values for the new program.
      */
-    void slotPluginProgramChanged(InstrumentId instrument,
-                                  int index);
+    void slotPluginProgramChanged(InstrumentId instrumentId,
+                                  int pluginIndex);
 
     /**
      * An external GUI has requested a configure call.  (This can only
@@ -1472,10 +1487,10 @@ public slots:
      */
     void slotChangePluginConfiguration(InstrumentId, int index,
                                        bool global, QString key, QString value);
-    void slotPluginDialogDestroyed(InstrumentId instrument,
+    void slotPluginDialogDestroyed(InstrumentId instrumentId,
                                    int index);
     void slotPluginBypassed(InstrumentId,
-                            int index, bool bypassed);
+                            int pluginIndex, bool bypassed);
 
     void slotShowPluginGUI(InstrumentId, int index);
     void slotStopPluginGUI(InstrumentId, int index);

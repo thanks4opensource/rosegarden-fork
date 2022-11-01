@@ -102,7 +102,7 @@ NotationWidget::NotationWidget(NotationView *notationView) :
     m_scene(nullptr),
     m_leftGutter(20),
     m_currentTool(nullptr),
-    m_playTracking(true),
+    m_scrollToFollow(true),
     m_hZoomFactor(1.0),
     m_vZoomFactor(1.0),
     m_referenceScale(nullptr),
@@ -157,10 +157,9 @@ NotationWidget::NotationWidget(NotationView *notationView) :
                            QPainter::TextAntialiasing |
                            QPainter::SmoothPixmapTransform);
 
-    bool texture = false;
     QSettings settings;
     settings.beginGroup(NotationViewConfigGroup);
-    texture = settings.value("backgroundtextures", true).toBool();
+    bool texture = settings.value("backgroundtextures", true).toBool();
     settings.endGroup();
 
     QBrush bg = (texture ?
@@ -639,8 +638,7 @@ NotationWidget::setSegments(RosegardenDocument *document,
     connect(m_scene, &NotationScene::currentStaffChanged,
             this, &NotationWidget::slotStaffChanged);
 
-    m_playTracking = m_document->getComposition().getEditorFollowPlayback();
-
+    m_scrollToFollow = m_document->getComposition().getEditorFollowPlayback();
     setTrackInstrumentOverride();
 }
 
@@ -700,9 +698,9 @@ NotationWidget::slotGenerateHeaders()
 }
 
 void
-NotationWidget::setCanvasCursor(QCursor c)
+NotationWidget::setCanvasCursor(QCursor cursor)
 {
-    if (m_view) m_view->viewport()->setCursor(c);
+    if (m_view) m_view->viewport()->setCursor(cursor);
 }
 
 Segment *
@@ -720,10 +718,10 @@ NotationWidget::segmentsContainNotes() const
 }
 
 void
-NotationWidget::locatePanner(bool tall)
+NotationWidget::locatePanner(bool vertical)
 {
     m_layout->removeWidget(m_panner);
-    if (tall) {
+    if (vertical) {
         m_panner->setMaximumHeight(QWIDGETSIZE_MAX);
         m_hpanner->setMaximumHeight(QWIDGETSIZE_MAX);
         m_panner->setMaximumWidth(80);
@@ -922,19 +920,19 @@ NotationWidget::slotSetGuitarChordInserter()
 }
 
 void
-NotationWidget::slotSetPlayTracking(bool tracking)
+NotationWidget::setScrollToFollow(bool scrollToFollow)
 {
-    m_document->getComposition().setEditorFollowPlayback(tracking);
-    m_playTracking = tracking;
-    if (m_playTracking) {
+    m_document->getComposition().setEditorFollowPlayback(scrollToFollow);
+    m_scrollToFollow = scrollToFollow;
+    if (m_scrollToFollow) {
         m_view->ensurePositionPointerInView(true);
     }
 }
 
 void
-NotationWidget::slotTogglePlayTracking()
+NotationWidget::slotScrollToFollow()
 {
-    slotSetPlayTracking(!m_playTracking);
+    setScrollToFollow(!m_scrollToFollow);
 }
 
 void
@@ -996,7 +994,7 @@ NotationWidget::slotPointerPositionChanged(timeT t)
 {
     updatePointer(t);
 
-    if (m_playTracking && !m_noScroll)
+    if (m_scrollToFollow && !m_noScroll)
         m_view->ensurePositionPointerInView(true);  // page
 }
 

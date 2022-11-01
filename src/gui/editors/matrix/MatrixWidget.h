@@ -93,7 +93,7 @@ class MatrixWidget : public QWidget,
     Q_OBJECT
 
 public:
-    MatrixWidget(MatrixView *matrixView);
+    explicit MatrixWidget(MatrixView *matrixView);
     virtual ~MatrixWidget() override;
 
     enum class NoteColorType {

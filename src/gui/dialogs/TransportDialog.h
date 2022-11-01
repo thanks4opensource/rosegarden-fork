@@ -48,6 +48,10 @@ class QDialog;
 namespace Rosegarden
 {
 
+
+#if 0  // t4os: master looping version
+class RosegardenDocument;
+#endif
 class TimeSignature;
 class RealTime;
 class MappedEvent;
@@ -57,7 +61,7 @@ class TransportDialog : public QDialog
 {
     Q_OBJECT
 public:
-    TransportDialog(QWidget *parent = nullptr);
+    explicit TransportDialog(QWidget *parent = nullptr);
     ~TransportDialog() override;
 
     enum TimeDisplayMode { RealMode, SMPTEMode, BarMode, BarMetronomeMode, FrameMode };
@@ -119,6 +123,9 @@ protected:
     void displayTime();
 
 public slots:
+#if 0  // t4os: master looping version
+    void slotDocumentLoaded(RosegardenDocument *doc);
+#endif
 
     // These two slots are activated by QTimers
     //
@@ -162,6 +169,17 @@ signals:
     void editTransportTime(QWidget *);
     //void scrollTempo(int);
     void panic();
+
+private slots:
+
+#if 0  // t4os: master looping version
+    // Loop Widgets.
+    void slotLoopButtonClicked();
+    void slotSetStartLoopingPointAtMarkerPos();
+    void slotSetStopLoopingPointAtMarkerPos();
+    /// From RosegardenDocument.
+    void slotLoopChanged();
+#endif
 
 private:
     void loadPixmaps();

@@ -410,17 +410,14 @@ MatrixWidget::setSegments(RosegardenDocument *document,
 
     Composition &comp = document->getComposition();
 
-    Track *track;
-    Instrument *instr;
-
     // Look at segments to see if we need piano keyboard or key mapping ruler
     // (cf comment in MatrixScene::setSegments())
     m_onlyKeyMapping = true;
     m_hasPercussionSegments = false;
     std::vector<Segment *>::iterator si;
     for (si=segments.begin(); si!=segments.end(); ++si) {
-        track = comp.getTrackById((*si)->getTrack());
-        instr = document->getStudio().getInstrumentById(track->getInstrument());
+        Track *track = comp.getTrackById((*si)->getTrack());
+        Instrument *instr = document->getStudio().getInstrumentById(track->getInstrument());
         if (instr) {
             if (instr->getKeyMapping()) m_hasPercussionSegments = true;
             else m_onlyKeyMapping = false;

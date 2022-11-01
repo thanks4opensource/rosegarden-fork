@@ -58,8 +58,8 @@ public:
     typedef std::vector<Segment *> SegmentVector;
     typedef void (NotationView::*opOnEvent) (Event* e, Segment *containing);
     NotationView(RosegardenDocument *doc,
-                    std::vector<Segment *> segments,
-                    QWidget *parent = nullptr);
+                 const std::vector<Segment *>& segments,
+                 QWidget *parent = nullptr);
 
     ~NotationView() override;
 
@@ -67,7 +67,7 @@ public:
 
     Segment *getCurrentSegment() override;
     EventSelection *getSelection() const override;
-    void setSelection(EventSelection* s, bool preview = false) override;
+    void setSelection(EventSelection* selection, bool preview = false) override;
 
     virtual void initLayoutToolbar();
     void initRulersToolbar();
@@ -310,7 +310,12 @@ protected slots:
     void slotToggleRulersToolBar();
     void slotToggleTransportToolBar();
 
-    void slotToggleTracking();
+    void slotScrollToFollow();
+
+#if 0  // t4os: master looping version
+    void slotLoop();
+    void slotLoopChanged();
+#endif
 
     /// Note-on received asynchronously -- consider step-by-step editing
     void slotInsertableNoteOnReceived(int pitch, int velocity);
@@ -411,7 +416,7 @@ private:
      * export a LilyPond file (used by slotPrintLilyPond and
      * slotPreviewLilyPond)
      */
-    bool exportLilyPondFile(QString url, bool forPreview = false);
+    bool exportLilyPondFile(QString file, bool forPreview = false);
 
     /**
      * Use QTemporaryFile to obtain a tmp filename that is guaranteed to be unique.
@@ -487,7 +492,7 @@ private:
     void setCurrentNotePixmap(QPixmap);
     void setCurrentNotePixmapFrom(QAction *);
 
-    void insertControllerSequence(const ControlParameter &cp);
+    void insertControllerSequence(const ControlParameter &controlParameter);
     bool isShowable(Event *e);
     void setWidgetSegments();
     void EditOrnamentInline(Event *trigger, Segment *containing);

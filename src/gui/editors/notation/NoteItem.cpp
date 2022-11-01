@@ -26,6 +26,18 @@
 namespace Rosegarden
 {
 
+NoteItemDimensions::NoteItemDimensions() :
+    noteBodyWidth(0),
+    noteBodyHeight(0),
+    left(0),
+    right(0),
+    above(0),
+    below(),
+    borderX(0),
+    borderY(0)
+{}
+
+// cppcheck-suppress uninitMemberVar
 NoteItem::NoteItem(const NotePixmapParameters &params,
                    QSharedPointer<NoteStyle> style,
                    bool selected,
@@ -141,7 +153,6 @@ NoteItem::makePixmap() const
 
     return pixmap;
 }
-    
+
 
 }
-
