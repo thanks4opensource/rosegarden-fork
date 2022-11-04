@@ -125,7 +125,7 @@ MatrixScene::MatrixScene() :
     connect(RosegardenDocument::currentDocument,
             &RosegardenDocument::keySignaturesChanged,
             this,
-            &MatrixScene::slotKeySignaturesChanged);
+            &MatrixScene::slotUpdateNoteLabels);
 
 #if 0  // Failed experiments to use Alt or Tab for alternate tool switching
     qt_set_sequence_auto_mnemonic(false);
@@ -1711,7 +1711,7 @@ const EventContainer &notes)
 }
 
 void
-MatrixScene::slotKeySignaturesChanged()
+MatrixScene::slotUpdateNoteLabels()
 {
     m_keySignaturesChanged = true;
     updateAllSegments();
@@ -1726,20 +1726,6 @@ MatrixScene::updateAllSegmentsColors()
         (*i)->updateAllColors();
     }
 }
-
-void
-MatrixScene::updateAllSegmentsNames()
-{
-    setKeySignaturesChanged(true);
-
-    for (std::vector<MatrixViewSegment *>::iterator i = m_viewSegments.begin();
-         i != m_viewSegments.end(); ++i) {
-        (*i)->updateAll();
-    }
-
-    setKeySignaturesChanged(false);
-}
-
 
 void
 MatrixScene::updateCurrentSegmentNames()
@@ -1762,6 +1748,5 @@ MatrixScene::findSegmentIndex(const Segment *segment) const
     // Not found.
     return -1;
 }
-
 
 }

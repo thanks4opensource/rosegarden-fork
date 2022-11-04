@@ -407,6 +407,25 @@ public:
      */
     void toggleLoopingMode();
 
+    // Hack. Necessary because playback looping control now in
+    // RosegardenSequencer::keepPlaying() (not optimal -- should be in
+    // SequenceManager but seemingly impossible to do there -- still
+    // infinitely better than in RosegardenMainWindow::slotSetPointerPosition()
+    // where was previously) and RosegardenSequencer (and lower) deal
+    // in RealTime times vs timeT as in SequenceManager and above, and
+    // mapping RealTime playback loop end (loop/segments/composition) back to
+    // timeT is inexact/incomprehensible/difficult/impossible.
+    // But single-play loop (vs continuous) needs to stop exactly at
+    // timeT Composition::getPosition() end of loop so that
+    // RosegardenMainWindow::slotPlay() can repeatedly single-play
+    // loop each time user commands (code checks for timeT
+    // Composition::getPosition() end >= loop_end and sets back to start
+    // (loop/segments/composition) as it does for any playback begin
+    // when current Composition::getPosition() is outside loop (l/s/c) range.
+    // This allows RosegardenSequencer::keepPlaying() to reset timeT
+    // position to correct value.
+    void setPositionToPlaybackLoopingEnd();
+
     /**
      * Cause the document to use the given time as the origin
      * when inserting any subsequent recorded data

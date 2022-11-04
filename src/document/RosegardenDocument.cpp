@@ -2718,6 +2718,22 @@ void RosegardenDocument::toggleLoopingMode()
     emit loopingModeChanged(isLooping);
 }
 
+// See comment in .h file
+void RosegardenDocument::setPositionToPlaybackLoopingEnd()
+{
+    timeT endPosition;
+    if (m_composition.loopRangeIsActive())
+        endPosition = m_composition.getLoopEnd();
+    else if (Preferences::getStopAtEnd())
+        endPosition = m_composition.getMaxSegmentEndTime();
+    else
+        endPosition = m_composition.getEndMarker();
+
+    m_composition.setPosition(endPosition);
+
+    emit pointerPositionChanged(endPosition);
+}
+
 void
 RosegardenDocument::addRecordMIDISegment(TrackId tid)
 {

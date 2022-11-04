@@ -150,9 +150,6 @@ public:
     /// just colors of notes
     void updateAllSegmentsColors();
 
-    /// just names of notes
-    void updateAllSegmentsNames();
-
     /// just in one segment
     void updateCurrentSegmentNames();
 
@@ -259,7 +256,7 @@ public slots:
     void slotNotesTied  (const EventContainer &notes);
     void slotNotesUntied(const EventContainer &notes);
 
-    void slotKeySignaturesChanged();
+    void slotUpdateNoteLabels();
 
 // t4os -- see comment in constructor implemementation
 protected slots:

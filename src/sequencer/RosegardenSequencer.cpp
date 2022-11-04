@@ -41,6 +41,7 @@
 #include "base/Instrument.h"
 #include "base/InstrumentStaticSignals.h"
 #include "gui/studio/StudioControl.h"
+#include "document/RosegardenDocument.h"
 
 #include "gui/application/RosegardenApplication.h"
 #include "gui/application/RosegardenMainWindow.h"
@@ -1241,23 +1242,37 @@ RosegardenSequencer::startPlaying()
 bool
 RosegardenSequencer::keepPlaying()
 {
-    Profiler profiler("RosegardenSequencer::keepPlaying");
+    //Profiler profiler("RosegardenSequencer::keepPlaying");
 
-    MappedEventList c;
+    // See extensive documentation at setPositionToPlaybackLoopingEnd()
+    // in RosegardenDocument.h
+    if (m_songPosition > m_loopEnd && m_loopingMode == LoopingMode::ONE_SHOT) {
+        stop(true);
+        RosegardenDocument::currentDocument->setPositionToPlaybackLoopingEnd();
+        return true;
+    }
+
 
     RealTime fetchEnd = m_songPosition + m_readAhead;
+
+    // If we are looping, don't fetch past the end of the loop.
     if (m_loopingMode == LoopingMode::CONTINUOUS && fetchEnd >= m_loopEnd)
     {
         fetchEnd = m_loopEnd - RealTime(0, 1);
     }
+
+    MappedEventList mappedEventList;
+
+    // If time has actually moved, get the events.
     if (fetchEnd > m_lastFetchSongPosition) {
-        fetchEvents(c, m_lastFetchSongPosition, fetchEnd, false);
+        fetchEvents(mappedEventList, m_lastFetchSongPosition, fetchEnd, false);
     }
 
     // Again, process whether we need to or not to keep
     // the Sequencer up-to-date with audio events
-    //
-    m_driver->processEventsOut(c, m_lastFetchSongPosition, fetchEnd);
+    m_driver->processEventsOut(mappedEventList,
+                               m_lastFetchSongPosition,
+                               fetchEnd);
 
     if (fetchEnd > m_lastFetchSongPosition) {
         m_lastFetchSongPosition = fetchEnd;
@@ -1287,7 +1302,8 @@ RosegardenSequencer::updateClocks()
 
     // Go around the loop if we've reached the end
     //
-    if (m_loopingMode == LoopingMode::CONTINUOUS && newPosition >= m_loopEnd) {
+    if (m_loopingMode == LoopingMode::CONTINUOUS && newPosition >= m_loopEnd)
+    {
         RealTime oldPosition = m_songPosition;
 
         // Remove the loop width from the song position and send
@@ -1307,7 +1323,8 @@ RosegardenSequencer::updateClocks()
         m_driver->processEventsOut(c, m_songPosition, m_songPosition + m_readAhead);
 
         m_driver->startClocks();
-    } else {
+    }
+    else {
         m_songPosition = newPosition;
 
         if (m_songPosition <= m_driver->getStartPosition())

@@ -754,7 +754,7 @@ public:
      * not "2/16", "4/32", etc. but is exact, modulo MIDI's 3840
      * ticks per measure, so can be unusual value e.g. "571/3840".
      */
-    QString getMusicalTimeStringForAbsoluteTime(timeT absoluteTime);
+    QString getMusicalTimeStringForAbsoluteTime(timeT absoluteTime) const;
 
     /**
      * Return the absolute time corresponding to a given bar number

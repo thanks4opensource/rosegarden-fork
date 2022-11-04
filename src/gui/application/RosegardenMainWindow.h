@@ -1206,12 +1206,10 @@ public slots:
      */
     void slotToggleSolo(bool);
 
-#if 0  // t4os: master version loopin
     /*
      * Looping buttons
      */
     void slotLoopButtonClicked();
-#endif
     void slotSetLoopingMode(bool continuous);
 
     /**

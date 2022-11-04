@@ -288,6 +288,7 @@ protected:
     const SnapGrid *getSnapGrid() const;
     void readOptions() override;
     void insertControllerSequence(const ControlParameter &controlParameter);
+    void setChordNameRulerActive(bool);
 
 private:
     RosegardenDocument *m_document;

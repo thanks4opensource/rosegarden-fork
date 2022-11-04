@@ -122,11 +122,7 @@ public:
     RosegardenDocument *getDocument() { return m_document; }
     Device *getCurrentDevice();
     MatrixScene *getScene()  { return m_scene; }
-#if 0   // t4osDEBUG
-    Panner *getPanner() { return m_panner; }  // unused
-#else
-    Panned *getPanned() { return m_panned; }  // unused
-#endif
+    Panned *getPanned() { return m_panned; }
 
     /**
      * Show the pointer.  Used by MatrixView upon construction, this ensures
@@ -168,6 +164,8 @@ public:
     ChordNameRuler *getChordNameRuler() const { return m_chordNameRuler; }
     void setChordNameRulerVisible(bool visible);
     void setTempoRulerVisible(bool visible);
+    // Check note label/chord mode
+    bool needUpdateNoteLabels();
 
     /// Show the highlight on the piano/percussion rulers.
     void showHighlight(bool visible);
@@ -428,7 +426,7 @@ private slots:
     void slotUpdateChordNameRuler();
 
     // User has changed chord name ruler segments (to analzyze)
-    void slotChordNameRulerSegmentsUpdated();
+    void slotChordAnalysisChanged();
 
 private:
     MatrixView* const m_view;

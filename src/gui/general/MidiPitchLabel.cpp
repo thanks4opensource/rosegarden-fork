@@ -56,12 +56,12 @@ MidiPitchLabel::MidiPitchLabel(int pitch, const char *separator, bool sharps)
     if (pitch < 0 || pitch > 127)
         m_midiNote = "";
     else {
-#if 0   // t4osDEBUG
+#if 0   // t4os
         // Very expensive per-note in MatrixElement::configure(...)
         QSettings settings;
         settings.beginGroup(GeneralOptionsConfigGroup);
         int baseOctave = settings.value("midipitchoctave", -2).toInt() ;
-#elif 0   // t4osDEBUG -- use even faster way, below
+#elif 0   // t4os -- use even faster way, below
         int baseOctave = Preferences::getPreference(GeneralOptionsConfigGroup,
                                                     "midipitchoctave",
                                                     -2);
@@ -76,7 +76,7 @@ MidiPitchLabel::MidiPitchLabel(int pitch, const char *separator, bool sharps)
                                       .arg(separator)
                                       .arg(octave);
 
-#if 0   // t4osDEBUG
+#if 0   // t4os
         settings.endGroup();
 #endif
     }
@@ -154,13 +154,7 @@ QString MidiPitchLabel::fixedSolfege(int pitch, bool isSharpKey)
     };
 #undef NN
 
-#if 0   // t4osDEBUG
-    int baseOctave = Preferences::getPreference(GeneralOptionsConfigGroup,
-                                                "midipitchoctave",
-                                                -2);
-#else
         const int baseOctave = Preferences::midiOctaveNumberOffset.get();
-#endif
 
     QString octave = QString("%1").arg(pitch / 12 + baseOctave);
 

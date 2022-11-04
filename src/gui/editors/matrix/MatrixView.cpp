@@ -237,8 +237,7 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     view = settings.value("Chords ruler shown",
                           findAction("show_chords_ruler")->isChecked()
                          ).toBool();
-    findAction("show_chords_ruler")->setChecked(view);
-    m_matrixWidget->setChordNameRulerVisible(view);
+    setChordNameRulerActive(view);   // also sets menu checkmark
 
     // ... and tempo ruler
     view = settings.value("Tempo ruler shown",
@@ -331,21 +330,30 @@ MatrixView::MatrixView(RosegardenDocument *doc,
 
     m_matrixWidget->getScene()->setKeySignaturesChanged(false);
 
-    if (   m_matrixWidget->getChordSpellingType()
-        != MatrixWidget::ChordSpellingType::OFF) {
+    // Force chord name ruler on if note labeling mode requires
+    if (      m_matrixWidget->getChordSpellingType()
+           != MatrixWidget::ChordSpellingType::OFF
+
+        ||    m_matrixWidget->getNoteNameType()
+           == MatrixWidget::NoteNameType::DEGREE
+
+        ||    m_matrixWidget->getNoteNameType()
+           == MatrixWidget::NoteNameType::MOVABLE_DO
+
+        ||    m_matrixWidget->getNoteNameType()
+           == MatrixWidget::NoteNameType::INTEGER_KEY) {
+
         // Notes have already been drawn but need to update with
-        // chord spelling names.
-        if (!findAction("show_chords_ruler")->isChecked()) {
+        // key-relative note names and/or chord spelling.
+        if (!findAction("show_chords_ruler")->isChecked())
             // Need chord name ruler for chord note spelling
-            findAction("show_chords_ruler")->setChecked(true);
-            slotToggleChordsRuler();
-        }
+            setChordNameRulerActive(true);
 
         // Does recalculate (and redisplay since ruler is visible)
-          m_matrixWidget
-        ->getChordNameRuler()
-        ->setCurrentSegment(getCurrentSegment(), true);  // true == force recalc
-        m_matrixWidget->getScene()->updateAllSegmentsNames();
+        m_matrixWidget->getChordNameRuler()
+                       ->setCurrentSegment(getCurrentSegment(),
+                                           true);  // true == force recalc
+        m_matrixWidget->getScene()->slotUpdateNoteLabels();
     }
 }
 
@@ -1683,16 +1691,27 @@ MatrixView::slotLoopChanged()
 #endif
 
 void
+MatrixView::setChordNameRulerActive(bool active)
+{
+    findAction("show_chords_ruler")->setChecked(active);
+
+    m_matrixWidget->setChordNameRulerVisible(active);
+
+    Preferences::setPreference(MatrixViewConfigGroup,
+                               "Chords ruler shown",
+                               active);
+}
+
+void
 MatrixView::slotToggleChordsRuler()
 {
     bool view = findAction("show_chords_ruler")->isChecked();
 
     m_matrixWidget->setChordNameRulerVisible(view);
 
-    QSettings settings;
-    settings.beginGroup(MatrixViewConfigGroup);
-    settings.setValue("Chords ruler shown", view);
-    settings.endGroup();
+    Preferences::setPreference(MatrixViewConfigGroup,
+                               "Chords ruler shown",
+                               view);
 }
 
 void
@@ -2024,7 +2043,7 @@ MatrixView::slotShowNames()
     settings.setValue("show_note_names", show);
     settings.endGroup();
     m_matrixWidget->setShowNoteNames(show);
-    m_matrixWidget->getScene()->updateAllSegmentsNames();
+    m_matrixWidget->getScene()->slotUpdateNoteLabels();
 }
 
 void
@@ -2106,6 +2125,7 @@ MatrixView::slotNoteNames()
                            MatrixWidget::NoteNameType::CONCERT)).toInt());
     MatrixWidget::NoteNameType newNameType = previousNameType;
 
+    bool needChordNameRuler = false;
     const QObject *s = sender();
     QString name = s->objectName();
     if (name == "fixed_do_solfege")
@@ -2114,12 +2134,18 @@ MatrixView::slotNoteNames()
         newNameType = MatrixWidget::NoteNameType::INTEGER_ABSOLUTE;
     else if (name == "midi_pitches")
         newNameType = MatrixWidget::NoteNameType::RAW_MIDI;
-    else if (name == "degree_names")
+    else if (name == "degree_names") {
+        needChordNameRuler = true;
         newNameType = MatrixWidget::NoteNameType::DEGREE;
-    else if (name == "movable_do_solfege")
+    }
+    else if (name == "movable_do_solfege") {
+        needChordNameRuler = true;
         newNameType = MatrixWidget::NoteNameType::MOVABLE_DO;
-    else if (name == "key_integer_names")
+    }
+    else if (name == "key_integer_names") {
+        needChordNameRuler = true;
         newNameType = MatrixWidget::NoteNameType::INTEGER_KEY;
+    }
     else if (name == "note_names_off")
         newNameType = MatrixWidget::NoteNameType::OFF;
     else    // if (name == "concert_pitch_names")
@@ -2131,9 +2157,12 @@ MatrixView::slotNoteNames()
 
     m_matrixWidget->setNoteNameType(newNameType);
 
+    if (needChordNameRuler)
+        setChordNameRulerActive(true);
+
     // Only do if changed.
     if (newNameType != previousNameType)
-        m_matrixWidget->getScene()->updateAllSegmentsNames();
+        m_matrixWidget->getScene()->slotUpdateNoteLabels();
 }
 
 void
@@ -2170,14 +2199,14 @@ MatrixView::slotChordSpelling()
         if (   newChordSpellingType != MatrixWidget::ChordSpellingType::OFF
             && !m_matrixWidget->chordNameRulerIsVisible()) {
             // Must have chord name ruler to do chord spelling in note names
-            m_matrixWidget->setChordNameRulerVisible(true);
+            setChordNameRulerActive(true);
             QSettings settings;
             settings.beginGroup(MatrixViewConfigGroup);
             settings.setValue("Chords ruler shown", true);
             settings.endGroup();
             findAction("show_chords_ruler")->setChecked(true);
         }
-        m_matrixWidget->getScene()->updateAllSegmentsNames();
+        m_matrixWidget->getScene()->slotUpdateNoteLabels();
     }
 }
 
@@ -2193,9 +2222,7 @@ MatrixView::slotNotesCmajFlats()
                                flats);
 
     m_matrixWidget->setNoteNamesCmajFlats(flats);
-    m_matrixWidget->getScene()->setKeySignaturesChanged(true);
-    m_matrixWidget->getScene()->updateAllSegments();
-    m_matrixWidget->getScene()->setKeySignaturesChanged(false);
+    m_matrixWidget->getScene()->slotUpdateNoteLabels();
 }
 
 void
@@ -2210,9 +2237,7 @@ MatrixView::slotOffsetMinors()
                                offsetMinors);
 
     m_matrixWidget->setNoteNamesOffsetMinors(offsetMinors);
-    m_matrixWidget->getScene()->setKeySignaturesChanged(true);
-    m_matrixWidget->getScene()->updateAllSegments();
-    m_matrixWidget->getScene()->setKeySignaturesChanged(false);
+    m_matrixWidget->getScene()->slotUpdateNoteLabels();
 }
 
 void
@@ -2227,9 +2252,7 @@ MatrixView::slotAlternateMinors()
                                alternateMinors);
 
     m_matrixWidget->setNoteNamesAlternateMinors(alternateMinors);
-    m_matrixWidget->getScene()->setKeySignaturesChanged(true);
-    m_matrixWidget->getScene()->updateAllSegments();
-    m_matrixWidget->getScene()->setKeySignaturesChanged(false);
+    m_matrixWidget->getScene()->slotUpdateNoteLabels();
 }
 
 void

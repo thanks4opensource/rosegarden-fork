@@ -267,8 +267,6 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
 
         m_textItem->setBrush(textColor(colour));
 
-        QString noteName;
-
         if (   showName != m_prevShowName
             || time     != m_prevTime
             || m_scene->getKeySignaturesChanged())
@@ -283,6 +281,7 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
 
         const MatrixWidget *matrixWidget = m_scene->getMatrixWidget();
 
+        QString noteName;
         switch (matrixWidget->getNoteNameType()) {
             case MatrixWidget::NoteNameType::OFF:
                 noteName = "";
@@ -325,7 +324,8 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
             break;
         }
 
-        const ChordNameRuler *chordNameRuler = matrixWidget->getChordNameRuler();
+        const ChordNameRuler   *chordNameRuler
+                             = matrixWidget->getChordNameRuler();
         if (      matrixWidget->getChordSpellingType()
                != MatrixWidget::ChordSpellingType::OFF
             && chordNameRuler
@@ -392,9 +392,23 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
 // See documentation in .h file
 void
 MatrixElement::getKeyInfo(const ShowName showName, const timeT time)
-
 {
-    Rosegarden::Key key = m_segment->getKeyAtTime(time);
+    // Get key at time either from segment or from ChordNameRuler
+    //
+    Rosegarden::Key     key;
+    bool                gotKey = false;  // no such thing as null key to test
+
+    if (m_scene->getMatrixWidget()->needUpdateNoteLabels()) {
+        const ChordNameRuler   *chordNameRuler
+                             = m_scene->getMatrixWidget()->getChordNameRuler();
+
+        if (chordNameRuler && chordNameRuler->isVisible()) {
+            key    = chordNameRuler->keyAtTime(time);
+            gotKey = true;
+        }
+    }
+
+    if (!gotKey) key = m_segment->getKeyAtTime(time);
 
     if (key.getAccidentalCount() == 0)
         m_sharps = !m_scene->getMatrixWidget()->getNoteNamesCmajFlats();

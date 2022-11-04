@@ -1997,6 +1997,7 @@ Composition::getAbsoluteTimeForMusicalTime(int bar, int beat,
 
 QString
 Composition::getMusicalTimeStringForAbsoluteTime(timeT absoluteTime)
+const
 {
     static const int MIDI_TICKS_PER_MEASURE = 3840;
     struct Gcd {

@@ -35,6 +35,7 @@ class CompositionTimeSliceAdapter;
 class Quantizer;
 class Composition;
 class ChordAnalyzerImpl;
+class Key;
 
 
 class ChordAnalyzer
@@ -78,6 +79,8 @@ class ChordAnalyzer
     //   text events. Also add C major key change at beginning of each
     //   segment in "segments"  (and "chordsAndKeys") if no key change at
     //   segment start time.
+    // Clear and fill "keys" map with key tonic at each "chordsAndKeys"
+    //   key change time.
     // Clear and fill "roots" map with chord root at each "chordsAndKeys"
     //   chord time.
     // Use notes in all "segments" name chords.
@@ -91,6 +94,7 @@ class ChordAnalyzer
     //      chords.
     //   Else whenever any note or off, within timeWindow tolerance.
     void labelChords(Segment                        &chordsAndKeys,
+                     std::map<timeT, const Key>     &keys,
                      std::map<timeT, int>           &roots,
                      bool                           &conflictingKeyChanges,
                      const std::vector<Segment*>     segments,

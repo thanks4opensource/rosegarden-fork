@@ -432,7 +432,11 @@ public:
         delete m_accidentalHeights;
     }
 
-    Key &operator=(const Key &kc);
+    Key &operator=(const Key &kc) {
+        m_name = kc.m_name;
+        m_accidentalHeights = nullptr;
+        return *this;
+    }
 
     bool operator==(const Key &k) const {
         return k.m_name == m_name;

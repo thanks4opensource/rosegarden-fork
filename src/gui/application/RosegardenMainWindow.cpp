@@ -1212,12 +1212,16 @@ RosegardenMainWindow::initView()
 
     enterActionState("new_file"); //@@@ JAS orig. 0
 
+#if 0  // ancient code
     if (findAction("show_chord_name_ruler")->isChecked()) {
         SetWaitCursor swc;
         m_view->initChordNameRuler();
     } else {
         m_view->initChordNameRuler();
     }
+#else  // Always, needs to do connect() for any/all views with chord name rulers
+    m_view->initChordNameRuler();
+#endif
 
     // Must be done late because RosegardenMainViewWidget and/or
     // its TrackEditor are constructed/swapped/etc and
@@ -4986,10 +4990,12 @@ RosegardenMainWindow::slotSetPointerPosition(timeT t)
 {
     RosegardenDocument *doc = RosegardenDocument::currentDocument;
     Composition &comp = doc->getComposition();
-    bool stopAtEnd = Preferences::getStopAtEnd();
 
+#if 0   // t4os -- not used, see below
+    bool stopAtEnd = Preferences::getStopAtEnd();
     timeT startTime = 0;  // avoid compiler warning, "maybe-unitialized"
     timeT stopTime  = 0;  //   "      "        "   , "  "  -     "     "
+
     if (comp.loopRangeIsActive()) {
         startTime = comp.getLoopStart();
         stopTime = comp.getLoopEnd();
@@ -5000,10 +5006,20 @@ RosegardenMainWindow::slotSetPointerPosition(timeT t)
         startTime = comp.getStartMarker();
         stopTime = comp.getEndMarker();
     }
+#endif
 
     if (m_seqManager) {
         // If we're playing and we're past the end...
         // Also check startTime in case loop ruler click before start
+#if 0   // t4os -- handle this in RosegardenSequencer::keepPlaying()
+        //         Broken here because get sometimes called here
+        //         while in continuous loop mode with t slightly beyond
+        //         stopTime so this halts. Can't be fixed here because
+        //         "how much?" beyond is accepatble. Plus, never
+        //         should have been like this to begin with (this
+        //         should merely update pointer -- looping should
+        //         be handled in RosegardenSequencer or preferabley
+        //         SequenceManager.
         if (m_seqManager->getTransportStatus() == PLAYING &&
             (t > stopTime || t < startTime)) {
 
@@ -5017,6 +5033,7 @@ RosegardenMainWindow::slotSetPointerPosition(timeT t)
 
             return;
         }
+#endif
         // If we're recording and we're near the end...
         if (m_seqManager->getTransportStatus() == RECORDING  &&
             t > comp.getEndMarker() - timebase) {
@@ -5882,7 +5899,6 @@ RosegardenMainWindow::isSequencerRunning()
 void
 RosegardenMainWindow::slotPlay()
 {
-
     if (!isUsingSequencer())
         return ;
 
@@ -6012,13 +6028,11 @@ RosegardenMainWindow::slotFastforward()
         m_seqManager->fastforward();
 }
 
-#if 0  // t4os: master looping version
 void
 RosegardenMainWindow::slotLoopButtonClicked()
 {
     RosegardenDocument::currentDocument->toggleLoopingMode();
 }
-#endif
 
 void
 RosegardenMainWindow::slotSetLoopingMode(bool continuous)

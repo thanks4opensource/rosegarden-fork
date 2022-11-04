@@ -518,9 +518,9 @@ MatrixWidget::setSegments(RosegardenDocument *document,
             this,
             &MatrixWidget::slotUpdateChordNameRuler);
     connect(m_chordNameRuler,
-            &ChordNameRuler::analysisSegmentsChange,
+            &ChordNameRuler::chordAnalysisChanged,
             this,
-            &MatrixWidget::slotChordNameRulerSegmentsUpdated);
+            &MatrixWidget::slotChordAnalysisChanged);
 
     m_layout->addWidget(m_topStandardRuler, TOPRULER_ROW, MAIN_COL, 1, 1);
     m_layout->addWidget(m_bottomStandardRuler, BOTTOMRULER_ROW, MAIN_COL, 1, 1);
@@ -1318,11 +1318,11 @@ MatrixWidget::setChordNameRulerVisible(bool visible)
                                             true);  // true == force recalc
         m_chordNameRuler->show();
         m_chordNameRuler->slotRecalculateAll();
-        m_scene->updateAllSegmentsNames();
+        m_scene->slotUpdateNoteLabels();
     }
     else {
         m_chordNameRuler->hide();
-        m_scene->updateAllSegmentsNames();
+        m_scene->slotUpdateNoteLabels();
     }
 }
 
@@ -1785,19 +1785,38 @@ MatrixWidget::slotInstrumentGone()
     m_instrument = nullptr;
 }
 
-void
-MatrixWidget::slotUpdateChordNameRuler()
+bool
+MatrixWidget::needUpdateNoteLabels()
 {
-    m_chordNameRuler->slotRecalculateAll();
-    if (m_chordSpellingType != ChordSpellingType::OFF)
-        m_scene->updateCurrentSegmentNames();
+    // These modes require relabeling of notes due to possible key change.
+    return    m_noteNameType      == NoteNameType::DEGREE
+           || m_noteNameType      == NoteNameType::MOVABLE_DO
+           || m_noteNameType      == NoteNameType::INTEGER_KEY
+#if 0   // is not key-dependent
+           || m_chordSpellingType != ChordSpellingType::OFF
+#endif
+           ;
 }
 
 void
-MatrixWidget::slotChordNameRulerSegmentsUpdated()
+MatrixWidget::slotUpdateChordNameRuler()
 {
-    if (m_chordSpellingType != ChordSpellingType::OFF)
-        m_scene->updateCurrentSegmentNames();
+    if (!m_chordNameRuler->isVisible())
+        return;
+
+    if (needUpdateNoteLabels())
+        m_chordNameRuler->slotRecalculateAll();
+
+    m_scene->slotUpdateNoteLabels();
+}
+
+void
+MatrixWidget::slotChordAnalysisChanged()
+{
+    // Only signaled from ChordNameRuler if needed (edge case of conflicting
+    //   key changes among segments).
+    if (needUpdateNoteLabels())
+        m_scene->slotUpdateNoteLabels();
 }
 
 void

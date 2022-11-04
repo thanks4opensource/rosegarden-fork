@@ -19,7 +19,8 @@
 #include <string>
 #include <map>
 #include <algorithm>
-#include <cmath> // fabs, pow
+#include <iterator>  // prev()
+#include <cmath> // fabs(), pow()
 
 #include "base/NotationTypes.h"
 #include "AnalysisTypes.h"
@@ -577,6 +578,7 @@ class ChordAnalyzerImpl
     // Implementation of ChordAnalyzer::labelChords(). See .h file
     // for description of input and output arguments.
     void labelChords(Segment                        &chordsAndKeys,
+                     std::map<timeT, const Key>     &keys,
                      std::map<timeT, int>           &roots,
                      bool                           &conflictingKeyChanges,
                      const std::vector<Segment*>     segments,
@@ -658,11 +660,11 @@ class ChordAnalyzerImpl
 
     // The two analysis algorithms
     //
-    void labelChordsAtNotesOnOff(const NotesAndKeys     &notesAndKeys,
-                                 Segment                &chords,
-                                 std::map<timeT, int>   &roots,
-                                 const timeT             quantizationTime);
-    //
+    void labelChordsAtNotesOnOff(const NotesAndKeys         &notesAndKeys,
+                                 Segment                    &chords,
+                                 std::map<timeT, int>       &roots,
+                                 const timeT                 quantizationTime);
+
     void labelChordsOnePerTimePeriod(const NotesAndKeys     &notesAndKeys,
                                     Segment                 &chords,
                                     std::map<timeT, int>    &roots,
@@ -922,10 +924,10 @@ void ChordAnalyzerImpl::setChordLabels()
 
 void
 ChordAnalyzerImpl::labelChordsAtNotesOnOff(
-const NotesAndKeys      &notesAndKeys,
-Segment                 &chords,
-std::map<timeT, int>    &roots,
-const timeT              quantizationTime)
+const NotesAndKeys          &notesAndKeys,
+Segment                     &chords,
+std::map<timeT, int>        &roots,
+const timeT                  quantizationTime)
 {
     // Bitmask of pitch classes, 0x1==C,0 0x800==B,11.
     unsigned mask = 0;
@@ -1017,10 +1019,10 @@ const timeT              quantizationTime)
 
 void
 ChordAnalyzerImpl::labelChordsOnePerTimePeriod(
-const NotesAndKeys      &notesAndKeys,
-Segment                 &chords,
-std::map<timeT, int>    &roots,
-const timeT              timePeriod)
+const NotesAndKeys          &notesAndKeys,
+Segment                     &chords,
+std::map<timeT, int>        &roots,
+const timeT                  timePeriod)
 {
     // Bitmask of pitch classes, 0x1==C,0 0x800==B,11.
     unsigned mask = 0;
@@ -1071,9 +1073,10 @@ const timeT              timePeriod)
     } pendingRemover(pitches, pitchClasses, mask);
 
     // Checks to prevent outputting duplicate/unchanged chords
-    bool  notesChanged = false;
-    timeT beginTime    = notesAndKeys.begin()->first,
-          endTime      = beginTime + timePeriod + 1;
+    bool  notesChanged  = false;
+    timeT beginTime     = notesAndKeys.begin()->first,
+          endTime       = beginTime + timePeriod + 1;
+    auto  lastNoteOrKey = std::prev(notesAndKeys.end());
 
     endTime -= endTime % timePeriod;
 
@@ -1102,7 +1105,7 @@ const timeT              timePeriod)
         // Don't have to check for timeAndNoteOrKeyIter == notesAndKeys.end()
         // because will always have note off (actually full set of them)
         // at end.
-        if (time >= endTime) {
+        if (time >= endTime || timeAndNoteOrKeyIter == lastNoteOrKey) {
             unsigned bass  = 0,
                      tenor = 0;
             // PendingRemover deletes pitches with count of zero, so
@@ -2270,6 +2273,7 @@ void ChordAnalyzer::updateChordNameStyles() { m_impl->updateChordNameStyles(); }
 void
 ChordAnalyzer::labelChords(
 Segment                         &chordsAndKeys,
+std::map<timeT, const Key>      &keys,
 std::map<timeT, int>            &roots,
 bool                            &conflictingKeyChanges,
 const std::vector<Segment*>      segments,
@@ -2278,6 +2282,7 @@ const timeT                      timeWindow,
 bool                             onePerTimePeriod)
 {
     m_impl->labelChords(chordsAndKeys,
+                        keys,
                         roots,
                         conflictingKeyChanges,
                         segments,
@@ -2289,6 +2294,7 @@ bool                             onePerTimePeriod)
 void
 ChordAnalyzerImpl::labelChords(
 Segment                         &chords,
+std::map<timeT, const Key>      &keys,
 std::map<timeT, int>            &roots,
 bool                            &conflictingKeyChanges,
 const std::vector<Segment*>      segments,
@@ -2297,6 +2303,13 @@ const timeT                      timeWindow,
 bool                             onePerTimePeriod)
 {
     if (segments.empty()) return;
+
+    // NOTE: Significant percentage of code/algorithms below necessary
+    //       to support the rare edge cases of having conflicting key
+    //       changes at the same time in multiple segments. Return
+    //       parameter "conflictingKeyChanges" returns status to
+    //       upstream caller e.g. for matrix editor to relabel notes
+    //       if in labeling mode requiring knowledge of current key.
 
     class NoteOrKeyEqual {
       public:
@@ -2325,6 +2338,7 @@ bool                             onePerTimePeriod)
                 break;
             }
         }
+
         if (needDefaultKeyAtSegmentStart) {
             Key cMajor; // default is C major
             segment->insert(cMajor.getAsEvent(segment->getStartTime()));
@@ -2334,11 +2348,15 @@ bool                             onePerTimePeriod)
     if (!currentSegment)
         currentSegment = segments[0];
 
+    // To ensure that current segment's key changes override any
+    // conflicting ones from other segments
+    std::set<timeT> currentSegmentKeyChangeTimes;
+
+    // For finding conflicting key changes
+    std::map<timeT, std::pair<std::string, unsigned>> keyChanges;
     conflictingKeyChanges = false;
 
-    std::map<timeT, std::pair<std::string, unsigned>> keyChanges;
-
-    for (auto segment : segments)
+    for (auto segment : segments) {
         for (auto event : *segment) {
             timeT time = event->getAbsoluteTime();
 
@@ -2354,13 +2372,35 @@ bool                             onePerTimePeriod)
                         ++keyChange->second.second;
                 }
 
-                if (segment == currentSegment) {
-                    auto existing = notesAndKeys.find(time);
-                    if (   existing != notesAndKeys.end()
-                        && existing->second.onOffKey == NoteOrKey::KEY)
+                if (segment == currentSegment)
+                    currentSegmentKeyChangeTimes.insert(time);
+
+                // Overwrite existing key change at time, unless
+                //   is from current segment (takes precedence).
+                // Otherwise later segments' conflicting key changes
+                //   arbitrarily "win" (for lack of any better policy).
+                auto existing = notesAndKeys.find(time);
+                if (   existing != notesAndKeys.end()
+                    && existing->second.onOffKey == NoteOrKey::KEY) {
+                           // Current segment always wins
+                    if (   segment == currentSegment
+                           // Later segments win over earlier non-current ones
+                        ||    currentSegmentKeyChangeTimes.find(time)
+                           == currentSegmentKeyChangeTimes.end()) {
                         notesAndKeys.erase(existing);
-                    notesAndKeys.insert({time,
-                                         NoteOrKey(Key(*event).getName())});
+                        Key key(*event);
+                        notesAndKeys.insert({time, NoteOrKey(key.getName())});
+                        // Can't do "keys[time] = key" because const
+                        auto previous = keys.find(time);
+                        if (previous != keys.end())  // safety, always true
+                            keys.erase(previous);
+                        keys.insert({time, key});
+                    }
+                }
+                else {   // No key change already at this time
+                    Key key(*event);
+                    notesAndKeys.insert({time, NoteOrKey(key.getName())});
+                    keys        .insert({time, key});
                 }
             }
 
@@ -2372,8 +2412,8 @@ bool                             onePerTimePeriod)
             auto     allAtTime = notesAndKeys.equal_range(time);
 
             if (allAtTime.first == allAtTime.second) {
-                notesAndKeys.insert({   time, NoteOrKey(pitch, NoteOrKey::ON )});
-                notesAndKeys.insert({offTime, NoteOrKey(pitch, NoteOrKey::OFF)});
+                notesAndKeys.insert({   time, NoteOrKey(pitch,NoteOrKey::ON )});
+                notesAndKeys.insert({offTime, NoteOrKey(pitch,NoteOrKey::OFF)});
                 continue;
             }
 
@@ -2394,11 +2434,17 @@ bool                             onePerTimePeriod)
             else
                 ++found->second.count;
         }
+    }
 
+    // Above had checked for any conflicting key changes at same time.
+    // Now check for non-conflicting key changes at same time but one
+    //   or more segments without a key change at that time.
     if (!conflictingKeyChanges)
         for (auto keyChange : keyChanges)
             if (keyChange.second.second != segments.size())
                 conflictingKeyChanges = true;
+
+    if (notesAndKeys.empty()) return;
 
     if (onePerTimePeriod) labelChordsOnePerTimePeriod(notesAndKeys,
                                                       chords,

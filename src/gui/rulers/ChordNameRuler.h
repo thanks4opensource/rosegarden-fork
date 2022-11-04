@@ -46,6 +46,7 @@ class RulerScale;
 class RosegardenDocument;
 class Composition;
 class ChordAnalyzer;
+class Key;
 
 
 /**
@@ -137,14 +138,19 @@ public:
     QSize minimumSizeHint() const override;
     void setMinimumWidth(int width) { m_width = width; }
 
-    // Pitch class 0..11, or -1 if no chord, as per setCurrentSegment() segment
-    // For external use labelling notes, e.g. by MatrixElement
-    int chordRootPitchAtTime(timeT) const;
+
+    // Pitch class 0..11
+    // For external use labeling note in-key degrees, e.g. by MatrixElement
+    const Key keyAtTime(const timeT t) const;
+
+    // Pitch class 0..11, or -1 if no chord
+    // For external use labeling note in-chord function, e.g. by MatrixElement
+    int chordRootPitchAtTime(const timeT) const;
 
 signals:
-    void insertKeyChange();
-    void copyChords();
-    void analysisSegmentsChange();
+    void chordAnalysisChanged();
+    void insertKeyChange();  // pop up notation editor key change dialog
+    void copyChords();       // notation editor copy ruler chords to text
 
 
 // See documentation for methods at definitions/implementations in .cpp file
@@ -275,8 +281,12 @@ private:
     Studio      *m_studio;
     Segment     *m_chordSegment;   // Contains text event analyzed chord names
 
-    // For external use labelling chord notes, e.g. by MatrixElement
-    std::map<timeT, int>     m_roots;
+    // For external use labeling note in-key degrees, e.g. by MatrixElement
+    std::map<timeT, const Key> m_keys;
+    // For external use labeling note in-chord function, e.g. by MatrixElement
+    std::map<timeT, int> m_roots;
+
+
 
     // Flags and settings
     bool           m_conflictingKeyChanges, // optimize whether re-anlyze needed

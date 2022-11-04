@@ -701,6 +701,7 @@ ChordNameRuler::setCurrentSegment(const Segment *segment, bool forceRecalc)
         || forceRecalc) {
         m_currentSegment = segment;
         recalculate(0, 0);
+        emit chordAnalysisChanged();
     }
     else
         m_currentSegment = segment;
@@ -763,8 +764,20 @@ ChordNameRuler::setStudio(Studio *studio)
 }
 
 // See documentation in .h file
+const Key
+ChordNameRuler::keyAtTime(const timeT t)
+const
+{
+    if (m_keys.empty()) return Key();
+    auto upper = m_keys.upper_bound(t);
+    if (upper != m_keys.begin())
+        --upper;
+    return upper->second;
+}
+
+// See documentation in .h file
 int
-ChordNameRuler::chordRootPitchAtTime(timeT t)
+ChordNameRuler::chordRootPitchAtTime(const timeT t)
 const
 {
     if (m_roots.empty()) return -1;
@@ -796,11 +809,12 @@ ChordNameRuler::slotScrollHoriz(int x)
     update();
 }
 
-// See documentation in .h file
+// Force re-analysis of chords.
 void
 ChordNameRuler::slotRecalculateAll()
 {
     recalculate(0, 0);
+    emit chordAnalysisChanged();
 }
 
 // Qt ruler internals
@@ -873,8 +887,7 @@ ChordNameRuler::slotChooseActiveSegments()
         m_currentSegment = m_chordNoteSegments[0];
 
     recalculate(0, 0);
-
-    emit analysisSegmentsChange();
+    emit chordAnalysisChanged();
 }
 
 void
@@ -888,7 +901,8 @@ ChordNameRuler::slotSetAlgorithm()
                                "chord_name_unarpeggiate",
                                m_doUnarpeggiation);
 
-    recalculate(0, 0);
+    labelChords(0, 0);
+    emit chordAnalysisChanged();
 }
 
 void
@@ -922,8 +936,8 @@ ChordNameRuler::slotSetQuantization()
                                static_cast<unsigned>(m_quantization));
 
     m_quantizationTime = noteDurationToMidiTicks(m_quantization);
-
-    recalculate(0, 0);
+    labelChords(0, 0);
+    emit chordAnalysisChanged();
 }
 
 void
@@ -956,8 +970,8 @@ ChordNameRuler::slotSetUnarpeggiation()
                                static_cast<unsigned>(m_unarpeggiation));
 
     m_unarpeggiationTime = noteDurationToMidiTicks(m_unarpeggiation);
-
-    recalculate(0, 0);
+    labelChords(0, 0);
+    emit chordAnalysisChanged();
 }
 
 void
@@ -980,6 +994,7 @@ ChordNameRuler::slotChordNameType()
 
     m_analyzer->updateChordNameStyles();
     labelChords(0, 0);
+    emit chordAnalysisChanged();
 }
 
 void
@@ -1000,6 +1015,7 @@ ChordNameRuler::slotChordSlashType()
 
     m_analyzer->updateChordNameStyles();
     labelChords(0, 0);
+    emit chordAnalysisChanged();
 }
 
 void
@@ -1011,6 +1027,7 @@ ChordNameRuler::slotChordAddedBass()
 
     m_analyzer->updateChordNameStyles();
     labelChords(0, 0);
+    emit chordAnalysisChanged();
 }
 
 void
@@ -1022,6 +1039,7 @@ ChordNameRuler::slotPreferSlashChords()
 
     m_analyzer->updateChordNameStyles();
     labelChords(0, 0);
+    emit chordAnalysisChanged();
 }
 
 void
@@ -1036,6 +1054,7 @@ ChordNameRuler::slotCMajorFlats()
 
     m_analyzer->updateChordNameStyles();
     labelChords(0, 0);
+    emit chordAnalysisChanged();
 }
 
 void
@@ -1050,6 +1069,7 @@ ChordNameRuler::slotOffsetMinors()
 
     m_analyzer->updateChordNameStyles();
     labelChords(0, 0);
+    emit chordAnalysisChanged();
 }
 
 void
@@ -1064,13 +1084,15 @@ ChordNameRuler::slotAltMinors()
 
     m_analyzer->updateChordNameStyles();
     labelChords(0, 0);
+    emit chordAnalysisChanged();
 }
 
 void
 ChordNameRuler::slotNonDiatonicChords()
 {
     Preferences::nonDiatonicChords.set(m_nonDiatonicChords->isChecked());
-    recalculate(0, 0);
+    labelChords(0, 0);
+    emit chordAnalysisChanged();
 }
 
 void
@@ -1081,6 +1103,7 @@ ChordNameRuler::slotSetNameStyles()
     if (result == QDialog::Accepted) {
         m_analyzer->updateChordNameStyles();
         labelChords(0, 0);
+        emit chordAnalysisChanged();
     }
 }
 
@@ -1357,8 +1380,10 @@ void ChordNameRuler::labelChords(timeT /*from*/, timeT /*to*/)
     SegmentSelection selection;
 
     m_chordSegment->clear();
+    m_keys.clear();
     m_roots.clear();
     m_analyzer->labelChords(*m_chordSegment,
+                            m_keys,
                             m_roots,
                             m_conflictingKeyChanges,
                             m_chordNoteSegments,
@@ -1482,10 +1507,10 @@ ChordNameRuler::mouseDoubleClickEvent(QMouseEvent *e)
                          = new EraseCommand(eventSelection, nullptr);
             macroCommand->addCommand(eraseCommand);
         }
-
         CommandHistory::getInstance()->addCommand(macroCommand);
 
-        m_doc->signalKeySignaturesChanged(false);  // false==!inserted
+        labelChords(0, 0);
+        m_doc->signalKeySignaturesChanged(false);  // false means !inserted
     }
 
 }  // ChordNameRuler::mouseDoubleClickEvent(QMouseEvent *e)
