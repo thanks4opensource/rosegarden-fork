@@ -38,7 +38,7 @@ MultiKeyInsertionCommand::MultiKeyInsertionCommand(RosegardenDocument *doc,
         bool shouldConvert,
         bool shouldTranspose,
         bool shouldTransposeKey,
-	bool shouldIgnorePercussion) :
+        bool shouldIgnorePercussion) :
         MacroCommand(getGlobalName(&key))
 {
    Composition &c = doc->getComposition();
@@ -47,13 +47,13 @@ MultiKeyInsertionCommand::MultiKeyInsertionCommand(RosegardenDocument *doc,
     for (Composition::iterator i = c.begin(); i != c.end(); ++i) {
         Segment *segment = *i;
 
-	Instrument *instrument = s.getInstrumentFor(segment);
-	// if (instrument) {
-	//    RG_DEBUG <<
-	//                "PERC DEBUG: instrument->isPercussion " << instrument->isPercussion() <<
-	//                " ignorePercussion " << shouldIgnorePercussion << endl << endl << endl;
-	//}
-	if (instrument) if (instrument->isPercussion() &&
+        Instrument *instrument = s.getInstrumentFor(segment);
+        // if (instrument) {
+        //    RG_DEBUG <<
+        //                "PERC DEBUG: instrument->isPercussion " << instrument->isPercussion() <<
+        //                " ignorePercussion " << shouldIgnorePercussion << endl << endl << endl;
+        //}
+        if (instrument) if (instrument->isPercussion() &&
                             shouldIgnorePercussion) continue;
 
         // no harm in using getEndTime instead of getEndMarkerTime here:
@@ -64,7 +64,8 @@ MultiKeyInsertionCommand::MultiKeyInsertionCommand(RosegardenDocument *doc,
                                                shouldConvert,
                                                shouldTranspose,
                                                shouldTransposeKey,
-	                                       shouldIgnorePercussion));
+                                               shouldIgnorePercussion,
+                                               true));  // override signal
         } else if (segment->getStartTime() > time) {
             addCommand(new KeyInsertionCommand(*segment,
                                                segment->getStartTime(),
@@ -72,7 +73,8 @@ MultiKeyInsertionCommand::MultiKeyInsertionCommand(RosegardenDocument *doc,
                                                shouldConvert,
                                                shouldTranspose,
                                                shouldTransposeKey,
-                                               shouldIgnorePercussion));
+                                               shouldIgnorePercussion,
+                                               true));  // override signal
         }
     }
 }
@@ -80,6 +82,16 @@ MultiKeyInsertionCommand::MultiKeyInsertionCommand(RosegardenDocument *doc,
 MultiKeyInsertionCommand::~MultiKeyInsertionCommand()
 {
     // nothing
+}
+
+void MultiKeyInsertionCommand::postExecute()
+{
+    RosegardenDocument::currentDocument->signalKeySignaturesChanged(true);
+}
+
+void MultiKeyInsertionCommand::postUnexecute()
+{
+    RosegardenDocument::currentDocument->signalKeySignaturesChanged(false);
 }
 
 }

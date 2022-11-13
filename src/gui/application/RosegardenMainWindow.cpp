@@ -648,20 +648,6 @@ RosegardenMainWindow::signalAction(int fd)
     }
 }
 
-#if 0
-        // Now done here instead of in NotationWidget::enterEvent() so
-        // always happens when mouse enters anywhere in notation editor
-        // window (including window manager border), not just widget area.
-        //
-        // No, never gets called. Probably because changeEvent() gets
-        // first. Do this there instead.
-void RosegardenMainWindow::focusInEvent(QFocusEvent*)
-{
-    qDebug() << "RosegardenMainWindow::focusInEvent()";
-    RosegardenSequencer::getInstance()->unSetTrackInstrumentOverride();
-}
-#endif
-
 void
 RosegardenMainWindow::closeEvent(QCloseEvent *event)
 {
@@ -1211,17 +1197,6 @@ RosegardenMainWindow::initView()
     slotChangeZoom(zoomLevel);
 
     enterActionState("new_file"); //@@@ JAS orig. 0
-
-#if 0  // ancient code
-    if (findAction("show_chord_name_ruler")->isChecked()) {
-        SetWaitCursor swc;
-        m_view->initChordNameRuler();
-    } else {
-        m_view->initChordNameRuler();
-    }
-#else  // Always, needs to do connect() for any/all views with chord name rulers
-    m_view->initChordNameRuler();
-#endif
 
     // Must be done late because RosegardenMainViewWidget and/or
     // its TrackEditor are constructed/swapped/etc and

@@ -135,14 +135,15 @@ ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
         m_offsetMinorKeys                (nullptr),
         m_altMinorKeys                   (nullptr),
         m_nonDiatonicChords              (nullptr),
-        m_regetSegmentsOnChange          (true),
+        m_enableChooseActiveSegments     (true),
         m_currentSegment                 (nullptr),
+        m_numActiveSegments              (0),
         m_studio                         (nullptr),
-        m_chordSegment                   (nullptr),
+        m_chordAndKeyNames               (new Segment()),
+        m_implicitSegments               (true),
         m_conflictingKeyChanges          (false),
         m_chordNameStylesUpdated         (false),
         m_doUnarpeggiation               (false),
-        m_firstTime                      (true),
         m_quantization                   (NoteDuration::NONE),
         m_unarpeggiation                 (NoteDuration::QUARTER),
         m_quantizationTime               (0),
@@ -162,6 +163,38 @@ ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
     m_compositionRefreshStatusId = m_composition->getNewRefreshStatusId();
 
     createMenuAndTooltip();
+
+    // Populate m_chordNote with all segments in composition
+    // Used for main window -- matrix and notation register
+    //   explicit list of segments via other construtor.
+    m_segments.clear();
+    for (Composition::iterator   ci  = m_composition->begin() ;
+                                 ci != m_composition->end() ;
+                               ++ci) {
+        if (m_studio) {
+            TrackId ti = (*ci)->getTrack();
+            Instrument   *instr
+                       =   m_studio
+                         ->getInstrumentById(  m_composition
+                                             ->getTrackById(ti)
+                                             ->getInstrument());
+
+            if (   instr
+                && instr->getType() == Instrument::Midi
+                && instr->isPercussion())
+                continue;
+        }
+
+        m_segments.push_back(SegmentAndActive{*ci, true});
+
+        connect(*ci,  &Segment::contentsChanged,
+                this, &ChordNameRuler::slotSegmentContentsChanged);
+    }
+    m_numActiveSegments = m_segments.size();
+
+    resetActiveSegmentIndices();
+
+    analyzeChordsAndKeyChanges(false);  // don't emit chordAnalysisChanged()
 }
 
 // See documentation in .h file
@@ -234,14 +267,15 @@ ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
         m_offsetMinorKeys                (nullptr),
         m_altMinorKeys                   (nullptr),
         m_nonDiatonicChords              (nullptr),
-        m_regetSegmentsOnChange          (false),
+        m_enableChooseActiveSegments     (false),
         m_currentSegment                 (nullptr),
+        m_numActiveSegments              (0),
         m_studio                         (nullptr),
-        m_chordSegment                   (nullptr),
+        m_chordAndKeyNames               (new Segment()),
+        m_implicitSegments               (false),
         m_conflictingKeyChanges          (false),
         m_chordNameStylesUpdated         (false),
         m_doUnarpeggiation               (false),
-        m_firstTime                      (true),
         m_quantization                   (NoteDuration::NONE),
         m_unarpeggiation                 (NoteDuration::QUARTER),
         m_quantizationTime               (0),
@@ -261,19 +295,42 @@ ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
 
     m_compositionRefreshStatusId = m_composition->getNewRefreshStatusId();
 
+#if 0
     // Save specified segments
     for (std::vector<Segment *>::iterator i = segments.begin();
             i != segments.end(); ++i)
-        insertSegment(*i, true);  // true==also into m_chordNoteSegments
+        insertSegment(*i, true);  // true==also into m_segments
     resetActiveSegmentIndices();
+#else
+    RosegardenDocument *document(RosegardenDocument::currentDocument);
+    Composition &composition(document->getComposition());
+    for (Segment *segment : segments) {
+        TrackId trackId = segment->getTrack();
+        Track *track = composition.getTrackById(trackId);
+        Instrument *instr = document->
+                            getStudio().
+                            getInstrumentById(track->getInstrument());
+
+        // Only regular, not percussion segments
+        if (!instr->getKeyMapping()) {
+            m_segments.push_back(SegmentAndActive{segment, true});
+            connect(segment, &Segment::contentsChanged,
+                    this,    &ChordNameRuler::slotSegmentContentsChanged);
+        }
+    }
+    m_numActiveSegments = m_segments.size();
+    resetActiveSegmentIndices();
+#endif
 
     createMenuAndTooltip();
+
+    analyzeChordsAndKeyChanges(false);  // don't emit chordAnalysisChanged()
 }
 
 ChordNameRuler::~ChordNameRuler()
 {
     delete m_analyzer;
-    delete m_chordSegment;
+    delete m_chordAndKeyNames;
 }
 
 void
@@ -293,7 +350,7 @@ ChordNameRuler::createMenuAndTooltip()
     QAction *action;
 
     // Only supported in notation and matrix editors, not main/tracks window
-    if (!m_regetSegmentsOnChange) {
+    if (!m_enableChooseActiveSegments) {
         action = m_menu->addAction(tr("choose_active_segments"));
         action->setText(tr("Choose chord note segments..."));
         connect(action, &QAction::triggered,
@@ -700,44 +757,52 @@ ChordNameRuler::setCurrentSegment(const Segment *segment, bool forceRecalc)
     if (   (segment && segment != m_currentSegment && m_conflictingKeyChanges)
         || forceRecalc) {
         m_currentSegment = segment;
-        recalculate(0, 0);
+
+        if (isVisible()) analyzeChordsAndKeyChanges();
+
+        // For matrix editor to redraw key highlight stripes if mode requres
+        m_doc->signalKeySignaturesChanged(true);  // true==inserted, (arbitrary)
+
+#if 0   // t4os -- done in analyzeChordsAndKeyChanges(), don't redo
+        //         even though slightly nicer to do after signalKey
         emit chordAnalysisChanged();
+#endif
     }
     else
         m_currentSegment = segment;
 }
 
-// Remove from m_segments and m_chordNoteSegments, regeneratiting the latter.
+// Remove from m_segments
 void
 ChordNameRuler::removeSegment(const Segment *segment)
 {
-    auto inSegments = m_segments.find(const_cast<Segment*>(segment));
-    if (inSegments != m_segments.end()) {
-        m_segments.erase(inSegments);
+    auto found  = findSegment(segment);
+    if (found != m_segments.end()) {
+        Segment *foundSegment = found->segment;
 
-        if (segment == m_currentSegment)
-            // In case client doesn't immediately call setCurrentSegment()
-            m_currentSegment = m_segments.begin()->first;
+        if (found->active) --m_numActiveSegments;
 
-        m_chordNoteSegments.clear();
-        for (auto seg : m_segments)
-            m_chordNoteSegments.push_back(seg.first);
-        resetActiveSegmentIndices();
+        disconnect(found->segment,
+                   &Segment::contentsChanged,
+                   this,
+                   &ChordNameRuler::slotSegmentContentsChanged);
 
-        // Don't call. Rely on client (notation or matrix editor)
-        // calling setCurrentSegment() with desired segment afterwards
-        // (which would then make this recalculate/repaint redundant)
-        // or not calling if is last segment being deleted and editor
-        // is in process of being destructed.
-        //
-        // recalculate(0, 0);
+        m_segments.erase(found);
+
+        if (m_segments.empty()) {
+            m_currentSegment = nullptr;
+            return;
+        }
+
+        if (foundSegment == m_currentSegment)
+            m_currentSegment = m_segments[0].segment;
     }
+
+    analyzeChordsAndKeyChanges();
 }
 
-// Add segment to m_segments and m_chordNoteSegments, but only if
-// not a percussion segment.
 void
-ChordNameRuler::insertSegment(Segment *segment, bool alsoChordNameSegments)
+ChordNameRuler::addSegment(Segment *segment)
 {
     RosegardenDocument *document(RosegardenDocument::currentDocument);
     Composition &composition(document->getComposition());
@@ -746,15 +811,20 @@ ChordNameRuler::insertSegment(Segment *segment, bool alsoChordNameSegments)
     Instrument *instr = document->
                         getStudio().
                         getInstrumentById(track->getInstrument());
+    // Only regular, not percussion segments
+    if (instr->getKeyMapping()) return;
 
-    // Check if is percussion segment
-    if (!instr->getKeyMapping()) {
-        m_segments.insert(SegmentRefreshMap::value_type(
-                                    segment,
-                                    (segment)->getNewRefreshStatusId()));
-        if (alsoChordNameSegments)
-            m_chordNoteSegments.push_back(segment);
-    }
+    m_segments.push_back(SegmentAndActive{segment, true});
+    ++m_numActiveSegments;
+    resetActiveSegmentIndices();  // Don't really need, only this only
+                                  // used my main window which doesn't
+                                  // allow choice of segments.
+    m_currentSegment = segment;   // Don't really need, ibid.
+
+    analyzeChordsAndKeyChanges();
+
+    connect(segment, &Segment::contentsChanged,
+            this,    &ChordNameRuler::slotSegmentContentsChanged);
 }
 
 void
@@ -768,11 +838,46 @@ const Key
 ChordNameRuler::keyAtTime(const timeT t)
 const
 {
+#if 0   // DEBUG
+    std::cerr << "ChordNameRuler::keyAtTime("
+              << t
+              << ")  "
+              << m_keys.size()
+              << " keys:";
+    for (auto key : m_keys)
+        std::cerr << ' '
+                  << key.first
+                  << '/'
+                  << key.second.getTonicPitch();
+    std::cerr << std::endl;
+#endif
+
     if (m_keys.empty()) return Key();
     auto upper = m_keys.upper_bound(t);
     if (upper != m_keys.begin())
         --upper;
     return upper->second;
+}
+
+// See documentation in .h file
+timeT
+ChordNameRuler::getNextKeyTime(
+const timeT  currentKeyTime)
+const
+{
+    Composition &composition(m_doc->getComposition());
+
+    if (m_keys.size() <= 1)
+        return composition.getMaxSegmentEndTime();
+
+    if (currentKeyTime < m_keys.begin()->first)
+        return m_keys.begin()->first;
+
+    auto iter = m_keys.find(currentKeyTime);
+    if (iter == m_keys.end() || ++iter == m_keys.end())
+        return composition.getMaxSegmentEndTime();
+
+    return iter->first;
 }
 
 // See documentation in .h file
@@ -809,12 +914,13 @@ ChordNameRuler::slotScrollHoriz(int x)
     update();
 }
 
-// Force re-analysis of chords.
 void
-ChordNameRuler::slotRecalculateAll()
+ChordNameRuler::slotSegmentContentsChanged()
 {
-    recalculate(0, 0);
-    emit chordAnalysisChanged();
+    const Segment *segment = dynamic_cast<const Segment*>(sender());
+    auto found = findSegment(segment);
+    if (found != m_segments.end() && found->active)
+        analyzeChordsAndKeyChanges();
 }
 
 // Qt ruler internals
@@ -859,35 +965,47 @@ ChordNameRuler::slotCopyChords()
 void
 ChordNameRuler::slotChooseActiveSegments()
 {
+    // Shouldn't ever happen: Matrix and notation editors destruct
+    // if and when all of their segments are removed in main window,
+    // and main window's chord name ruler's menu doesn't have the
+    // action connected to this slot.
+    if (m_segments.empty()) return;
+
     std::vector<Segment*> segments;
-    for (SegmentRefreshMap::value_type srfmvt : m_segments)
-        segments.push_back(srfmvt.first);
+    for (auto segment : m_segments) segments.push_back(segment.segment);
 
     QString header(tr("Construct chords from notes in segments:"));
 
     // Pop up dialog and abort if "Cancel" instead of "OK"
     if (!chooseSegments(header, segments)) return;
 
-    // Fill in m_chordNoteSegments from user choices in dialog
-    // Also check to make sure m_currentSegment is in m_chordNoteSegments,
+    // Set m_segments "active" flags  from user choices in dialog
+    // Also check to make sure m_currentSegment is in m_segments,
     //   otherwise arbitrarily set to first one (unless empty in which
     //   case set to nullptr.)
-    m_chordNoteSegments.clear();
-    bool currentSegmentInActiveSegments = false;
-    for (int index : m_activeSegmentIndices) {
-        Segment *anActiveSegment = segments[index];
-        m_chordNoteSegments.push_back(anActiveSegment);
-        if (anActiveSegment == m_currentSegment)
-            currentSegmentInActiveSegments = true;
-    }
+    for (auto &seg : m_segments)
+        seg.active = false;
+    for (int index : m_activeSegmentIndices)
+        m_segments[index].active = true;
+    m_numActiveSegments = m_activeSegmentIndices.size();
 
-    if (m_chordNoteSegments.empty())
-        m_currentSegment = nullptr;
-    if (!currentSegmentInActiveSegments)
-        m_currentSegment = m_chordNoteSegments[0];
+    auto foundCurrent = findSegment(m_currentSegment);
+    if (   foundCurrent != m_segments.end()   // should always be true
+        || !foundCurrent->active)
+        m_currentSegment = m_segments[0].segment;  // arbitrary choice
 
-    recalculate(0, 0);
+    analyzeChordsAndKeyChanges();
+
+    // For matrix editor to redraw key highlight stripes if mode requres
+    // Need to do regardless of m_conflictingKeyChanges because
+    //   might have gone from conflicting to non-, or vice-versa.
+    m_doc->signalKeySignaturesChanged(true);  // true==inserted, (arbitrary)
+
+#if 0   // t4os -- already done in analyzeChordsAndKeyChanges();
+        //         in analyzeChordsAndKeyChanges() despite being
+        //         slightly nicer to wait until after signalKey
     emit chordAnalysisChanged();
+#endif
 }
 
 void
@@ -901,8 +1019,7 @@ ChordNameRuler::slotSetAlgorithm()
                                "chord_name_unarpeggiate",
                                m_doUnarpeggiation);
 
-    labelChords(0, 0);
-    emit chordAnalysisChanged();
+    analyzeChordsAndKeyChanges();
 }
 
 void
@@ -936,8 +1053,7 @@ ChordNameRuler::slotSetQuantization()
                                static_cast<unsigned>(m_quantization));
 
     m_quantizationTime = noteDurationToMidiTicks(m_quantization);
-    labelChords(0, 0);
-    emit chordAnalysisChanged();
+    analyzeChordsAndKeyChanges();
 }
 
 void
@@ -970,8 +1086,7 @@ ChordNameRuler::slotSetUnarpeggiation()
                                static_cast<unsigned>(m_unarpeggiation));
 
     m_unarpeggiationTime = noteDurationToMidiTicks(m_unarpeggiation);
-    labelChords(0, 0);
-    emit chordAnalysisChanged();
+    analyzeChordsAndKeyChanges();
 }
 
 void
@@ -993,8 +1108,7 @@ ChordNameRuler::slotChordNameType()
                                static_cast<unsigned>(m_chordNameType));
 
     m_analyzer->updateChordNameStyles();
-    labelChords(0, 0);
-    emit chordAnalysisChanged();
+    analyzeChordsAndKeyChanges();
 }
 
 void
@@ -1014,8 +1128,7 @@ ChordNameRuler::slotChordSlashType()
                                static_cast<unsigned>(m_chordSlashType));
 
     m_analyzer->updateChordNameStyles();
-    labelChords(0, 0);
-    emit chordAnalysisChanged();
+    analyzeChordsAndKeyChanges();
 }
 
 void
@@ -1026,8 +1139,7 @@ ChordNameRuler::slotChordAddedBass()
                                m_slashAddedBassAction->isChecked());
 
     m_analyzer->updateChordNameStyles();
-    labelChords(0, 0);
-    emit chordAnalysisChanged();
+    analyzeChordsAndKeyChanges();
 }
 
 void
@@ -1038,8 +1150,7 @@ ChordNameRuler::slotPreferSlashChords()
                                m_preferSlashChordsAction ->isChecked());
 
     m_analyzer->updateChordNameStyles();
-    labelChords(0, 0);
-    emit chordAnalysisChanged();
+    analyzeChordsAndKeyChanges();
 }
 
 void
@@ -1053,8 +1164,7 @@ ChordNameRuler::slotCMajorFlats()
                                m_cMajorFlats->isChecked());
 
     m_analyzer->updateChordNameStyles();
-    labelChords(0, 0);
-    emit chordAnalysisChanged();
+    analyzeChordsAndKeyChanges();
 }
 
 void
@@ -1068,8 +1178,7 @@ ChordNameRuler::slotOffsetMinors()
                                m_offsetMinorKeys->isChecked());
 
     m_analyzer->updateChordNameStyles();
-    labelChords(0, 0);
-    emit chordAnalysisChanged();
+    analyzeChordsAndKeyChanges();
 }
 
 void
@@ -1083,16 +1192,14 @@ ChordNameRuler::slotAltMinors()
                                m_altMinorKeys->isChecked());
 
     m_analyzer->updateChordNameStyles();
-    labelChords(0, 0);
-    emit chordAnalysisChanged();
+    analyzeChordsAndKeyChanges();
 }
 
 void
 ChordNameRuler::slotNonDiatonicChords()
 {
     Preferences::nonDiatonicChords.set(m_nonDiatonicChords->isChecked());
-    labelChords(0, 0);
-    emit chordAnalysisChanged();
+    analyzeChordsAndKeyChanges();
 }
 
 void
@@ -1102,8 +1209,7 @@ ChordNameRuler::slotSetNameStyles()
     auto result = chordNameStylesDialog.exec();
     if (result == QDialog::Accepted) {
         m_analyzer->updateChordNameStyles();
-        labelChords(0, 0);
-        emit chordAnalysisChanged();
+        analyzeChordsAndKeyChanges();
     }
 }
 
@@ -1138,11 +1244,27 @@ ChordNameRuler::chooseSegments(const QString               &header,
     return dialog.exec() == QDialog::Accepted;
 }
 
+std::vector<ChordNameRuler::SegmentAndActive>::iterator
+ChordNameRuler::findSegment(
+const Segment *segment)
+{
+    struct Finder {
+        Finder(const Segment *seg) : m_seg(seg) {};
+        bool operator()(const SegmentAndActive &seg)
+                       { return seg.segment == m_seg ; }
+        const Segment *m_seg;
+    };
+
+    return std::find_if(m_segments.begin(),
+                        m_segments.end(),
+                        Finder(segment));
+}
+
 // Set all to inactive.
 void
 ChordNameRuler::resetActiveSegmentIndices()
 {
-    m_activeSegmentIndices.resize(m_chordNoteSegments.size());
+    m_activeSegmentIndices.resize(m_segments.size());
     std::iota(m_activeSegmentIndices.begin(), m_activeSegmentIndices.end(), 0);
 }
 
@@ -1178,221 +1300,30 @@ const NoteDuration  noteDuration)
         return quantizationIter->second;
 }
 
-// Analyze chords.
-// Actual call to analyzer broken out into labelChords(). This code
-//   largely old, pre-rewrite code, largely used to set m_segments
-//   for main window (aka track editor) which doesn't use constructor
-//   specifying segments as do matrix and notation editors (which also
-//   explicitly handle removing segments).
-// Code works but should probably be cleaned up.
-// Also no longer fully supports "from" and "to" times which were necessary
-//   optimizations when, pre-write, was called each time ruler was scrolled
-//   or scaled (which is no longer the case -- recalculate() now only
-//   called when notes/keys/etc change).
-// Plus new chord analysis algorithms more-or-less require starting from
-//   beginning of segment (to keep track of current key changes, including
-//   pathological cases of different key changes in different segments)
-//   so from/to optimization difficult/impossible and/or not worthwhile.
-void
-ChordNameRuler::recalculate(timeT from, timeT to)
-{
-    // Views may have constructed and then hidden. Don't do
-    // expensive recalc if so. Will recalc when re-shown.
-    if (!isVisible())
-        return;
-
-    bool regetSegments = false;
-
-    enum RecalcLevel { RecalcNone, RecalcVisible, RecalcWhole };
-    RecalcLevel level = RecalcNone;
-
-    if (m_segments.empty()) {
-
-        regetSegments = true;
-
-    } else if (m_regetSegmentsOnChange) {
-
-        RefreshStatus &rs =
-            m_composition->getRefreshStatus(m_compositionRefreshStatusId);
-
-        if (rs.needsRefresh()) {
-            rs.setNeedsRefresh(false);
-            regetSegments = true;
-        }
-    }
-
-    if (regetSegments) {
-        SegmentSelection ss;
-        m_chordNoteSegments.clear();
-
-        for (Composition::iterator ci = m_composition->begin();
-                ci != m_composition->end(); ++ci) {
-
-            if (m_studio) {
-
-                TrackId ti = (*ci)->getTrack();
-
-                Instrument *instr = m_studio->getInstrumentById
-                                    (m_composition->getTrackById(ti)->getInstrument());
-
-                if (instr &&
-                        instr->getType() == Instrument::Midi &&
-                        instr->isPercussion()) {
-                    continue;
-                }
-            }
-
-            ss.insert(*ci);
-            m_chordNoteSegments.push_back(*ci);
-        }
-        resetActiveSegmentIndices();
-
-        std::vector<SegmentRefreshMap::iterator> eraseThese;
-
-        for (SegmentRefreshMap::iterator si = m_segments.begin();
-                si != m_segments.end(); ++si) {
-            if (ss.find(si->first) == ss.end()) {
-                eraseThese.push_back(si);
-                level = RecalcWhole;
-                RG_DEBUG << "recalculate(): Segment deleted, updating (now have " << m_segments.size() << " segments)";
-            }
-        }
-
-        for (std::vector<SegmentRefreshMap::iterator>::iterator ei = eraseThese.begin();
-                ei != eraseThese.end(); ++ei) {
-            m_segments.erase(*ei);
-        }
-
-        for (SegmentSelection::iterator si = ss.begin();
-                si != ss.end(); ++si) {
-
-            if (m_segments.find(*si) == m_segments.end()) {
-                insertSegment(*si, false);  // false==not also chordNameSegments
-                level = RecalcWhole;
-                RG_DEBUG << "recalculate(): Segment created, adding (now have " << m_segments.size() << " segments)";
-            }
-        }
-
-        if (m_currentSegment &&
-            ss.find(const_cast<Segment*>(m_currentSegment)) == ss.end()) {
-            m_currentSegment = nullptr;
-            level = RecalcWhole;
-        }
-    }
-
-    if (!m_chordSegment)
-        m_chordSegment = new Segment();
-    if (m_segments.empty())
-        return ;
-
-    SegmentRefreshStatus overallStatus;
-    overallStatus.setNeedsRefresh(false);
-
-    for (SegmentRefreshMap::iterator i = m_segments.begin();
-            i != m_segments.end(); ++i) {
-        SegmentRefreshStatus &status =
-            i->first->getRefreshStatus(i->second);
-        if (status.needsRefresh()) {
-            overallStatus.push(status.from(), status.to());
-        }
-    }
-
-    // Always recalculate everything at least once
-    if (m_firstTime) {
-        m_firstTime = false;
-        level = RecalcWhole;
-    }
-
-    // We now have the overall area affected by these changes, across
-    // all segments.  If it's entirely within our displayed area, just
-    // recalculate the displayed area; if it overlaps, calculate the
-    // union of the two areas; if it's entirely without, calculate
-    // nothing.
-
-    if (level == RecalcNone) {
-        if (from == to) {
-            RG_DEBUG << "recalculate(): from==to, recalculating all";
-            level = RecalcWhole;
-        } else if (overallStatus.from() == overallStatus.to()) {
-            RG_DEBUG << "recalculate(): overallStatus.from==overallStatus.to, ignoring";
-            level = RecalcNone;
-        } else if (overallStatus.from() >= from && overallStatus.to() <= to) {
-            RG_DEBUG << "recalculate(): change is " << overallStatus.from() << "->" << overallStatus.to() << ", I show " << from << "->" << to << ", recalculating visible area";
-            level = RecalcVisible;
-        } else if (overallStatus.from() >= to || overallStatus.to() <= from) {
-            RG_DEBUG << "recalculate(): change is " << overallStatus.from() << "->" << overallStatus.to() << ", I show " << from << "->" << to << ", ignoring";
-            level = RecalcNone;
-        } else {
-            RG_DEBUG << "recalculate(): change is " << overallStatus.from() << "->" << overallStatus.to() << ", I show " << from << "->" << to << ", recalculating whole";
-            level = RecalcWhole;
-        }
-    }
-
-    if (level == RecalcNone)
-        return ;
-
-    for (SegmentRefreshMap::iterator i = m_segments.begin();
-            i != m_segments.end(); ++i) {
-        i->first->getRefreshStatus(i->second).setNeedsRefresh(false);
-    }
-
-    if (!m_currentSegment) { //!!! arbitrary, must do better
-        //!!! need a segment starting at zero or so with a clef and key in it!
-        m_currentSegment = m_segments.begin()->first;
-    }
-
-    // Commented out in pre-rewrite version.
-    /*!!!
-        for (Composition::iterator ci = m_composition->begin();
-             ci != m_composition->end(); ++ci) {
-
-            if ((*ci)->getEndMarkerTime() >= from &&
-                ((*ci)->getStartTime() <= from ||
-                 (clefKeySegment &&
-                  (*ci)->getStartTime() < clefKeySegment->getStartTime()))) {
-
-                clefKeySegment = *ci;
-            }
-        }
-
-        if (!clefKeySegment) return;
-        }
-    */
-
-    if (level == RecalcWhole) {
-        from = 0;
-        to = 0;
-    }
-    else {
-        Segment::iterator i = m_chordSegment->findTime(from);
-        Segment::iterator j = m_chordSegment->findTime(to);
-        m_chordSegment->erase(i, j);
-    }
-
-    labelChords(from, to);
-
-}  // ChordNameRuler::recalculate(timeT from, timeT to)
-
-
 // Analyze chords and redraw ruler.
-void ChordNameRuler::labelChords(timeT /*from*/, timeT /*to*/)
+void ChordNameRuler::analyzeChordsAndKeyChanges(bool emitSignal)
 {
-    SegmentSelection selection;
-
-    m_chordSegment->clear();
+    m_chordAndKeyNames->clear();
     m_keys.clear();
     m_roots.clear();
-    m_analyzer->labelChords(*m_chordSegment,
+
+    std::vector<Segment*> segments;
+    for (auto segment : m_segments)
+        if (segment.active) segments.push_back(segment.segment);
+
+    m_analyzer->labelChords(*m_chordAndKeyNames,
                             m_keys,
                             m_roots,
                             m_conflictingKeyChanges,
-                            m_chordNoteSegments,
+                            segments,
                             m_currentSegment,
                             m_doUnarpeggiation ? m_unarpeggiationTime
                                                : m_quantizationTime,
                             m_doUnarpeggiation);
 
     update();
+
+    if (emitSignal) emit chordAnalysisChanged();
 }
 
 // Pop up menu.
@@ -1428,10 +1359,9 @@ ChordNameRuler::mouseDoubleClickEvent(QMouseEvent *e)
     // Segment::getKeyAtTime() searches backwards in time for key change.
     // Only want those which match the most recent in any segment.
     timeT maxKeyTime = std::numeric_limits<timeT>::min();
-    for (SegmentRefreshMap::value_type srfmvt : m_segments) {
-        Segment *segment = srfmvt.first;
+    for (auto segment : m_segments) {
         timeT keyTime;
-        Key key = segment->getKeyAtTime(clickedAt, keyTime);
+        Key key = segment.segment->getKeyAtTime(clickedAt, keyTime);
 
         if (key.getEvent() == nullptr)
             continue;
@@ -1457,26 +1387,26 @@ ChordNameRuler::mouseDoubleClickEvent(QMouseEvent *e)
     std::vector<Segment*>     keyChangeSegments;
     std::vector<const Event*> keyChangeEvents;
 
-    for (SegmentRefreshMap::value_type srfmvt : m_segments) {
-        Segment *segment = srfmvt.first;
+    for (auto segment : m_segments) {
         timeT keyTime;
-        Key          key   = segment->getKeyAtTime(clickedAt, keyTime);
+        Key          key   = segment.segment->getKeyAtTime(clickedAt, keyTime);
         const Event *event = key.getEvent();
 
         if (keyTime != maxKeyTime || event == nullptr) continue;
 
-        keyChangeSegments.push_back(segment);
+        keyChangeSegments.push_back(segment.segment);
         keyChangeEvents  .push_back(event);
 
         keyChangesStrings << (   QString::fromStdString(key.getName())
                            + tr(" in segment ")
-                           + QString::fromStdString(segment->getLabel()));
+                           + QString::fromStdString(  segment
+                                                     .segment
+                                                    ->getLabel()));
 
-        QColor textColor = segment->getPreviewColour();
+        QColor textColor = segment.segment->getPreviewColour();
         foregrounds.push_back(textColor);
-        backgrounds.push_back(segment->getColour());
+        backgrounds.push_back(segment.segment->getColour());
     }
-
 
     Composition &comp(RosegardenDocument::currentDocument->getComposition());
     QString timeString(comp.getMusicalTimeStringForAbsoluteTime(maxKeyTime));
@@ -1509,8 +1439,8 @@ ChordNameRuler::mouseDoubleClickEvent(QMouseEvent *e)
         }
         CommandHistory::getInstance()->addCommand(macroCommand);
 
-        labelChords(0, 0);
-        m_doc->signalKeySignaturesChanged(false);  // false means !inserted
+        analyzeChordsAndKeyChanges();
+        emit chordAnalysisChanged();
     }
 
 }  // ChordNameRuler::mouseDoubleClickEvent(QMouseEvent *e)
@@ -1548,8 +1478,6 @@ ChordNameRuler::paintEvent(QPaintEvent* e)
     if (!m_composition)
         return ;
 
-    RG_DEBUG << "paintEvent()";
-
     QPainter paint(this);
 
     // In a stylesheet world...  Yadda yadda.  Fix the stupid background to
@@ -1565,9 +1493,7 @@ ChordNameRuler::paintEvent(QPaintEvent* e)
 
     QRect clipRect = paint.clipRegion().boundingRect();
 
-    if (m_firstTime) recalculate(0, 0);
-
-    if (!m_chordSegment)
+    if (!m_chordAndKeyNames)
         return ;
 
     int   beginX    = m_currentXOffset,
@@ -1581,8 +1507,9 @@ ChordNameRuler::paintEvent(QPaintEvent* e)
               keySpacing      = m_boldFont.pixelSize() / 2;
     int       currentX        = clipRect.x();
 
-    for (Segment::iterator   eventIter  = m_chordSegment->findTime(beginTime);
-                             eventIter != m_chordSegment->findTime(endTime);
+    for (Segment::iterator   eventIter  =   m_chordAndKeyNames
+                                          ->findTime(beginTime);
+                             eventIter != m_chordAndKeyNames->findTime(endTime);
                            ++eventIter) {
 
         if (   !(*eventIter)->isa(Text::EventType)
@@ -1593,9 +1520,11 @@ ChordNameRuler::paintEvent(QPaintEvent* e)
         std::string text((*eventIter)->get<String>(Text::TextPropertyName)),
                     type((*eventIter)->get<String>(Text::TextTypePropertyName));
 
+
         int textX =   static_cast<int>(
-                      std::round(m_rulerScale->getXForTime(  (*eventIter)
-                                                           ->getAbsoluteTime())))
+                      std::round(  m_rulerScale
+                                 ->getXForTime(  (*eventIter)
+                                               ->getAbsoluteTime())))
                     - m_currentXOffset;
 
         if (textX < currentX) {
@@ -1603,7 +1532,8 @@ ChordNameRuler::paintEvent(QPaintEvent* e)
                 paint.drawLine(textX, 0, textX, height());
             else
                 paint.drawLine(textX, height() - 4, textX, height());
-            if (textX > currentX) currentX = textX;
+            if (textX > currentX)
+                currentX = textX;
             continue;
         }
 

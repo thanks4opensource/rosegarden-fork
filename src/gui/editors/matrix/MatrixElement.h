@@ -39,6 +39,7 @@ class Segment;
 class IsotropicRectItem;
 class IsotropicTextItem;
 class IsotropicDiamondItem;
+class ChordNameRuler;
 
 /// A note on the matrix editor.
 /**
@@ -188,7 +189,13 @@ protected:
     // Get key info at time, and set m_prevTime and m_prevShowName
     // Checking of latter two in reconfigure(...) avoids expensive
     //   Segment::getKeyAtTime() unless necessary.
-    void getKeyInfo(const ShowName showName, const timeT time);
+    // Returns false if no chord name ruler and time is outside
+    //   of MatrixScene::getCurrentSegment() span (so as not to
+    //   display any key-relative note names in that case).
+    bool getKeyInfo(const ChordNameRuler*,
+                    const bool chordNameRulerIsVisible,
+                    const ShowName showName,
+                    const timeT time);
 
     // Common code used by reconfigure(timeT, timeT, int, int),
     // setCurrent(), and setColor().

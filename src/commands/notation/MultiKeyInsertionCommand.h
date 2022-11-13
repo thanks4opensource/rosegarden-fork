@@ -43,14 +43,14 @@ class MultiKeyInsertionCommand : public MacroCommand
     Q_DECLARE_TR_FUNCTIONS(Rosegarden::MultiKeyInsertionCommand)
 
 public:
-    
+
     MultiKeyInsertionCommand(RosegardenDocument *doc,
                              timeT time,
                              Key key,
                              bool shouldConvert,
                              bool shouldTranspose,
                              bool shouldTransposeKey,
-			     bool shouldIgnorePercussion); 
+                             bool shouldIgnorePercussion);
     ~MultiKeyInsertionCommand() override;
 
     static QString getGlobalName(Key *key = nullptr) {
@@ -60,6 +60,11 @@ public:
             return tr("Add &Key Change...");
         }
     }
+
+protected:
+    void postExecute() override;
+    void postUnexecute() override;
+
 };
 
 

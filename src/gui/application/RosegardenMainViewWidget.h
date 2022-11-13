@@ -113,8 +113,6 @@ public:
      */
     void setZoomSize(double size);
 
-    void initChordNameRuler();
-
     bool haveSelection();
     SegmentSelection getSelection();
     void updateSelectedSegments();

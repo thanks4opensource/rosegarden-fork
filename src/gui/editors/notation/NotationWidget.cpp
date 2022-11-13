@@ -536,13 +536,6 @@ NotationWidget::setSegments(RosegardenDocument *document,
                                           true,    // key change insert enabled
                                           true,    // enable copy chords to text
                                           24);     // height
-#if 0  // Done once (only, don't do multiple times) in
-       // /RosegardenMainViewWidget::initChordNameRuler()
-    connect(CommandHistory::getInstance(),
-            &CommandHistory::commandExecuted,
-            m_chordNameRuler,
-            &ChordNameRuler::slotRecalculateAll);
-#endif
     connect(m_chordNameRuler,
             &ChordNameRuler::insertKeyChange,
             m_notationView,

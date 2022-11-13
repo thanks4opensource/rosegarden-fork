@@ -44,14 +44,16 @@ KeyInsertionCommand::KeyInsertionCommand(Segment &segment, timeT time,
                                          bool shouldConvert,
                                          bool shouldTranspose,
                                          bool shouldTransposeKey,
-                                         bool shouldIgnorePercussion) :
+                                         bool shouldIgnorePercussion,
+                                         bool dontSignal) :
     BasicCommand(getGlobalName(&key), segment, time, segment.getEndTime()),
     m_key(key),
     m_lastInsertedEvent(nullptr),
     m_convert(shouldConvert),
     m_transpose(shouldTranspose),
     m_transposeKey(shouldTransposeKey),
-    m_ignorePercussion(shouldIgnorePercussion)
+    m_ignorePercussion(shouldIgnorePercussion),
+    m_dontSignal(dontSignal)
 {
     // nothing
 }
@@ -266,12 +268,14 @@ KeyInsertionCommand::modifySegment()
 
 void KeyInsertionCommand::postExecute()
 {
-    RosegardenDocument::currentDocument->signalKeySignaturesChanged(true);
+    if (!m_dontSignal)
+        RosegardenDocument::currentDocument->signalKeySignaturesChanged(true);
 }
 
 void KeyInsertionCommand::postUnexecute()
 {
-    RosegardenDocument::currentDocument->signalKeySignaturesChanged(false);
+    if (!m_dontSignal)
+        RosegardenDocument::currentDocument->signalKeySignaturesChanged(false);
 }
 
 }

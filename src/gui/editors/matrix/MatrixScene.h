@@ -227,6 +227,8 @@ public:
     void setKeySignaturesChanged(bool changed)
         { m_keySignaturesChanged = changed; }
 
+    void updateNoteLabels();
+
 signals:
 #if 0   // SIGNAL_SLOT_ABUSE
     void mousePressed(const MatrixMouseEvent *e);
@@ -252,15 +254,16 @@ signals:
     void segmentDeleted(Segment *);
     void sceneDeleted(); // all segments have been removed
 
+
 public slots:
     void slotNotesTied  (const EventContainer &notes);
     void slotNotesUntied(const EventContainer &notes);
 
-    void slotUpdateNoteLabels();
 
 // t4os -- see comment in constructor implemementation
 protected slots:
     void slotCommandExecuted();
+    void slotKeySignaturesChanged();
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent *) override;

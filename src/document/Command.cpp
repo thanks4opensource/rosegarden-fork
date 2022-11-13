@@ -64,6 +64,7 @@ MacroCommand::execute()
     for (size_t i = 0; i < m_commands.size(); ++i) {
         m_commands[i]->execute();
     }
+    postExecute();
 }
 
 void
@@ -72,6 +73,7 @@ MacroCommand::unexecute()
     for (size_t i = 0; i < m_commands.size(); ++i) {
         m_commands[m_commands.size() - i - 1]->unexecute();
     }
+    postUnexecute();
 }
 
 QString

@@ -80,7 +80,13 @@ MatrixElement::MatrixElement(MatrixScene *scene, Event *event,
         m_current = false;
     }
 
-    getKeyInfo(m_prevShowName, m_prevTime);
+    const ChordNameRuler *chordNameRuler =   m_scene
+                                           ->getMatrixWidget()
+                                           ->getChordNameRuler();
+    getKeyInfo(chordNameRuler,
+               (chordNameRuler ? chordNameRuler->isVisible() : false),
+               m_prevShowName,
+               m_prevTime);
 
     reconfigure();
 }
@@ -267,10 +273,17 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
 
         m_textItem->setBrush(textColor(colour));
 
-        if (   showName != m_prevShowName
+        ChordNameRuler     *chordNameRuler
+                         = m_scene->getMatrixWidget()->getChordNameRuler();
+        bool haveKeyInfo = chordNameRuler && chordNameRuler->isVisible();
+        if (   !haveKeyInfo
+            || showName != m_prevShowName
             || time     != m_prevTime
             || m_scene->getKeySignaturesChanged())
-            getKeyInfo(showName, time);
+            haveKeyInfo = getKeyInfo(chordNameRuler,
+                                     haveKeyInfo,
+                                     showName,
+                                     time);
 
         unsigned degree =   (  pitch
                              + (   m_minor && m_minorNotesOffset
@@ -307,25 +320,33 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
             break;
 
             case MatrixWidget::NoteNameType::DEGREE:
-                if (m_minor && !m_minorNotesOffset && m_alternateMinorNotes)
-                    noteName = MidiPitchLabel::scaleDegreeMinorAlt(degree,
-                                                                   m_sharps);
+                if (haveKeyInfo) {
+                    if (m_minor && !m_minorNotesOffset && m_alternateMinorNotes)
+                        noteName =   MidiPitchLabel
+                                   ::scaleDegreeMinorAlt(degree, m_sharps);
+                    else
+                        noteName = MidiPitchLabel::scaleDegreeMajor(degree,
+                                                                    m_sharps);
+                }
                 else
-                    noteName = MidiPitchLabel::scaleDegreeMajor(degree,
-                                                                m_sharps);
+                    noteName = "?";
             break;
 
             case MatrixWidget::NoteNameType::MOVABLE_DO:
-                noteName = MidiPitchLabel::movableSolfege(degree, m_sharps);
+                if (haveKeyInfo)
+                    noteName = MidiPitchLabel::movableSolfege(degree, m_sharps);
+                else
+                    noteName = "?";
             break;
 
             case MatrixWidget::NoteNameType::INTEGER_KEY:
-                noteName = QString("%1").arg(degree);
+                if (haveKeyInfo)
+                    noteName = QString("%1").arg(degree);
+                else
+                    noteName = "?";
             break;
         }
 
-        const ChordNameRuler   *chordNameRuler
-                             = matrixWidget->getChordNameRuler();
         if (      matrixWidget->getChordSpellingType()
                != MatrixWidget::ChordSpellingType::OFF
             && chordNameRuler
@@ -390,25 +411,41 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
 }
 
 // See documentation in .h file
-void
-MatrixElement::getKeyInfo(const ShowName showName, const timeT time)
+bool
+MatrixElement::getKeyInfo(
+const ChordNameRuler    *chordNameRuler,
+const bool               chordNameRulerIsVisible,
+const ShowName           showName,
+const                    timeT time)
 {
     // Get key at time either from segment or from ChordNameRuler
     //
     Rosegarden::Key     key;
-    bool                gotKey = false;  // no such thing as null key to test
 
-    if (m_scene->getMatrixWidget()->needUpdateNoteLabels()) {
-        const ChordNameRuler   *chordNameRuler
-                             = m_scene->getMatrixWidget()->getChordNameRuler();
-
-        if (chordNameRuler && chordNameRuler->isVisible()) {
-            key    = chordNameRuler->keyAtTime(time);
-            gotKey = true;
-        }
+    if (chordNameRulerIsVisible)
+        key = chordNameRuler->keyAtTime(time);
+    else {
+#if 1  // Don't key-relative label notes outside of current segment span
+        const Segment *segment = m_scene->getCurrentSegment();
+        if (!segment) return false;
+        if (   time <  segment->getClippedStartTime()
+            || time >= segment->getEndMarkerTime(true))
+            return false;
+        key = segment->getKeyAtTime(time);
+#else  // Do label, with note's segment's key at time ...
+       // ... but incorrectly gets previous non-overlappinng segment's
+       // key because Segment::getKeyAtTime() doesn't "clip" to
+       // segment start time.
+       // Reconsider if/when that fixed.
+        const Segment *currentSegment = m_scene->getCurrentSegment();
+        if (   currentSegment
+            && (   time >= currentSegment->getClippedStartTime()
+                || time <  currentSegment->getEndMarkerTime(true)))
+            key = currentSegment->getKeyAtTime(time);
+        else
+            key = m_segment->getKeyAtTime(time);
+#endif
     }
-
-    if (!gotKey) key = m_segment->getKeyAtTime(time);
 
     if (key.getAccidentalCount() == 0)
         m_sharps = !m_scene->getMatrixWidget()->getNoteNamesCmajFlats();
@@ -430,6 +467,8 @@ MatrixElement::getKeyInfo(const ShowName showName, const timeT time)
 
     m_prevShowName = showName;
     m_prevTime     = time;
+
+    return true;
 }
 
 bool

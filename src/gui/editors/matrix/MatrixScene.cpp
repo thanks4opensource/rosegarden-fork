@@ -117,15 +117,10 @@ MatrixScene::MatrixScene() :
             &RosegardenMainWindow::midiOctaveOffsetChanged,
             this,
             [this](){updateAllSegments(false);});
-
-    // Still need this even if connecting generic slotCommandExecuted()
-    // because checkUpdate() only updates notes in segments that are
-    // in modified time range. This eventually calls
-    // MatrixElement::reconfigure() twice for those, but unavoidable.
     connect(RosegardenDocument::currentDocument,
             &RosegardenDocument::keySignaturesChanged,
             this,
-            &MatrixScene::slotUpdateNoteLabels);
+            &MatrixScene::slotKeySignaturesChanged);
 
 #if 0  // Failed experiments to use Alt or Tab for alternate tool switching
     qt_set_sequence_auto_mnemonic(false);
@@ -313,11 +308,6 @@ MatrixScene::setCurrentSegment(const Segment* const segment)
     // Unset old current segment
     updateCurrentSegment(false);  // !isCurrent
 
-    if (m_widget && m_widget->getChordNameRuler())
-          m_widget
-        ->getChordNameRuler()
-        ->setCurrentSegment(segment, false);  // false == recalc only if needed
-
     for (int i = 0; i < int(m_segments.size()); ++i) {
         if (m_segments[i] == segment) {
             m_currentSegmentIndex = i;
@@ -325,6 +315,11 @@ MatrixScene::setCurrentSegment(const Segment* const segment)
             break;
         }
     }
+
+    if (m_widget && m_widget->getChordNameRuler())
+          m_widget
+        ->getChordNameRuler()
+        ->setCurrentSegment(segment, false);  // false == recalc only if needed
 }
 
 Segment *
@@ -593,15 +588,27 @@ MatrixScene::recreateKeyHighlights()
     Segment *segment = getCurrentSegment();
     if (!segment) return;
 
+    const ChordNameRuler *chordNameRuler = m_widget->getChordNameRuler();
+    if (!chordNameRuler || !chordNameRuler->isVisible())
+        chordNameRuler = nullptr;
+
     m_widget->getPanned()->setBackgroundBrush(QColor(128, 128, 128));
 
-    timeT k0 = segment->getClippedStartTime();
-    timeT k1 = segment->getClippedStartTime();
+    timeT k0, k1, endTime;
+    if (chordNameRuler) {
+        k1 = k0 = m_document->getComposition().getMinSegmentStartTime();
+        endTime = m_document->getComposition().getMaxSegmentEndTime();
+    }
+    else {
+        k1 = k0 = segment->getClippedStartTime();
+        endTime = segment->getEndMarkerTime(true);
+    }
 
     int i = 0;
-
-    while (k0 < segment->getEndMarkerTime()) {
-        Rosegarden::Key key = segment->getKeyAtTime(k0);
+    while (k0 < endTime) {
+        Rosegarden::Key key;
+        if (chordNameRuler) key = chordNameRuler->keyAtTime(k0);
+        else                key =        segment->getKeyAtTime(k0);
 
         // offset the highlights according to how far this key's tonic pitch is
         // from C major (0)
@@ -619,12 +626,12 @@ MatrixScene::recreateKeyHighlights()
         offset += 12;
         offset %= 12;
 
-        if (!segment->getNextKeyTime(k0, k1)) k1 = segment->getEndMarkerTime();
+        if (chordNameRuler)
+            k1 = chordNameRuler->getNextKeyTime(k0);
+        else if (!segment->getNextKeyTime(k0, k1))
+            k1 = segment->getEndMarkerTime(true); // true == clip to composition
 
-        if (k0 == k1) {
-            RG_WARNING << "WARNING: MatrixScene::recreatePitchHighlights: k0 == k1 ==" << k0;
-            break;
-        }
+        if (k0 == k1) break;
 
         double x0 = m_scale->getXForTime(k0);
         double x1 = m_scale->getXForTime(k1);
@@ -1711,11 +1718,28 @@ const EventContainer &notes)
 }
 
 void
-MatrixScene::slotUpdateNoteLabels()
+MatrixScene::updateNoteLabels()
 {
     m_keySignaturesChanged = true;
     updateAllSegments();
     m_keySignaturesChanged = false;
+}
+
+void
+MatrixScene::slotKeySignaturesChanged()
+{
+    // Do *not* call (or do similar internally) updateNoteLabels()
+    // as that gets triggered independently.
+
+    if (m_highlightType == HT_Key)
+        recreateKeyHighlights();
+
+    if (    m_widget
+        &&  m_widget->getChordNameRuler()
+        && !m_widget->getChordNameRuler()->isVisible()
+        &&  m_widget->needUpdateNoteLabels()
+        &&  m_widget->getChordNameRuler()->conflictingKeyChanges())
+        updateNoteLabels();
 }
 
 void

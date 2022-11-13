@@ -76,6 +76,12 @@ public:
 
     virtual const std::vector<Command *>& getCommands() { return m_commands; }
 
+    /// These can be overridden by derived classes for any purpose,
+    /// e.g. to emit a specific signal.
+    virtual void postExecute() {};
+    virtual void postUnexecute() {};
+
+
 protected:
     QString m_name;
     std::vector<Command *> m_commands;

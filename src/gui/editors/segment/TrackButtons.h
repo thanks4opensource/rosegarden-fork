@@ -190,7 +190,7 @@ public slots:
     void slotInstrumentMenu(int trackId);
 
     /// Does the actual work for the other slotInstrumentSelected().
-    void slotInstrumentSelected(int instrumentIndex);		// old kde3
+    void slotInstrumentSelected(int instrumentIndex);           // old kde3
 
     /// Handles the user clicking on a selection in the instrument menu.
     /**
@@ -198,7 +198,7 @@ public slots:
      *
      * @see slotInstrumentMenu()
      */
-    void slotInstrumentSelected(QAction*);		// old kde3
+    void slotInstrumentSelected(QAction*);              // old kde3
 
     /// Handles instrument changes from the TrackParameterBox.
     /**
@@ -295,6 +295,7 @@ protected:
     void trackChanged(const Composition *, Track*) override;
     void tracksDeleted(const Composition *, std::vector<TrackId> &trackIds) override;
     void trackSelectionChanged(const Composition *, TrackId trackId) override;
+    void segmentAdded(const Composition *, Segment *) override;
     void segmentRemoved(const Composition *, Segment *) override;
 
     int trackHeight(TrackId trackId);

@@ -353,7 +353,7 @@ MatrixView::MatrixView(RosegardenDocument *doc,
         m_matrixWidget->getChordNameRuler()
                        ->setCurrentSegment(getCurrentSegment(),
                                            true);  // true == force recalc
-        m_matrixWidget->getScene()->slotUpdateNoteLabels();
+        m_matrixWidget->getScene()->updateNoteLabels();
     }
 }
 
@@ -569,15 +569,16 @@ void MatrixView::slotPlaying(bool playing)
 void
 MatrixView::slotUpdateWindowTitle(bool)
 {
-    // Set client label
-    //
-    QString view = tr("Matrix");
-    //&&&if (isDrumMode())
-    //    view = tr("Percussion");
+    QString newWindowTitle(getTitle(tr("Matrix")));
 
-    if (m_segments.empty()) return;
+    if (newWindowTitle == m_currentWindowTitle)
+        return;
 
-    setWindowTitle(getTitle(view));
+    m_currentWindowTitle = newWindowTitle;
+
+    if (m_segments.empty()) return;  // can't happen  except possibly at close
+
+    setWindowTitle(m_currentWindowTitle);
 
     setWindowIcon(IconLoader::loadPixmap("window-matrix"));
 }
@@ -1696,6 +1697,7 @@ MatrixView::setChordNameRulerActive(bool active)
     findAction("show_chords_ruler")->setChecked(active);
 
     m_matrixWidget->setChordNameRulerVisible(active);
+    m_matrixWidget->getScene()->recreatePitchHighlights();
 
     Preferences::setPreference(MatrixViewConfigGroup,
                                "Chords ruler shown",
@@ -1708,6 +1710,7 @@ MatrixView::slotToggleChordsRuler()
     bool view = findAction("show_chords_ruler")->isChecked();
 
     m_matrixWidget->setChordNameRulerVisible(view);
+    m_matrixWidget->getScene()->recreatePitchHighlights();
 
     Preferences::setPreference(MatrixViewConfigGroup,
                                "Chords ruler shown",
@@ -2043,7 +2046,7 @@ MatrixView::slotShowNames()
     settings.setValue("show_note_names", show);
     settings.endGroup();
     m_matrixWidget->setShowNoteNames(show);
-    m_matrixWidget->getScene()->slotUpdateNoteLabels();
+    m_matrixWidget->getScene()->updateNoteLabels();
 }
 
 void
@@ -2162,7 +2165,7 @@ MatrixView::slotNoteNames()
 
     // Only do if changed.
     if (newNameType != previousNameType)
-        m_matrixWidget->getScene()->slotUpdateNoteLabels();
+        m_matrixWidget->getScene()->updateNoteLabels();
 }
 
 void
@@ -2206,7 +2209,7 @@ MatrixView::slotChordSpelling()
             settings.endGroup();
             findAction("show_chords_ruler")->setChecked(true);
         }
-        m_matrixWidget->getScene()->slotUpdateNoteLabels();
+        m_matrixWidget->getScene()->updateNoteLabels();
     }
 }
 
@@ -2222,7 +2225,7 @@ MatrixView::slotNotesCmajFlats()
                                flats);
 
     m_matrixWidget->setNoteNamesCmajFlats(flats);
-    m_matrixWidget->getScene()->slotUpdateNoteLabels();
+    m_matrixWidget->getScene()->updateNoteLabels();
 }
 
 void
@@ -2237,7 +2240,7 @@ MatrixView::slotOffsetMinors()
                                offsetMinors);
 
     m_matrixWidget->setNoteNamesOffsetMinors(offsetMinors);
-    m_matrixWidget->getScene()->slotUpdateNoteLabels();
+    m_matrixWidget->getScene()->updateNoteLabels();
 }
 
 void
@@ -2252,7 +2255,7 @@ MatrixView::slotAlternateMinors()
                                alternateMinors);
 
     m_matrixWidget->setNoteNamesAlternateMinors(alternateMinors);
-    m_matrixWidget->getScene()->slotUpdateNoteLabels();
+    m_matrixWidget->getScene()->updateNoteLabels();
 }
 
 void

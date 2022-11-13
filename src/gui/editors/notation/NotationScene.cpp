@@ -1300,6 +1300,8 @@ NotationScene::dumpVectors()
 void
 NotationScene::segmentRemoved(const Composition *c, Segment *s)
 {
+    m_widget->getChordNameRuler()->removeSegment(s);
+
     NOTATION_DEBUG << "NotationScene::segmentRemoved(" << c << "," << s << ")";
     if (!m_document || !c || (c != &m_document->getComposition())) return;
 

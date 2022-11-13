@@ -39,6 +39,7 @@
 #include "gui/application/RosegardenMainWindow.h"
 #include "gui/general/GUIPalette.h"
 #include "gui/general/IconLoader.h"
+#include "gui/rulers/ChordNameRuler.h"
 #include "gui/seqmanager/SequenceManager.h"
 #include "gui/widgets/LedButton.h"
 #include "sound/AudioFileManager.h"
@@ -1283,12 +1284,37 @@ TrackButtons::trackSelectionChanged(const Composition *, TrackId trackId)
 }
 
 void
-TrackButtons::segmentRemoved(const Composition *, Segment *)
+TrackButtons::segmentAdded(const Composition *, Segment *s)
+{
+    ChordNameRuler *chordNameRuler =   RosegardenMainWindow::self()
+                                     ->getView()
+                                     ->getTrackEditor()
+                                     ->getChordNameRuler();
+    chordNameRuler->addSegment(s);
+    // Unknown what current selected segment (if any) is, and not
+    // important in this context anyway, but need to force recalculate
+    // of chords, and redraw if ruler is curently shown.
+    chordNameRuler->setCurrentSegment(s, true);
+
+}
+
+void
+TrackButtons::segmentRemoved(const Composition *, Segment *s)
 {
     // If recording causes the track heights to change, this makes sure
     // they go back if needed when recording stops.
-
     slotUpdateTracks();
+
+    ChordNameRuler *chordNameRuler =   RosegardenMainWindow::self()
+                                     ->getView()
+                                     ->getTrackEditor()
+                                     ->getChordNameRuler();
+    chordNameRuler->removeSegment(s);
+
+    // Unknown what current selected segment (if any) is, and not
+    // important in this context anyway, but need to force recalculate
+    // of chords, and redraw if ruler is curently shown.
+    chordNameRuler->setCurrentSegment(nullptr, true);
 }
 
 void

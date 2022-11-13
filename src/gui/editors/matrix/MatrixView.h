@@ -317,6 +317,7 @@ private:
     bool m_inChordMode;
 
     QString m_contextHelp;
+    QString m_currentWindowTitle;
 
     int getPitchFromNoteInsertAction(QString name,
                                      Accidental &accidental,
