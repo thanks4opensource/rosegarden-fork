@@ -1,3 +1,17 @@
+#   Rosegarden
+#   A MIDI and audio sequencer and musical notation editor.
+#   Copyright 2000-2022 the Rosegarden development team.
+#   Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+#
+#   Other copyrights also apply to some parts of this work.	 Please
+#   see the AUTHORS file and individual file headers for details.
+#
+#   This program is free software; you can redistribute it and/or
+#   modify it under the terms of the GNU General Public License as
+#   published by the Free Software Foundation; either version 2 of the
+#   License, or (at your option) any later version.	 See the file
+#   COPYING included with this distribution for more information.
+
 # CMake version required. This must be the very first line, because it sets default policies affecting everything else
 cmake_minimum_required(VERSION 3.1)
 
@@ -5,7 +19,13 @@ cmake_minimum_required(VERSION 3.1)
 project(rosegarden)
 
 # Version
-set(ROSEGARDEN_VERSION "22.12")
+set(ROSEGARDEN_VERSION "thanks4opensource (fork)")
+
+# t4os date
+set(ROSEGARDEN_VERSION_DATE "2022-11-15")
+
+# Codename
+# set(ROSEGARDEN_VERSION "22.12")
 set(ROSEGARDEN_CODENAME "Enchantress")
 #set(ROSEGARDEN_CODENAME "Flutterbye")
 #set(ROSEGARDEN_CODENAME "Grace Note")

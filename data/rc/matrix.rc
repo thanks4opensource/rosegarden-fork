@@ -1,5 +1,21 @@
 <!DOCTYPE kpartgui SYSTEM "kpartgui.dtd">
 
+<!--
+    Rosegarden
+    A MIDI and audio sequencer and musical notation editor.
+    Copyright 2000-2022 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+
+    Other copyrights also apply to some parts of this work. Please
+    see the AUTHORS file and individual file headers for details.
+
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 2 of the
+    License, or (at your option) any later version. See the file
+    COPYING included with this distribution for more information.
+-->
+
 <kpartgui name="Rosegarden::Matrix" version="1501">
 
 <MenuBar>
@@ -58,7 +74,7 @@
                 text="Movable-do solfège: Do, Di/Ra, Re, ... Li/Ta, Ti"
                 checked="false" />
         <Action name="key_integer_names"
-                text="In-key integers key: 0, 1, 2, ... 10, 11"
+                text="In-key integers: 0, 1, 2, ... 10, 11"
                 checked="false" />
 	<Separator/>
         <Action name="chord_spelling_off"

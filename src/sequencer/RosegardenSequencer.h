@@ -4,6 +4,7 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as

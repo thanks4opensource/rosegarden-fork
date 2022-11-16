@@ -4,6 +4,7 @@
     Rosegarden
     A sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
     See the AUTHORS file for more details.
 
     This file is Copyright 2002
