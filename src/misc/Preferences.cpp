@@ -158,31 +158,6 @@ bool Preferences::getStopAtSegmentEnd()
     return stopAtSegmentEnd.get();
 }
 
-PreferenceBool jumpToLoop(SequencerOptionsConfigGroup, "jumpToLoop", true);
-
-void Preferences::setJumpToLoop(bool value)
-{
-    jumpToLoop.set(value);
-}
-
-bool Preferences::getJumpToLoop()
-{
-    return jumpToLoop.get();
-}
-
-PreferenceBool advancedLooping(
-        SequencerOptionsConfigGroup, "advancedLooping", false);
-
-void Preferences::setAdvancedLooping(bool value)
-{
-    advancedLooping.set(value);
-}
-
-bool Preferences::getAdvancedLooping()
-{
-    return advancedLooping.get();
-}
-
 namespace
 {
     const QString AudioFileLocationDialogGroup = "AudioFileLocationDialog";

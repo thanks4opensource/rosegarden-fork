@@ -1333,12 +1333,8 @@ void RosegardenMainViewWidget::slotShowTempoRuler(bool v)
 
 void RosegardenMainViewWidget::slotShowChordNameRuler(bool v)
 {
-    if (v) {
-        m_trackEditor->getChordNameRuler()->setStudio(&RosegardenDocument::currentDocument->getStudio());
-        m_trackEditor->getChordNameRuler()->show();
-    } else {
-        m_trackEditor->getChordNameRuler()->hide();
-    }
+    if (v) m_trackEditor->getChordNameRuler()->show();
+    else   m_trackEditor->getChordNameRuler()->hide();
 }
 
 void RosegardenMainViewWidget::slotShowPreviews(bool v)

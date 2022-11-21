@@ -139,7 +139,6 @@ ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
         m_enableChooseActiveSegments     (true),
         m_currentSegment                 (nullptr),
         m_numActiveSegments              (0),
-        m_studio                         (nullptr),
         m_chordAndKeyNames               (new Segment()),
         m_implicitSegments               (true),
         m_conflictingKeyChanges          (false),
@@ -168,23 +167,17 @@ ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
     // Populate m_chordNote with all segments in composition
     // Used for main window -- matrix and notation register
     //   explicit list of segments via other construtor.
-    m_segments.clear();
+    const Studio &studio(doc->currentDocument->getStudio());
     for (Composition::iterator   ci  = m_composition->begin() ;
                                  ci != m_composition->end() ;
                                ++ci) {
-        if (m_studio) {
-            TrackId ti = (*ci)->getTrack();
-            Instrument   *instr
-                       =   m_studio
-                         ->getInstrumentById(  m_composition
-                                             ->getTrackById(ti)
-                                             ->getInstrument());
+        TrackId ti = (*ci)->getTrack();
+        Instrument *instr = studio.getInstrumentById(  m_composition
+                                                     ->getTrackById(ti)
+                                                     ->getInstrument());
 
-            if (   instr
-                && instr->getType() == Instrument::Midi
-                && instr->isPercussion())
-                continue;
-        }
+        if (instr && instr->isPercussion())
+            continue;
 
         m_segments.push_back(SegmentAndActive{*ci, true});
 
@@ -271,7 +264,6 @@ ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
         m_enableChooseActiveSegments     (false),
         m_currentSegment                 (nullptr),
         m_numActiveSegments              (0),
-        m_studio                         (nullptr),
         m_chordAndKeyNames               (new Segment()),
         m_implicitSegments               (false),
         m_conflictingKeyChanges          (false),
@@ -826,12 +818,6 @@ ChordNameRuler::addSegment(Segment *segment)
 
     connect(segment, &Segment::contentsChanged,
             this,    &ChordNameRuler::slotSegmentContentsChanged);
-}
-
-void
-ChordNameRuler::setStudio(Studio *studio)
-{
-    m_studio = studio;
 }
 
 // See documentation in .h file
