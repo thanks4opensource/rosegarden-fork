@@ -584,6 +584,7 @@ class ChordAnalyzerImpl
                      bool                           &conflictingKeyChanges,
                      const std::vector<Segment*>     segments,
                      const Segment                  *currentSegment,
+                     const bool                      keysOnly,
                      const timeT                     timeWindow,
                      bool                            onePerTimePeriod);
 
@@ -2271,6 +2272,7 @@ ChordAnalyzer::~ChordAnalyzer() { delete m_impl; }
 
 void ChordAnalyzer::updateChordNameStyles() { m_impl->updateChordNameStyles(); }
 
+// See documentation in .h file
 void
 ChordAnalyzer::labelChords(
 Segment                         &chordsAndKeys,
@@ -2279,6 +2281,7 @@ std::map<timeT, int>            &roots,
 bool                            &conflictingKeyChanges,
 const std::vector<Segment*>      segments,
 const Segment                   *currentSegment,
+const bool                       keysOnly,
 const timeT                      timeWindow,
 bool                             onePerTimePeriod)
 {
@@ -2288,6 +2291,7 @@ bool                             onePerTimePeriod)
                         conflictingKeyChanges,
                         segments,
                         currentSegment,
+                        keysOnly,
                         timeWindow,
                         onePerTimePeriod);
 }
@@ -2300,6 +2304,7 @@ std::map<timeT, int>            &roots,
 bool                            &conflictingKeyChanges,
 const std::vector<Segment*>      segments,
 const Segment                   *currentSegment,
+const bool                       keysOnly,
 const timeT                      timeWindow,
 bool                             onePerTimePeriod)
 {
@@ -2349,10 +2354,6 @@ bool                             onePerTimePeriod)
     if (!currentSegment)
         currentSegment = segments[0];
 
-    // To ensure that current segment's key changes override any
-    // conflicting ones from other segments
-    std::set<timeT> currentSegmentKeyChangeTimes;
-
     // For finding conflicting key changes
     std::map<timeT, std::pair<std::string, unsigned>> keyChanges;
     conflictingKeyChanges = false;
@@ -2373,32 +2374,7 @@ bool                             onePerTimePeriod)
                         ++keyChange->second.second;
                 }
 
-                if (segment == currentSegment)
-                    currentSegmentKeyChangeTimes.insert(time);
-
-                // Overwrite existing key change at time, unless
-                //   is from current segment (takes precedence).
-                // Otherwise later segments' conflicting key changes
-                //   arbitrarily "win" (for lack of any better policy).
-                auto existing = notesAndKeys.find(time);
-                if (   existing != notesAndKeys.end()
-                    && existing->second.onOffKey == NoteOrKey::KEY) {
-                           // Current segment always wins
-                    if (   segment == currentSegment
-                           // Later segments win over earlier non-current ones
-                        ||    currentSegmentKeyChangeTimes.find(time)
-                           == currentSegmentKeyChangeTimes.end()) {
-                        notesAndKeys.erase(existing);
-                        Key key(*event);
-                        notesAndKeys.insert({time, NoteOrKey(key.getName())});
-                        // Can't do "keys[time] = key" because const
-                        auto previous = keys.find(time);
-                        if (previous != keys.end())  // safety, always true
-                            keys.erase(previous);
-                        keys.insert({time, key});
-                    }
-                }
-                else {   // No key change already at this time
+                if (segment == currentSegment) {  // Only current segment's keys
                     Key key(*event);
                     notesAndKeys.insert({time, NoteOrKey(key.getName())});
                     keys        .insert({time, key});
@@ -2446,6 +2422,15 @@ bool                             onePerTimePeriod)
                 conflictingKeyChanges = true;
 
     if (notesAndKeys.empty()) return;
+
+    if (keysOnly) {
+        for (const auto  &timeAndNoteOrKey : notesAndKeys)
+            if (timeAndNoteOrKey.second.onOffKey == NoteOrKey::KEY)
+                 chords.insert( Text(timeAndNoteOrKey.second.name,
+                                     Text::KeyName)
+                               .getAsEvent(timeAndNoteOrKey.first));
+        return;
+    }
 
     if (onePerTimePeriod) labelChordsOnePerTimePeriod(notesAndKeys,
                                                       chords,

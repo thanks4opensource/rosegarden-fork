@@ -88,7 +88,9 @@ class ChordAnalyzer
     // Use "currentSegment" for key at chord times.
     // Set "conflictingKeyChanges" true if different key changes at
     //   same times in different "segments" (or key change at
-    //   time in one or more and not in one or more others)
+    //   time in one or more and not in one or more others).
+    // If "keysOnly", only fille "chordsAndKeys" with key changes
+    //   (no chords).
     // Two different chord analysis algorithms:
     //   If "onePerTimePeriod" true, all notes within "timeWindow"
     //      period (aligned modulo that time). Includes arpeggiated
@@ -100,6 +102,7 @@ class ChordAnalyzer
                      bool                           &conflictingKeyChanges,
                      const std::vector<Segment*>     segments,
                      const Segment                  *currentSegment,
+                     const bool                      keysOnly,
                      const timeT                     timeWindow,
                      bool                            onePerTimePeriod);
 

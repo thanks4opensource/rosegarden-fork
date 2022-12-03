@@ -198,6 +198,27 @@ Segment::~Segment()
 }
 
 bool
+Segment::isPercussion()
+const
+{
+    if (!isMIDI()) return false;
+
+    // Should not be called for segment not in composition.
+    if (!m_composition) return false;
+
+    Track *track =  m_composition->getTrackById(getTrack());
+    if (!track) return false;
+
+    Instrument *instrument =   RosegardenDocument::currentDocument
+                             ->getStudio()
+                              .getInstrumentById(track->getInstrument());
+    if (!instrument) return false;
+
+    // Percussion instruments have key mappings (pitch to drum name)
+    return static_cast<bool>(instrument->getKeyMapping());
+}
+
+bool
 Segment::setAsReference() {
     if (!isLinked()) return false;
     getLinker()->setReference(this);

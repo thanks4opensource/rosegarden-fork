@@ -35,18 +35,19 @@
 
 #include "gui/application/RosegardenMainWindow.h"
 
+#include "gui/general/GUIPalette.h"
+
 #include "gui/widgets/Panner.h"
 #include "gui/widgets/Panned.h"
 #include "gui/widgets/Thumbwheel.h"
-
-#include "gui/rulers/PitchRuler.h"
-#include "gui/rulers/PercussionPitchRuler.h"
 
 #include "gui/rulers/ControlRulerWidget.h"
 #include "gui/rulers/StandardRuler.h"
 #include "gui/rulers/TempoRuler.h"
 #include "gui/rulers/ChordNameRuler.h"
 #include "gui/rulers/LoopRuler.h"
+#include "gui/rulers/PitchRuler.h"
+#include "gui/rulers/PercussionPitchRuler.h"
 
 #include "gui/general/ThornStyle.h"
 
@@ -120,6 +121,8 @@ MatrixWidget::MatrixWidget(MatrixView *matrixView) :
     m_changerWidget(nullptr),
     m_segmentChanger(nullptr),
     m_lastSegmentChangerValue(0),
+    m_extantKeyLabelMarkers(nullptr),
+    m_extantKeyLabelChords(nullptr),
     m_segmentLabel(nullptr),
     m_instrument(nullptr),
     m_localMapping(nullptr),
@@ -486,13 +489,43 @@ MatrixWidget::setSegments(RosegardenDocument *document,
     connect(m_scene, &MatrixScene::selectionChanged,
             this, &MatrixWidget::selectionChanged);
 
+
+    m_extantKeyLabelMarkers = new QLabel();
+    m_extantKeyLabelMarkers->setStyleSheet(
+         QString("QLabel {background-color : %1;"
+                          "color : black;"
+                          "font-weight: bold}")
+        .arg(GUIPalette::getColour(  GUIPalette
+                                   ::ChordNameRulerBackground)
+                                   .name()));
+    m_layout->addWidget(m_extantKeyLabelMarkers,
+                        TOPRULER_ROW,
+                        HEADER_COL,
+                        1,
+                        1);
+
+    m_extantKeyLabelChords = new QLabel();
+    m_extantKeyLabelChords->setStyleSheet(
+         QString("QLabel {background-color : %1;"
+                          "color : black;"
+                          "font-weight: bold}")
+        .arg(GUIPalette::getColour(  GUIPalette
+                                   ::ChordNameRulerBackground)
+                                   .name()));
+    m_layout->addWidget(m_extantKeyLabelChords,
+                        CHORDNAMERULER_ROW,
+                        HEADER_COL,
+                        1,
+                        1);
+
+
     m_topStandardRuler = new StandardRuler(document,
                                            m_referenceScale,
                                            false);
 
     m_bottomStandardRuler = new StandardRuler(document,
                                                m_referenceScale,
-                                               true);
+                                           true);
 
     m_tempoRuler = new TempoRuler(m_referenceScale,
                                   document,
@@ -841,6 +874,30 @@ MatrixWidget::zoomOutFromPanner()
 }
 
 void
+MatrixWidget::setExtantKeyLabel(
+int         x,
+const bool  xProvided)
+{
+    if (!xProvided) {
+        QPointF topLeft = m_panned->mapToScene(0, 0);
+        x = topLeft.x() * m_hZoomFactor;
+    }
+
+    timeT                beginTime      = m_referenceScale->getTimeForX(x);
+    const Segment       *currentSegment = m_scene->getCurrentSegment();
+    const std::string    keyName        =   currentSegment
+                                          ->getKeyAtTime(beginTime)
+                                           .getName();
+
+    if (keyName != m_extantKeyName) {
+        m_extantKeyName = keyName;
+        QString qstring(QString::fromStdString(m_extantKeyName));
+        m_extantKeyLabelMarkers->setText(qstring);
+        m_extantKeyLabelChords->setText(qstring);
+    }
+}
+
+void
 MatrixWidget::slotScrollRulers()
 {
     // Get time of the window left
@@ -855,6 +912,8 @@ MatrixWidget::slotScrollRulers()
     m_bottomStandardRuler->slotScrollHoriz(x - 2);
     m_tempoRuler->slotScrollHoriz(x - 2);
     m_chordNameRuler->slotScrollHoriz(x - 2);
+
+    setExtantKeyLabel(x, true);
 }
 
 EventSelection *
@@ -1307,14 +1366,20 @@ void
 MatrixWidget::setChordNameRulerVisible(bool visible)
 {
     if (visible) {
+        m_extantKeyLabelMarkers->setVisible(false);
+
         m_chordNameRuler->setCurrentSegment(m_view->getCurrentSegment(),
                                             true);  // true == force recalc
+
+        m_extantKeyLabelChords->setVisible(true);
         m_chordNameRuler->show();
         m_chordNameRuler->analyzeChordsAndKeyChanges(false); // don't signal ...
         m_scene->updateNoteLabels();                     // doing explitly
     }
     else {
+        m_extantKeyLabelChords->setVisible(false);
         m_chordNameRuler->hide();
+        m_extantKeyLabelMarkers->setVisible(true);
         m_scene->updateNoteLabels();
     }
 }
@@ -1585,6 +1650,8 @@ const Segment *segment)
     // Foreground/Text
     palette.setColor(QPalette::WindowText, segment->getPreviewColour());
     m_segmentLabel->setPalette(palette);
+
+    setExtantKeyLabel();
 }
 
 void
@@ -1789,17 +1856,6 @@ MatrixWidget::needUpdateNoteLabels()
            || m_chordSpellingType != ChordSpellingType::OFF
 #endif
            ;
-}
-
-void
-MatrixWidget::slotUpdateChordNameRuler()
-{
-    if (!m_chordNameRuler->isVisible())
-        return;
-
-    m_chordNameRuler->analyzeChordsAndKeyChanges();
-
-    if (needUpdateNoteLabels()) m_scene->updateNoteLabels();
 }
 
 void

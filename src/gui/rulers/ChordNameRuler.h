@@ -130,6 +130,10 @@ public:
     // Used by MatrixScene::slotKeySignaturesChanged()
     bool conflictingKeyChanges() const { return m_conflictingKeyChanges; }
 
+    // Used by MatrixElement methods to determine if should label
+    // notes with chord degrees.
+    bool haveChords() const { return isVisible() && m_showChords; }
+
     // Remove/add segment from current set used as sources for notes
     // for chord analysis
     void removeSegment(const Segment *segment);
@@ -173,6 +177,8 @@ protected slots:
     void slotInsertKeyChange();
     void slotCopyChords();
     void slotChooseActiveSegments();
+    void slotShowChords();
+    void slotShowKeys();
     void slotSetAlgorithm();
     void slotSetQuantization();
     void slotSetUnarpeggiation();
@@ -205,6 +211,8 @@ private:
 
     ChordAnalyzer *m_analyzer;  // chord analysis engine(s)
 
+    bool    m_showChords;
+    bool    m_showKeyChanges;
     bool    m_keyChangingEnabled;
     bool    m_chordCopyingEnabled;
 
@@ -221,7 +229,8 @@ private:
     unsigned int m_compositionRefreshStatusId;
 
     QMenu       *m_menu;
-    QAction     *m_quantizeAction,
+    QAction     *m_showChordsAction,
+                *m_quantizeAction,
                 *m_unarpeggiateAction,
                 *m_quantizationNoneNoteAction,
                 *m_quantizationNote128thNoteAction,
@@ -258,6 +267,9 @@ private:
                 *m_unarpeggiationWholeNoteAction,
                 *m_unarpeggiationWholeDotNoteAction,
                 *m_unarpeggiationDoubleNoteAction,
+                *m_showKeysAction,
+                *m_insertKeyChangeAction,
+                *m_chordCopyAction,
                 *m_pitchLetterAction,
                 *m_pitchIntegerAction,
                 *m_keyRomanNumeralAction,

@@ -423,9 +423,6 @@ private slots:
     /// Instrument is being destroyed
     void slotInstrumentGone();
 
-    // Command has executed, update ruler and possibly note labels
-    void slotUpdateChordNameRuler();
-
     // User has changed chord name ruler segments (to analzyze)
     void slotChordAnalysisChanged();
 
@@ -474,10 +471,14 @@ private:
     Panner *m_panner; // I own this
     void zoomInFromPanner();
     void zoomOutFromPanner();
+    void setExtantKeyLabel(int x=0, const bool xProvided=false);
 
     QWidget *m_changerWidget;
     Thumbwheel *m_segmentChanger;
     int m_lastSegmentChangerValue;
+    QLabel  *m_extantKeyLabelMarkers,   // One or the other of these two
+            *m_extantKeyLabelChords;    // in use at any given time.
+    std::string m_extantKeyName;
     QLabel *m_segmentLabel;
 
 

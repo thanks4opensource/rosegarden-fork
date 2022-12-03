@@ -351,7 +351,7 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
         if (      matrixWidget->getChordSpellingType()
                != MatrixWidget::ChordSpellingType::OFF
             && chordNameRuler
-            && chordNameRuler->isVisible()) {
+            && chordNameRuler->haveChords()) {
             int rootDegree = chordNameRuler->chordRootPitchAtTime(time);
             if (rootDegree != -1) {
                 unsigned chordDegree = (pitch + 12 - rootDegree) % 12;

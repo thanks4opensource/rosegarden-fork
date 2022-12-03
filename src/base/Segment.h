@@ -161,6 +161,11 @@ public:
     bool isAudio() const  { return (m_type == Audio); }
 
     /**
+     * If isMIDI(), type of segment's track's instrument, otherwise false
+     */
+    bool isPercussion() const;
+
+    /**
      * Get the element name this class will have when serialised
      */
     virtual QString getXmlElementName() const { return "segment"; }

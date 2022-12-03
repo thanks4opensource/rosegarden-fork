@@ -122,7 +122,7 @@
     </Menu>
     <Menu name="rulers" append="show_merge">
       <text>&amp;Rulers</text>
-        <Action name="show_chords_ruler" text="Show Ch&amp;ord Name Ruler" checked="false" />
+        <Action name="show_chords_ruler" text="Show Ch&amp;ord/Key Ruler" checked="false" />
         <Action name="show_raw_note_ruler" text="Show Ra&amp;w Note Ruler" checked="false" />
         <Action name="show_tempo_ruler" text="Show &amp;Tempo Ruler" checked="false" />
         <Separator/>

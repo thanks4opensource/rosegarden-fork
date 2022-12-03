@@ -150,7 +150,7 @@
       </Menu>
       <Menu name="rulers">
         <text>&amp;Rulers</text>
-        <Action name="show_chords_ruler" text="Show Ch&amp;ord Name Ruler" checked="false" />
+        <Action name="show_chords_ruler" text="Show Ch&amp;ord/Key Ruler" checked="false" />
         <Action name="show_tempo_ruler" text="Show &amp;Tempo Ruler" checked="true" />
         <Separator/>
         <Action name="toggle_velocity_ruler" text="Show &amp;Velocity Ruler" icon="ruler-velocity" checked="false" />
