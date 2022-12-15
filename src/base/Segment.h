@@ -254,6 +254,14 @@ public:
      */
     void setLowestPlayable(int pitch) { m_lowestPlayable = pitch; }
 
+    /**
+     * Returns false if segment doesn't intersect time range
+     */
+    bool getLowHighPitches(int &lowestPitch,
+                           int &highestPitch,
+                           const int minTime,
+                           const int maxTime) const;
+
 
     //////
     //

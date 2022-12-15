@@ -4,10 +4,11 @@
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
- 
+    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -23,9 +24,12 @@
 #include "gui/general/GUIPalette.h"
 #include "misc/Debug.h"
 #include "base/Profiler.h"
+#include "document/RosegardenDocument.h"
 
+#include <QAction>
 #include <QColor>
 #include <QGraphicsScene>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -47,9 +51,11 @@ public:
     friend class Panner;
 };
 
-Panner::Panner() :
+Panner::Panner(bool inMatrixEditor) :
+    m_inMatrixEditor(inMatrixEditor),
     m_pointerHeight(0),
     m_pointerVisible(false),
+    m_fitIgnorePercussion(true),
     m_clicked(false)
 {
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -60,7 +66,99 @@ Panner::Panner() :
 #endif
                         );
     setMouseTracking(true);
+#if 0   // Old code. Documented to disable mouse events, but getting
+        // even with, so removed because unwanted and doing nothing.
     setInteractive(false);
+#endif
+
+    const RosegardenDocument *document = RosegardenDocument::currentDocument;
+    const Composition &composition(document->getComposition());
+
+    m_menu = new QMenu(tr("Fit notes"), this);
+
+    m_fitVisibleAction = m_menu->addAction("fit_visible");
+    m_fitVisibleAction->setText(tr("Fit visible measures' notes vertical"));
+    connect(m_fitVisibleAction,
+            &QAction::triggered,
+            this,
+            [this]
+            {
+                emit zoomFitNotes(static_cast<unsigned>(FitMode::VISIBLE),
+                                  false,
+                                  this->m_fitIgnorePercussion);
+                this->viewport()->update();
+            });
+
+    m_fitAllAction = m_menu->addAction("fit_all");
+    m_fitAllAction->setText(tr("Fit all notes vertical"));
+    connect(m_fitAllAction,
+            &QAction::triggered,
+            this,
+            [this]
+            {
+                emit zoomFitNotes(static_cast<unsigned>(FitMode::ALL),
+                                  false,
+                                  this->m_fitIgnorePercussion);
+                this->viewport()->update();
+            });
+
+    m_fitLoopAction = m_menu->addAction("fit_loop");
+    m_fitLoopAction->setEnabled(composition.loopRangeIsActive());
+    m_fitLoopAction->setText(tr("Fit loop range notes vertical"));
+    connect(m_fitLoopAction,
+            &QAction::triggered,
+            this,
+            [this]
+            {
+                emit zoomFitNotes(static_cast<unsigned>(FitMode::LOOP),
+                                  false,
+                                  this->m_fitIgnorePercussion);
+                this->viewport()->update();
+            });
+
+    m_fitLoopBothAction = m_menu->addAction("fit_loop_both");
+    m_fitLoopBothAction->setEnabled(composition.loopRangeIsActive());
+    m_fitLoopBothAction->setText(tr("Fit loop range notes"));
+    connect(m_fitLoopBothAction,
+            &QAction::triggered,
+            this,
+            [this]
+            {
+                emit zoomFitNotes(static_cast<unsigned>(FitMode::LOOP),
+                                  true,
+                                  this->m_fitIgnorePercussion);
+                this->viewport()->update();
+            });
+
+    m_fitAllBothAction = m_menu->addAction("fit_all");
+    m_fitAllBothAction->setText(tr("Fit all notes"));
+    connect(m_fitAllBothAction,
+            &QAction::triggered,
+            this,
+            [this]
+            {
+                emit zoomFitNotes(static_cast<unsigned>(FitMode::ALL),
+                                  true,
+                                  this->m_fitIgnorePercussion);
+                this->viewport()->update();
+            });
+
+    m_fitIgnorePercussionAction = m_menu->addAction("ignore_percussion");
+    m_fitIgnorePercussionAction->setCheckable(true);
+    m_fitIgnorePercussionAction->setChecked(m_fitIgnorePercussion);
+    m_fitIgnorePercussionAction->setText(tr("Ignore percussion"));
+    connect(m_fitIgnorePercussionAction,
+            &QAction::triggered,
+            this,
+            [this]
+            {
+                  this->m_fitIgnorePercussion
+                = this->m_fitIgnorePercussionAction->isChecked();
+            });
+
+    // Only enable loop range options if loop range is active
+    connect(document,   &RosegardenDocument::loopRangeActiveChanged,
+            this,       &Panner::slotLoopRangeActiveChanged);
 }
 
 void
@@ -79,10 +177,10 @@ Panner::setScene(QGraphicsScene *s)
 }
 
 void
-Panner::slotSetPannedRect(QRectF rect) 
+Panner::slotSetPannedRect(QRectF rect)
 {
     RG_DEBUG << "Panner::slotSetPannedRect(" << rect << ")";
-    
+
     m_pannedRect = rect;
     viewport()->update();
 }
@@ -126,6 +224,18 @@ Panner::slotSceneRectChanged(const QRectF &newRect)
     fitInView(newRect, Qt::KeepAspectRatio);
     m_cache = QPixmap();
     viewport()->update();
+}
+
+void
+Panner::slotLoopRangeActiveChanged()
+{
+    bool active =   RosegardenDocument
+                  ::currentDocument
+                  ->getComposition()
+                   .loopRangeIsActive();
+
+    m_fitLoopAction    ->setEnabled(active);
+    m_fitLoopBothAction->setEnabled(active);
 }
 
 void
@@ -217,10 +327,15 @@ Panner::drawItems(QPainter *painter, int numItems,
     painter->drawPixmap(0, 0, m_cache);
     painter->restore();
 }
- 
+
 void
 Panner::mousePressEvent(QMouseEvent *e)
 {
+    if (m_inMatrixEditor && e->button() == Qt::RightButton) {
+        m_menu->exec(QCursor::pos());
+        return;
+    }
+
     if (e->button() != Qt::LeftButton) {
         QGraphicsView::mouseDoubleClickEvent(e);
         return;
@@ -290,7 +405,7 @@ Panner::mouseMoveEvent(QMouseEvent *e)
             delta.setY(dy);
         }
     }
-        
+
     nr.translate(delta);
     slotSetPannedRect(nr);
     emit pannedRectChanged(m_pannedRect);
@@ -326,6 +441,17 @@ Panner::wheelEvent(QWheelEvent *e)
 }
 
 void
+Panner::enterEvent(QEvent *e)
+{
+    if (m_inMatrixEditor) {
+        QString help(tr("Click-drag to move, double-click to jump, "
+                        "right-click for fit view menu."));
+        emit showContextHelp(help);
+    }
+    QGraphicsView::enterEvent(e);
+}
+
+void
 Panner::moveTo(QPoint p)
 {
     QPointF sp = mapToScene(p);
@@ -337,5 +463,4 @@ Panner::moveTo(QPoint p)
     viewport()->update();
 }
 
-
-}
+}  // namespace Rosegarden

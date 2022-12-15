@@ -105,6 +105,9 @@ enum {
     MAIN_COL,
 };
 
+const float MatrixWidget::ZOOM_FACTOR = pow(2.0, 0.25);
+
+
 MatrixWidget::MatrixWidget(MatrixView *matrixView) :
     m_view(matrixView),
     m_document(nullptr),
@@ -217,7 +220,7 @@ MatrixWidget::MatrixWidget(MatrixView *matrixView) :
     pannerLayout->addWidget(m_changerWidget);
 
     // the panner
-    m_panner = new Panner;
+    m_panner = new Panner(true);  // true == in matrix editor
     m_panner->setMaximumHeight(60);
     m_panner->setOptimizationFlag(QGraphicsView::DontAdjustForAntialiasing, true);
 
@@ -328,6 +331,9 @@ MatrixWidget::MatrixWidget(MatrixView *matrixView) :
     connect(m_panner, &Panner::zoomOut,
             this, &MatrixWidget::slotSyncPannerZoomOut);
 
+    connect(m_panner, &Panner::zoomFitNotes,
+            this,     &MatrixWidget::slotZoomFitNotes);
+
     connect(m_pianoView, &Panned::wheelEventReceived,
             m_panned, &Panned::slotEmulateWheelEvent);
 
@@ -341,13 +347,13 @@ MatrixWidget::MatrixWidget(MatrixView *matrixView) :
 
     m_toolBox = new MatrixToolBox(this);
 
-    // Relay context help from matrix tools
-    connect(m_toolBox, &BaseToolBox::showContextHelp,
-            this, &MatrixWidget::showContextHelp);
-
-    // Relay context help from matrix rulers
-    connect(m_controlsWidget, &ControlRulerWidget::showContextHelp,
-            this, &MatrixWidget::showContextHelp);
+    // Relay context help from tools, rulers, and panner
+    connect(m_toolBox,          &BaseToolBox::showContextHelp,
+            this,               &MatrixWidget::showContextHelp);
+    connect(m_controlsWidget,   &ControlRulerWidget::showContextHelp,
+            this,               &MatrixWidget::showContextHelp);
+    connect(m_panner,           &Panner::showContextHelp,
+            this,               &MatrixWidget::showContextHelp);
 
 #if 0  // Need to delay this until after setSegments() creates MatrixScene()
     MatrixMover *matrixMoverTool = dynamic_cast <MatrixMover *> (m_toolBox->getTool(MatrixMover::ToolName()));
@@ -814,6 +820,7 @@ MatrixWidget::setVerticalZoomFactor(double factor)
         m_referenceScale->setYZoomFactor(m_vZoomFactor);
     m_panned->resetTransform();
     m_panned->scale(m_hZoomFactor, m_vZoomFactor);
+
     // Only vertical zoom factor is applied to pitch ruler
     QTransform m;
     m.scale(1.0, m_vZoomFactor);
@@ -828,8 +835,8 @@ MatrixWidget::setVerticalZoomFactor(double factor)
 void
 MatrixWidget::zoomInFromPanner()
 {
-    m_hZoomFactor /= 1.1;
-    m_vZoomFactor /= 1.1;
+    m_hZoomFactor /= ZOOM_FACTOR;
+    m_vZoomFactor /= ZOOM_FACTOR;
     if (m_referenceScale)
         m_referenceScale->setXZoomFactor(m_hZoomFactor);
     QTransform m;
@@ -852,8 +859,8 @@ MatrixWidget::zoomInFromPanner()
 void
 MatrixWidget::zoomOutFromPanner()
 {
-    m_hZoomFactor *= 1.1;
-    m_vZoomFactor *= 1.1;
+    m_hZoomFactor *= ZOOM_FACTOR;
+    m_vZoomFactor *= ZOOM_FACTOR;
     if (m_referenceScale)
         m_referenceScale->setXZoomFactor(m_hZoomFactor);
     QTransform m;
@@ -1413,9 +1420,9 @@ MatrixWidget::slotHorizontalThumbwheelMoved(int v)
 
     for (int i = 0; i < steps; ++i) {
         if (zoomingIn)
-            newZoom *= 1.1;
+            newZoom *= ZOOM_FACTOR;
         else
-            newZoom /= 1.1;
+            newZoom /= ZOOM_FACTOR;
     }
 
     //RG_DEBUG << "slotHorizontalThumbwheelMoved(): v is: " << v << " h zoom factor was: " << m_lastH << " now: " << newZoom << " zooming " << (zoomingIn ? "IN" : "OUT");
@@ -1447,9 +1454,9 @@ MatrixWidget::slotVerticalThumbwheelMoved(int v)
 
     for (int i = 0; i < steps; ++i) {
         if (zoomingIn)
-            newZoom *= 1.1;
+            newZoom *= ZOOM_FACTOR;
         else
-            newZoom /= 1.1;
+            newZoom /= ZOOM_FACTOR;
     }
 
     //RG_DEBUG << "slotVerticalThumbwheelMoved(): v is: " << v << " z zoom factor was: " << m_lastV << " now: " << newZoom << " zooming " << (zoomingIn ? "IN" : "OUT");
@@ -1928,6 +1935,105 @@ MatrixWidget::slotZoomOut()
 
     m_Hzoom->setValue(v);
     slotHorizontalThumbwheelMoved(v);
+}
+
+void
+MatrixWidget::slotZoomFitNotes(
+const unsigned  modeAsUnsigned,
+const bool      fitHorizontal,
+const bool      ignorePercussion)
+{
+    const Panner::FitMode   mode       = static_cast<Panner::FitMode>(
+                                                    modeAsUnsigned);
+    const QRect             pannedRect = m_panned->rect();
+    const RulerScale       *rulerScale = m_scene->getRulerScale();
+    const unsigned          yRes       = m_scene->getYResolution() + 1;
+                                         // +1 because same is added in
+                                         // MatrixScene, MatrixElement, etc.
+    const Composition      *composition = nullptr;
+          int               lowestPitch,
+                            highestPitch,
+                            minTime = 0,
+                            maxTime = 0;
+
+    switch (mode) {
+        case Panner::FitMode::ALL:
+            composition = &m_document->getComposition();
+            minTime = composition->getMinSegmentStartTime();
+            maxTime = composition->getMaxSegmentEndTime();
+            break;
+
+        case Panner::FitMode::VISIBLE:
+            {
+                const QRectF sceneRect  =   m_panned
+                                          ->mapToScene(pannedRect)
+                                           .boundingRect();
+
+                minTime =   rulerScale->getTimeForX(sceneRect.x());
+                maxTime =   minTime
+                          + rulerScale->getDurationForWidth(sceneRect.x(),
+                                                            sceneRect.width());
+            }
+            break;
+
+        case Panner::FitMode::LOOP:
+            composition = &m_document->getComposition();
+            minTime = composition->getLoopStart();
+            maxTime = composition->getLoopEnd();
+            break;
+     }
+
+    m_scene->getLowHighPitches(lowestPitch,
+                               highestPitch,
+                               minTime,
+                               maxTime,
+                               ignorePercussion);
+
+    // Check for no notes in time range
+    if (lowestPitch == 128 && highestPitch == -1)
+        return;
+
+    static const int EXTRA = 1;  // Show upper/lower outlines of high/low notes
+    const double yPixels    =     (  (highestPitch - lowestPitch)
+                                   + 1)  // top highest to bottom lowest
+                                * yRes
+                              + 4 * EXTRA;   // top and bottom space
+    m_vZoomFactor           = pannedRect.height() / yPixels;
+    const int yScroll       = static_cast<int>(round(  (    (127 - highestPitch)
+                                                          * yRes
+                                                        - EXTRA)    // top space
+                                                     * m_vZoomFactor));
+    int prevHScroll         = 0;  // avoid compiler unititialized warning
+
+    if (fitHorizontal)
+        m_hZoomFactor =   pannedRect.width()
+                        * m_scene->getRulerScale()->getUnitsPerPixel()
+                        / static_cast<double>(maxTime - minTime);
+    else   // see prevHScroll, below
+        prevHScroll = m_panned->horizontalScrollBar()->sliderPosition();
+
+    setVerticalZoomFactor(m_vZoomFactor);
+    m_panned->verticalScrollBar()->setSliderPosition(yScroll);
+
+    if (fitHorizontal) {
+        setHorizontalZoomFactor(m_hZoomFactor);
+          m_panned
+        ->horizontalScrollBar()
+        ->setSliderPosition(static_cast<int>(
+                            round(  minTime
+                                  * m_hZoomFactor
+                                  /   m_scene->getRulerScale()
+                                    ->getUnitsPerPixel())));
+    }
+    else    // Hack to work around Qt bug (roundoff error?)
+            // Calling m_panned->resetTransform() in setVerticalZoomFactor()
+            //   for some reason subtracts 1 from the
+            //   m_panned->horizontalScrollBar()->sliderPosition().
+            // Need to reset it back, here,, otherwise repeated
+            //   inovocations of this with e.g. FitMode::VISIBLE and
+            //   fitHorizontal==false move m_panned to left on pixel
+            //   each time when 2nd..Nth should have no effect.
+        m_panned->horizontalScrollBar()->setSliderPosition(prevHScroll);
 }
 
 #if 0   // Now done in MatrixScene::focusInEvent() so always happens

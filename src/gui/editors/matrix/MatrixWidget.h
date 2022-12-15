@@ -350,6 +350,11 @@ private slots:
     /// Connected to Panned::zoomOut() for ctrl+wheel.
     void slotZoomOut();
 
+    /// Connected from Panner::zoomFitVertical(bool) signal
+    void slotZoomFitNotes(const unsigned mode,
+                          const bool fitHorizontal,
+                          const bool ignorePercussion);
+
     /// Scroll rulers to sync up with view.
     void slotScrollRulers();
 
@@ -427,6 +432,9 @@ private slots:
     void slotChordAnalysisChanged();
 
 private:
+    // 4th root of 2, so that 4 "clicks" of zoom wheels scale by 2x
+    static const float ZOOM_FACTOR;
+
     MatrixView* const m_view;
 
     // ??? Instead of storing the document, which can change, get the

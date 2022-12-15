@@ -813,6 +813,70 @@ int Segment::getNextId() const
     return m_id++;
 }
 
+bool
+Segment::getLowHighPitches(
+      int  &lowestPitch,
+      int  &highestPitch,
+const int   minTime,
+const int   maxTime)
+const
+{
+    if (!isMIDI()) return false;
+
+    // Segment doesn't intersect time range of interest, so
+    // no reason to go through notes checking each one;
+    if (getStartTime() > maxTime || getEndTime() < minTime)
+        return false;
+
+    // Outside MIDI limits
+    lowestPitch  = 128;
+    highestPitch = -1;
+
+    bool found = false;  // Return value, false if no notes in time range
+
+#if 1   // Unfortunately this linear search is required vs. the lower_bound()
+        //    bisection below because the latter will not capture notes that
+        //    begin before the time range of interest and end within it.
+        // And std::map<>::lower_bound() can't be given a comparison function
+        //   (e.g. a lambda) to compare both Event::getAbsoluteTime()
+        //   and Event::getAbsoluteTime() + event->getDuration(), and
+        //   making a new map/set with min/max of those times requires
+        //   traversing entire Segment anyway (not to mention
+        //   creation/destruction of new container and included elements).
+    for (const Event *event : *this) {
+        if (!event->has(BaseProperties::PITCH))
+            continue;
+
+        timeT   eventStart =              event->getAbsoluteTime(),
+                eventEnd   = eventStart + event->getDuration();
+
+        if (eventStart >= maxTime || eventEnd <= minTime)
+            continue;
+
+        int pitch = event->get<Int>(BaseProperties::PITCH);
+
+        if (pitch  < lowestPitch) lowestPitch  = pitch;
+        if (pitch > highestPitch) highestPitch = pitch;
+
+        found = true;
+    }
+#else
+    Event dummy("dummy", minTime, 0, MIN_SUBORDERING);
+    for (auto     iter  = lower_bound(&dummy) ;
+                  iter != end() && (*iter)->getAbsoluteTime() < maxTime ;
+                ++iter)
+        if ((*iter)->has(BaseProperties::PITCH)) {
+            int pitch = (*iter)->get<Int>(BaseProperties::PITCH);
+
+            if (pitch < lowestPitch)  lowestPitch  = pitch;
+            if (pitch > highestPitch) highestPitch = pitch;
+
+            found = true;
+        }
+#endif
+
+    return found;
+}
 
 void
 Segment::fillWithRests(timeT endTime)

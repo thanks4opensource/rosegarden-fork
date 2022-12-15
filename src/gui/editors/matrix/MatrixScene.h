@@ -41,7 +41,7 @@ class MatrixElement;
 class MatrixMouseEvent;
 class MatrixViewSegment;
 class ViewSegment;
-class RulerScale;
+class SegmentsRulerScale;
 class ZoomableRulerScale;
 class SnapGrid;
 
@@ -127,13 +127,22 @@ public:
 
     int getYResolution() const { return m_resolution; }
 
-    const RulerScale *getRulerScale() const { return m_scale; }
+    const SegmentsRulerScale *getRulerScale() const { return m_scale; }
     ZoomableRulerScale *getReferenceScale() { return m_referenceScale; }
     const SnapGrid *getSnapGrid() const { return m_snapGrid; }
 
     void setSnap(timeT);
 
+#if 0   // unused
     bool constrainToSegmentArea(QPointF &scenePos);
+#endif
+
+    // Returns false if no segment intersects time range
+    bool getLowHighPitches(int &lowestPitch,
+                           int &highestPitch,
+                           const int minTime,
+                           const int maxTime,
+                           const bool ignorePercussion) const;
 
     void playNote(Segment &segment, int pitch, int velocity = -1);
 
@@ -309,7 +318,8 @@ private:
      */
     unsigned m_currentSegmentIndex;
 
-    RulerScale *m_scale; // I own this (it maps between time and scene x)
+    SegmentsRulerScale *m_scale; // I own this (it maps between time and
+                                 // scene x)
     ZoomableRulerScale *m_referenceScale; // I own this (it refers to m_scale
                                   // and knows zoom level needed by the loop
                                   // rulers (which refer to m_snapGrid))

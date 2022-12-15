@@ -1626,6 +1626,7 @@ MatrixScene::setSnap(timeT t)
     recreateLines();
 }
 
+#if 0   // unused
 bool
 MatrixScene::constrainToSegmentArea(QPointF &scenePos)
 {
@@ -1657,6 +1658,41 @@ MatrixScene::constrainToSegmentArea(QPointF &scenePos)
     }
 
     return ok;
+}
+#endif
+
+bool
+MatrixScene::getLowHighPitches(
+      int   &lowestPitch,
+      int   &highestPitch,
+const int    minTime,
+const int    maxTime,
+const bool   ignorePercussion)
+const
+{
+    bool found = false;  // Return value, false if all segments outside range
+
+    // Outside MIDI limits
+    lowestPitch  = 128;
+    highestPitch = -1;
+
+    int  segmentLowest, segmentHighest;
+
+    for (const Segment *segment : m_segments) {
+        if (ignorePercussion && segment->isPercussion())
+            continue;
+
+        if (segment->getLowHighPitches(segmentLowest,
+                                       segmentHighest,
+                                       minTime,
+                                       maxTime)) {
+            found = true;
+            if (segmentLowest  < lowestPitch)  lowestPitch  = segmentLowest;
+            if (segmentHighest > highestPitch) highestPitch = segmentHighest;
+        }
+    }
+
+    return found;
 }
 
 void

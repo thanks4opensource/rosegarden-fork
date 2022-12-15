@@ -2559,7 +2559,9 @@ RosegardenDocument::setLoopRange(timeT start, timeT end)
     }
 
     bool outside;
-    bool rangeChanged = m_composition.limitRangeToSegments(start, end, &outside);
+    bool rangeChanged = m_composition.limitRangeToSegments(start,
+                                                           end,
+                                                           &outside);
 
     if (rangeChanged || outside) {
         if (outside)
@@ -2591,7 +2593,8 @@ RosegardenDocument::loopRangeChanged(bool rangeWasFixed,
     // Don't use this->setLoopRangeIsActive(() because that
     // emits loopRangeActiveChanged() which would cause a
     // preliminary, redundant update() in any/all LoopRulers.
-    bool isActive = !(loopStart == loopEnd);
+    bool wasActive = m_composition.loopRangeIsActive(),
+         isActive  = !(loopStart == loopEnd);
     m_composition.setLoopRangeIsActive(isActive);
     RosegardenMainWindow::self()->setHaveRange(isActive);
 
@@ -2605,9 +2608,9 @@ RosegardenDocument::loopRangeChanged(bool rangeWasFixed,
     emit loopRangeStartEndChanged(loopStart, loopEnd);
 
     static bool dontShow = false;
-    if ((m_composition.getLoopStart() == m_composition.getLoopEnd() ||
-            wasOutsideSegments) &&
-        !dontShow)
+    if ((   m_composition.getLoopStart() == m_composition.getLoopEnd()
+         || wasOutsideSegments)
+         && !dontShow)
     {
         QMessageBox messageBox;
         QCheckBox *checkBox = new QCheckBox(tr("Don't show this warning"));
@@ -2642,6 +2645,9 @@ RosegardenDocument::loopRangeChanged(bool rangeWasFixed,
 
         messageBox.exec();
     }
+
+    // Now emit signal if appropriate
+    if (isActive != wasActive) emit loopRangeActiveChanged();
 }
 
 void
