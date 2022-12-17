@@ -17,14 +17,16 @@ Contents
     * [Matrix/Percussion Editor unification](#percussion_matrix_editor_unification)
     * [Color](#color)
     * [Additional Main Window features](#additional_main_window_features)
-    * [Matrix Editor](#matrix_editor)
+    * [Matrix Editor tools](#matrix_editor_tools)
         * [Features in all editing tools](#features_in_all_tools)
         * [Individual tools](#individual_tools)
-        * [Other new features](#other_new_features)
+    * [Matrix Editor Panner features](#matrix_editor_panner_features)
+    * [Additional Matrix Editor features](#additional_new_matrix_editor)
     * [Loop Ruler](#loop_ruler)
     * [Marker Ruler](#marker_ruler)
-    * [Chord Name Ruler](#chord_name_ruler)
+    * [Chord/Key Ruler (formerly "Chord Name Ruler")](#chord_key_ruler)
 * [Further information](#further_information)
+* [Future work](#future_work)
 
 
 <br> <a name="license"></a>
@@ -149,7 +151,7 @@ pertain to the Matrix Editor. Users who do not, or only infrequently,
 use that facet of Rosegarden will reap less advantage than those who
 do, although they may benefit from the included  improvements to
 the [Loop Ruler](#loop_ruler), [Marker Ruler](#marker_ruler), and/or
-[Chord Name Ruler](#chord_name_ruler).
+[Chord/Key Ruler](#chord_key_ruler).
 
 Many of the features are more complex to describe than they are to
 actually use in practice. It is probably better to use the following
@@ -217,8 +219,8 @@ the context help area at the bottom of the Matrix Editor window.
   search through the entire composition's time range to see if any
   off-screen, late occurring notes exist.
 
-<a name="matrix_editor"></a>
-#### Matrix Editor
+<a name="matrix_editor_tools"></a>
+#### Matrix Editor tools
 
 In addition to the Percussion Matrix Editor unification described
 [above](#percussion_matrix_editor_unification), most of the fork's
@@ -251,7 +253,7 @@ There are multiple new options/modes for displaying notes.
   pitch" (standard letter names), "Fixed-do solfege", and "Integer"
   (12-tone) (all with MIDI octave number), and raw MIDI note numbers.
 
-* If the Chord Name Ruler is active and a note belongs to a chord, it
+* If the Chord/Key Ruler is active and a note belongs to a chord, it
   can also be labeled with an optional suffix describing the note's
   function within the chord (enabling the suffix also automatically
   activates the ruler if not currently checked "on" in "View ->
@@ -397,8 +399,38 @@ Individual tools:
     * Same as MultiTool click in leftmost 15% of note.
     * Similarly superfluous as per comments on Move tool, above.
 
-<a name="other_new_features"></a>
-Other Matrix Editor changes and improvements
+
+<a name="matrix_editor_panner_features"></a>
+#### Matrix Editor Panner features
+
+* New menu with actions to zoom/pan matrix grid to optimally "fit"
+  notes, i.e. display all onscreen but without any wasted extra
+  space.
+
+* Choice of fitting notes in currently displayed range of measures,
+  all notes in composition, or notes in loop range. Last only enabled
+  if loop range is defined and is active.
+
+* Optionally/additionally zoom horizontally to fit loop range, or
+  entire composition, to full window grid width. ("Entire composition"
+  option fairly useless as panner and main window already display
+  full composition, but included for completeness).
+
+* "Ignore percussion" option. Useful both because MIDI percussion
+  "note" numbers cover large range of values unrelated to
+  composition's pitch range (see [Future work](#future_work), below),
+  but also because percussion notes have invisible durations (unless
+  View -> Notes -> Show Percussion Durations is checked on) and can
+  produce unintuitive "fit" results.
+
+* Panner displays context help.
+
+* Matrix editor "zoom" wheels use scaling value of 4th root of 2 (so
+  4 "clicks" result in 2x size change).
+
+
+<a name="additional_new_matrix_editor"></a>
+#### Additional Matrix Editor features
 
 * New highlight ("stripe") modes: In-key vs accidental, and
   alternating light/dark (for percussion segments).
@@ -410,6 +442,15 @@ Other Matrix Editor changes and improvements
   measure/beat/grid line instead of the nearest earlier time (matches
   semantics that drum hits occur on the beat, not between beats).
 
+* Display of key in effect at first visible measure (left side of
+  matrix grid). Shown to left of Chord/Key ruler if active, or to
+  left of Marker and Loop Rulers if not. Similar to printed sheet
+  music (but not Rosegarden's notation editor) which has key
+  signature at beginning of each staff and only small number of
+  measures in each. Shows key when Chord/Key Ruler not active or
+  when no key change in currently displayed range of measures (e.g.
+  canonical case of single key for entire composition).
+
 * The vertical piano keyboard at the left of the Matrix Editor window
   more accurately aligns with the note grid.
 
@@ -417,7 +458,7 @@ The following changes/improvements to the Rosegarden "rulers": Loop,
 Marker, and Chord Name -- are available (with minor differences) in
 the matrix and notation editors, and the main window.
 
- <a name="loop_ruler"></a>
+<a name="loop_ruler"></a>
 #### Loop Ruler
 
 The loop ruler has been extended/enhanced in comparison to both the
@@ -533,10 +574,10 @@ capabilities improved, and new features added.
   difficult-to-see thin vertical line.
 
 
- <a name="chord_name_ruler"></a>
-#### Chord Name Ruler
+ <a name="chord_key_ruler"></a>
+#### Chord/Key Ruler (formerly "Chord Name Ruler")
 
-The Chord Name Ruler has been completely rewritten and extended,
+The Chord/Key Ruler has been completely rewritten and extended,
 along with its underlying chord analysis engine. New features and
 changes include:
 
@@ -595,7 +636,11 @@ changes include:
   (previously were "pushed" to right if not enough space). Rationale:
   Better to omit information than present false information.
 
-*  Visual distinction between time tick marks for chords vs key changes.
+* Right-click menu action to disable display of key changes (useful
+  if key change overwriting chord name at same time).
+
+* Visual distinction between time tick marks for chords vs key changes.
+
 
 <a name="general_changes_and_improvements"></a>
 #### General changes and improvements
@@ -638,3 +683,24 @@ Further information
 For further information see [README-official.md](README-official.md)
 and/or the official Rosegarden links listed
 [above](#acknowledgment_and_motivation).
+
+
+
+<br> <a name="future_work"></a>
+Future work
+-----------
+* Additional matrix editor note color mode: Notes colored by pitch
+  class (all C notes one color, all D notes another, etc, regardless
+  of octave).
+* "See-thru" matrix editor notes for View -> Notes -> Color ->
+  Segment mode to show mulitple notes at same pitch from different
+  segments/instruments ("doubled" notes).
+* User remapping of MIDI percussion notes to vertical position in
+  matrix editor grid and notation editor staves. Would allow
+  grouping of percussion instruments together and placement (in
+  matrix editor) directly above or below composition's pitched
+  instruments' notes. UI implemented similar to main window's
+  Tracks -> Move Track Up and Move Track Down menu actions. Option
+  could/would be ignored by the rare user who fluently plays MIDI
+  drums on piano keyboard (or other instrument) via muscle memory
+  that bass drum is pitch B1, snare is D2, low wood block F5, etc. 
