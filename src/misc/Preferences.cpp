@@ -160,7 +160,7 @@ bool Preferences::getStopAtSegmentEnd()
 
 namespace
 {
-    const QString AudioFileLocationDialogGroup = "AudioFileLocationDialog";
+    const char *AudioFileLocationDialogGroup = "AudioFileLocationDialog";
 }
 
 PreferenceBool afldDontShow(AudioFileLocationDialogGroup, "dontShow", false);
