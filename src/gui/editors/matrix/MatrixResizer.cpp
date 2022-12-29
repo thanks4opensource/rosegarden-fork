@@ -50,7 +50,8 @@ MatrixResizer::MatrixResizer(MatrixWidget *parent, MatrixToolBox *toolbox) :
     MatrixTool("MatrixResizer", parent, toolbox),
     m_currentElement(nullptr),
     m_event(nullptr),
-    m_currentViewSegment(nullptr)
+    m_currentViewSegment(nullptr),
+    m_mouseMoved(false)
 {
     createMenu();
 
@@ -79,6 +80,7 @@ MatrixResizer::handleLeftButtonPress(const MatrixMouseEvent *e)
                  << e->element;
 
     m_isFinished = false;
+    m_mouseMoved = false;
 
     if (!e->element) return;
 
@@ -160,6 +162,8 @@ MatrixResizer::handleMouseMove(const MatrixMouseEvent *e)
     if (!e || (e->buttons == Qt::NoButton && overlaySelectOrSegment(e)))
         return NO_FOLLOW;
 
+    m_mouseMoved = true;
+
     setContextHelpForPos(e);
 
     if (!m_currentElement || !m_currentViewSegment) return NO_FOLLOW;
@@ -199,7 +203,9 @@ MatrixResizer::handleMouseRelease(const MatrixMouseEvent *e)
 {
     m_isFinished = true;
 
-    if (!e || !m_currentElement || !m_currentViewSegment) return;
+    if (!e || !m_currentElement || !m_currentViewSegment || !m_mouseMoved)
+        return;
+    m_mouseMoved = false;
 
     timeT durationDiff = calculateDurationDiff(e);
 

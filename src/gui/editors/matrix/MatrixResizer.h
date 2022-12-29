@@ -81,6 +81,11 @@ protected:
     Event *m_event;
     MatrixViewSegment *m_currentViewSegment;
 
+    // Needed so that just clicking on a current segment note, e.g. to
+    // play it,  doesn't snap it to grid on mouse release if no
+    // intervening mouse movement.
+    bool m_mouseMoved;
+
 private:
     static QCursor *m_cursor;
     static QCursor *m_selectCursor;

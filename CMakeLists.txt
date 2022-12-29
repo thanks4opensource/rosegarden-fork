@@ -22,7 +22,7 @@ project(rosegarden)
 set(ROSEGARDEN_VERSION "thanks4opensource (fork)")
 
 # t4os date
-set(ROSEGARDEN_VERSION_DATE "2022-12-21")
+set(ROSEGARDEN_VERSION_DATE "2022-12-29")
 
 # Codename
 set(ROSEGARDEN_VERSION "23.06")

@@ -242,6 +242,20 @@ There are multiple new options/modes for displaying notes.
   at the cost of losing information regarding what voices the other
   notes belong to).
 
+* Update: "View -> Notes -> Color -> Pitch" mode. Notes colored
+  according to scale degree (solid color) or pattern of alternating
+  colors from adjacent diatonic notes for out-of-key accidentals.
+  Colors were chosen in an attempt to visually imply the relative
+  importance and musical function of each scale degree:
+
+            1st/tonic   bright green
+            2nd         dim blue
+            3rd         dim cyan
+            4th         dim orange
+            5th         yellow
+            6th         dim red
+            7th         dim magenta
+
 * The "Show percussion durations" menu was described
   [above](#show_percussion_durations).
 
@@ -704,3 +718,30 @@ Future work
   could/would be ignored by the rare user who fluently plays MIDI
   drums on piano keyboard (or other instrument) via muscle memory
   that bass drum is pitch B1, snare is D2, low wood block F5, etc. 
+* Optional "smooth scrolling" mode in matrix editor: Time cursor
+  stays fixed at 1/4 way from left (earliest time) of window and
+  notes scroll right-to-left across it during playback. Avoids
+  current "jump" when moving cursor gets close to right side of
+  window and entire display redraws (moved to the left), requiring
+  visual refocus/reorientation. (Yes, just like turning the page with
+  printed sheet music, but we are no longer limited by 600 year old
+  Gutenberg technology.)
+* Add `--stderr` commandline option. If not set, no output to
+  stderr/stdout except fatal errors output immediately before program
+  self-abort. Regardless, all warning and information messages
+  instead/also to new Qt text viewer widget/window, viewable via new
+  main window "Info" icon/button (added to "Open in Matrix Editor",
+  "Open in Notation Editor", etc. group) or via new "View ->
+  Windows -> ..." menu (currently missing, editors/viewers only
+  accessable via icon/buttons or accelerator keybindings). Info
+  viewer widget/window includes "Clear" button to remove
+  already-viewed messages.
+* Non-uniform matrix editor horizontal scaling: Have minimum width
+  for e.g. quarter notes, possibly same as vertical spacing of
+  pitches, so are "square". If measure contains only quarter and/or
+  longer (half, whole) notes, display as 4x quarter note width. If
+  has shorter notes (eighth and/or below), scale horizontally so
+  shortest note is same width as canonical measure's quarter note.
+  Similar to standard notation (and notation editor).
+
+

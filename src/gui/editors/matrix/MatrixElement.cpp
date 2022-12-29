@@ -42,15 +42,200 @@
 #include <QGraphicsRectItem>
 #include <QBrush>
 #include <QColor>
+#include <QPixmap>
 #include <QSettings>
 
 #include <limits>
 
+
+namespace
+{
+QBrush naturalColors[] = {
+    QBrush(QColor(  0, 255,   0)),  // 0  1  green
+    QBrush(QColor(112, 112, 255)),  // 1  2  blue
+    QBrush(QColor(  0, 220, 232)),  // 2  3  cyan
+    QBrush(QColor(255, 144,   0)),  // 3  4  orange
+    QBrush(QColor(232, 232,   0)),  // 4  5  yellow
+    QBrush(QColor(240,  64,  64)),  // 5  6  red
+    QBrush(QColor(216,   8, 232)),  // 6  7  magenta (needs g=8 for black text)
+};
+
+// Note fortuitous side effect of Qt failing: Pixmap QBrushes always
+//   have color() of black, so textColor() returns white which is what's
+//   desired anyway.
+const char *pixmap1to2Data[] = {"8 8 2 1",
+                               "  c #00c000",   // green
+                               ". c #0000a0",   // blue
+                               "..  ..  ",
+                               "..  ..  ",
+                               "  ..  ..",
+                               "  ..  ..",
+                               "..  ..  ",
+                               "..  ..  ",
+                               "  ..  ..",
+                               "  ..  .."},
+           *pixmap2to3Data[] = {"8 8 2 1",
+                               "  c #0000a0",   // blue
+                               ". c #0090b0",   // cyan
+                               "..  ..  ",
+                               "..  ..  ",
+                               "  ..  ..",
+                               "  ..  ..",
+                               "..  ..  ",
+                               "..  ..  ",
+                               "  ..  ..",
+                               "  ..  .."},
+           *pixmap3to4Data[] = {"8 8 2 1",
+                               "  c #006080",   // cyan
+                               ". c #f08000",   // orange
+                               "..  ..  ",
+                               "..  ..  ",
+                               "  ..  ..",
+                               "  ..  ..",
+                               "..  ..  ",
+                               "..  ..  ",
+                               "  ..  ..",
+                               "  ..  .."},
+           *pixmap4to5Data[] = {"8 8 2 1",
+                               ". c #806000",   // orange
+                               ". c #c0c000",   // yellow
+                               "..  ..  ",
+                               "..  ..  ",
+                               "  ..  ..",
+                               "  ..  ..",
+                               "..  ..  ",
+                               "..  ..  ",
+                               "  ..  ..",
+                               "  ..  .."},
+           *pixmap5to6Data[] = {"8 8 2 1",
+                               "  c #c08000",   // yellow
+                               ". c #a00000",   // red
+                               "..  ..  ",
+                               "..  ..  ",
+                               "  ..  ..",
+                               "  ..  ..",
+                               "..  ..  ",
+                               "..  ..  ",
+                               "  ..  ..",
+                               "  ..  .."},
+           *pixmap6to7Data[] = {"8 8 2 1",
+                               ". c #e00000",   // red
+                               ". c #5000a0",   // magenta
+                               "..  ..  ",
+                               "..  ..  ",
+                               "  ..  ..",
+                               "  ..  ..",
+                               "..  ..  ",
+                               "..  ..  ",
+                               "  ..  ..",
+                               "  ..  .."},
+           *pixmap7to1Data[] = {"8 8 2 1",
+                               "  c #400080",   // magenta
+                               ". c #00a000",   // green
+                               "..  ..  ",
+                               "..  ..  ",
+                               "  ..  ..",
+                               "  ..  ..",
+                               "..  ..  ",
+                               "..  ..  ",
+                               "  ..  ..",
+                               "  ..  .."};
+
+const char *pixmapTriggerNote[] = {"8 8 2 1",
+                                   "  c #000000",   // black
+                                   ". c #c0c0c0",   // light gray
+                                   "..  ..  ",
+                                   "..  ..  ",
+                                   "  ..  ..",
+                                   "  ..  ..",
+                                   "..  ..  ",
+                                   "..  ..  ",
+                                   "  ..  ..",
+                                   "  ..  .."};
+
+QBrush* accidentalPixmaps[7] = {nullptr};
+
+// Can't be const, and can't really init pointers to accidentalPixmaps
+//   (kept as placeholders for documenation's sake) here because
+//   accidentalPixmaps not created until initPixmaps().
+QBrush *majorScaleBrushes[] = {
+    &naturalColors    [0],  // 0   (1)
+     accidentalPixmaps[0],  // 1   1->2
+    &naturalColors    [1],  // 2   (2)
+     accidentalPixmaps[1],  // 3   2->3
+    &naturalColors    [2],  // 4   (3)
+    &naturalColors    [3],  // 5   (4)
+     accidentalPixmaps[3],  // 6   4->5
+    &naturalColors    [4],  // 7   (5)
+     accidentalPixmaps[4],  // 8   5->6
+    &naturalColors    [5],  // 9   (6)
+     accidentalPixmaps[5],  // 10  6->7
+    &naturalColors    [6],  // 11  (7)
+};
+
+// Ibid majorScaleBrushes directly above
+QBrush *minorScaleBrushes[] = {
+    &naturalColors    [0],  // 0   (1)
+     accidentalPixmaps[0],  // 1   1->2
+    &naturalColors    [1],  // 2   (2)
+    &naturalColors    [2],  // 3   (3)
+     accidentalPixmaps[2],  // 4   3->4
+    &naturalColors    [3],  // 5   (4)
+     accidentalPixmaps[3],  // 6   4->5
+    &naturalColors    [4],  // 7   (5)
+    &naturalColors    [5],  // 8   (6)
+     accidentalPixmaps[5],  // 9   6->7
+    &naturalColors    [6],  // 10  (7)
+     accidentalPixmaps[6],  // 11  7->1
+};
+
+QBrush *triggerNoteBrush;
+
+// For mapping QAbstractItemModels to MatrixElemens via
+// QAbstractItemModel::setData() and data().
+// Set in reconfigure() and retrieved by getMatrixElement().
+static const int MatrixElementData = 2;
+
+}  // namespace
+
+
 namespace Rosegarden
 {
 
+// Workaround because can't statically init nonDiatonicPitchPixmaps[]
+// before Qt is up and running.
+// Done only once per program execution.
+void MatrixElement::initPixmaps()
+{
+    static bool pixmapsInitialized = false;
 
-static const int MatrixElementData = 2;
+    if (pixmapsInitialized)
+        return;
+
+    accidentalPixmaps[0] = new QBrush(QPixmap(pixmap1to2Data));
+    accidentalPixmaps[1] = new QBrush(QPixmap(pixmap2to3Data));
+    accidentalPixmaps[2] = new QBrush(QPixmap(pixmap3to4Data));
+    accidentalPixmaps[3] = new QBrush(QPixmap(pixmap4to5Data));
+    accidentalPixmaps[4] = new QBrush(QPixmap(pixmap5to6Data));
+    accidentalPixmaps[5] = new QBrush(QPixmap(pixmap6to7Data));
+    accidentalPixmaps[6] = new QBrush(QPixmap(pixmap7to1Data));
+
+    majorScaleBrushes[1]  = accidentalPixmaps[0];  // 1   1->2
+    majorScaleBrushes[3]  = accidentalPixmaps[1];  // 3   2->3
+    majorScaleBrushes[6]  = accidentalPixmaps[3];  // 6   4->5
+    majorScaleBrushes[8]  = accidentalPixmaps[4];  // 8   5->6
+    majorScaleBrushes[10] = accidentalPixmaps[5];  // 10  6->7
+
+    minorScaleBrushes[1]  = accidentalPixmaps[0];  // 1   1->2
+    minorScaleBrushes[4]  = accidentalPixmaps[2];  // 4   3->4
+    minorScaleBrushes[6]  = accidentalPixmaps[3];  // 6   4->5
+    minorScaleBrushes[9]  = accidentalPixmaps[5];  // 9   6->7
+    minorScaleBrushes[11] = accidentalPixmaps[6];  // 11  7->1
+
+    triggerNoteBrush = new QBrush(QPixmap(pixmapTriggerNote));
+
+    pixmapsInitialized = true;
+}
 
 MatrixElement::MatrixElement(MatrixScene *scene, Event *event,
                              bool drum, long pitchOffset,
@@ -65,15 +250,17 @@ MatrixElement::MatrixElement(MatrixScene *scene, Event *event,
     m_prevShowName(ShowName::UNSET),
     m_prevTime(std::numeric_limits<timeT>::min()),
     m_tonic(0),
+    m_degree(0),
     m_sharps(true),
     m_minor(false),
-    m_minorNotesOffset(0),
+    m_offsetMinors(false),
     m_alternateMinorNotes(false),
     m_noteItem(nullptr),
     m_drumItem(nullptr),
     m_textItem(nullptr),
     m_noteSelectItem(nullptr),
     m_drumSelectItem(nullptr),
+    m_tiedNoteItem(nullptr),
     m_pitchOffset(pitchOffset),
     m_segment(segment)
 {
@@ -98,6 +285,7 @@ MatrixElement::~MatrixElement()
     m_scene->graphicsIsotropicDiamondPool.putBack(m_drumItem);
     m_scene->graphicsIsotropicRectPool.putBack(m_noteSelectItem);
     m_scene->graphicsIsotropicDiamondPool.putBack(m_drumSelectItem);
+    m_scene->graphicsEllipsePool.putBack(m_tiedNoteItem);
     m_scene->graphicsTextPool.putBack(m_textItem);
 }
 
@@ -149,13 +337,39 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
 
     m_velocity = velocity;
 
-    // if the note has TIED_FORWARD or TIED_BACK properties, draw it with a
-    // different fill pattern
     bool tiedNote = (event()->has(BaseProperties::TIED_FORWARD) ||
                      event()->has(BaseProperties::TIED_BACKWARD));
-    Qt::BrushStyle brushPattern = (tiedNote ? Qt::Dense2Pattern : Qt::SolidPattern);
 
-    const QColor colour(noteColor());
+    // Have to do this before noteColorBrush() instead of later (and/or
+    //   only if showName == ShowName::SHOW)
+    // Optional note name.
+    // But no note names on diamond-shaped percussion notes.
+    ShowName showName =      m_scene->getMatrixWidget()->getShowNoteNames()
+                          && !m_drumDisplay
+                        ? ShowName::SHOW
+                        : ShowName::SKIP;
+    const MatrixWidget::NoteColorType   noteColorType
+                                      =   m_scene
+                                        ->getMatrixWidget()
+                                        ->getNoteColorType();
+    ChordNameRuler     *chordNameRuler
+                     = m_scene->getMatrixWidget()->getChordNameRuler();
+    bool haveKeyInfo = chordNameRuler && chordNameRuler->isVisible();
+
+    if (  showName == ShowName::SHOW
+        || noteColorType == MatrixWidget::NoteColorType::PITCH) {
+        if (   !haveKeyInfo
+            || showName != m_prevShowName
+            || time     != m_prevTime
+            || m_scene->getKeySignaturesChanged())
+            haveKeyInfo = getKeyInfo(chordNameRuler,
+                                     haveKeyInfo,
+                                     showName,
+                                     time,
+                                     pitch);
+    }
+
+    const QBrush brush(noteBrush());
 
     // Turned off because adds little or no information to user (another
     // segment's notes are underneath?) and generally just confusingly
@@ -198,7 +412,7 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
         }
         m_drumItem->setSize(0.5 * fres, fres);
         m_drumItem->setPen(outlinePen());
-        m_drumItem->setBrush(QBrush(colour, brushPattern));
+        m_drumItem->setBrush(brush);
         m_drumItem->setPos(x0, pitchy);
         if (m_selected) {
             m_drumItem->setZValue(SELECTED_SEGMENT_NOTE_Z);
@@ -229,16 +443,18 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
                 m_drumSelectItem = nullptr;
             }
         }
+
         if (!m_noteItem) m_noteItem = m_scene->graphicsRectPool.getFrom();
-        safeWidth = m_width;
+
         if (safeWidth < 1) {
             x0 = std::max(0.0, x1 - 1);
             safeWidth = 1;
         }
+
         QRectF rect(0, 0, safeWidth, fres);
         m_noteItem->setRect(rect);
         m_noteItem->setPen(outlinePen());
-        m_noteItem->setBrush(QBrush(colour, brushPattern));
+        m_noteItem->setBrush(brush);
         m_noteItem->setPos(x0, pitchy);
 
         if (m_selected) {
@@ -255,13 +471,6 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
                             QVariant::fromValue((void *)this));
     }
 
-    // Optional note name.
-    // But no note names on diamond-shaped percussion notes.
-    ShowName showName =      m_scene->getMatrixWidget()->getShowNoteNames()
-                          && !m_drumDisplay
-                        ? ShowName::SHOW
-                        : ShowName::SKIP;
-
     if (showName == ShowName::SHOW) {
         if (!m_textItem) m_textItem = m_scene->graphicsTextPool.getFrom();
 
@@ -271,27 +480,7 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
         else
             m_textItem->setZValue(m_current ? ACTIVE_SEGMENT_TEXT_Z
                                             : NORMAL_SEGMENT_TEXT_Z);
-
-        m_textItem->setBrush(textColor(colour));
-
-        ChordNameRuler     *chordNameRuler
-                         = m_scene->getMatrixWidget()->getChordNameRuler();
-        bool haveKeyInfo = chordNameRuler && chordNameRuler->isVisible();
-        if (   !haveKeyInfo
-            || showName != m_prevShowName
-            || time     != m_prevTime
-            || m_scene->getKeySignaturesChanged())
-            haveKeyInfo = getKeyInfo(chordNameRuler,
-                                     haveKeyInfo,
-                                     showName,
-                                     time);
-
-        unsigned degree =   (  pitch
-                             + (   m_minor && m_minorNotesOffset
-                                ? 21   // C->A, +9 but make sure always positive
-                                : 12)  // make sure always positive
-                             - m_tonic)
-                          % 12;
+        m_textItem->setBrush(textColor(brush.color()));
 
         const MatrixWidget *matrixWidget = m_scene->getMatrixWidget();
 
@@ -322,11 +511,11 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
 
             case MatrixWidget::NoteNameType::DEGREE:
                 if (haveKeyInfo) {
-                    if (m_minor && !m_minorNotesOffset && m_alternateMinorNotes)
+                    if (m_minor && !m_offsetMinors && m_alternateMinorNotes)
                         noteName =   MidiPitchLabel
-                                   ::scaleDegreeMinorAlt(degree, m_sharps);
+                                   ::scaleDegreeMinorAlt(m_degree, m_sharps);
                     else
-                        noteName = MidiPitchLabel::scaleDegreeMajor(degree,
+                        noteName = MidiPitchLabel::scaleDegreeMajor(m_degree,
                                                                     m_sharps);
                 }
                 else
@@ -335,14 +524,15 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
 
             case MatrixWidget::NoteNameType::MOVABLE_DO:
                 if (haveKeyInfo)
-                    noteName = MidiPitchLabel::movableSolfege(degree, m_sharps);
+                    noteName = MidiPitchLabel::movableSolfege(m_degree,
+                                                              m_sharps);
                 else
                     noteName = "?";
             break;
 
             case MatrixWidget::NoteNameType::INTEGER_KEY:
                 if (haveKeyInfo)
-                    noteName = QString("%1").arg(degree);
+                    noteName = QString("%1").arg(m_degree);
                 else
                     noteName = "?";
             break;
@@ -389,9 +579,6 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
         m_textItem = nullptr;
     }
 
-    setLayoutX(x0);
-    setLayoutY(pitchy);
-
     // Leaving this in for now, but worried about it.
     // No Qt removeToolTip(). Is setting to empty QString the same,
     //   or does that leave empty QString tooltips on all non-tied
@@ -401,14 +588,49 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
     //   existing m_noteItems from pool so not are not associated
     //   one-to-one MatrixElement-to-QGraphicsRectItem.
     if (m_noteItem) {
-        if (tiedNote) {
-            m_noteItem->setToolTip(QObject::tr("This event is tied to "
-                                               "another event."));
+        if (event()->has(BaseProperties::TRIGGER_SEGMENT_ID)) {
+            // Takes precedence over also being tied note
+            m_noteItem->setToolTip(QObject::tr("This note triggers an "
+                                               "ornamentation segment."));
             m_onceHadToolTips.insert(m_noteItem);
         }
-        else if (m_onceHadToolTips.find(m_noteItem) != m_onceHadToolTips.end())
-            m_noteItem->setToolTip(QString());
+        else if (tiedNote) {
+            if (event()->has(BaseProperties::TIED_FORWARD)) {
+                if (!m_tiedNoteItem)
+                    m_tiedNoteItem = m_scene->graphicsEllipsePool.getFrom();
+
+                if (m_selected)
+                    m_tiedNoteItem->setZValue(SELECTED_SEGMENT_TEXT_Z);
+                else
+                    m_tiedNoteItem->setZValue(  m_current
+                                              ? ACTIVE_SEGMENT_TEXT_Z
+                                              : NORMAL_SEGMENT_TEXT_Z);
+
+                m_tiedNoteItem->setBrush(textColor(brush.color()));
+                m_tiedNoteItem->setPen(Qt::NoPen);
+                qreal oneThird = fres / 3.0;
+                m_tiedNoteItem->setRect(0, 0, oneThird, oneThird);
+                m_tiedNoteItem->setPos(x0 + safeWidth - oneThird * 0.5,
+                                       pitchy + oneThird);
+            }
+
+            m_noteItem->setToolTip(QObject::tr("This note is tied to "
+                                               "another note."));
+            m_onceHadToolTips.insert(m_noteItem);
+        }
+        else {
+            if (m_tiedNoteItem) {
+                m_scene->graphicsEllipsePool.putBack(m_tiedNoteItem);
+                m_tiedNoteItem = nullptr;
+            }
+
+            if (m_onceHadToolTips.find(m_noteItem) != m_onceHadToolTips.end())
+                m_noteItem->setToolTip(QString());
+        }
     }
+
+    setLayoutX(x0);
+    setLayoutY(pitchy);
 }
 
 // See documentation in .h file
@@ -417,7 +639,8 @@ MatrixElement::getKeyInfo(
 const ChordNameRuler    *chordNameRuler,
 const bool               chordNameRulerIsVisible,
 const ShowName           showName,
-const                    timeT time)
+const timeT              time,
+const unsigned           pitch)
 {
     // Get key at time either from segment or from ChordNameRuler
     //
@@ -453,18 +676,21 @@ const                    timeT time)
     else
         m_sharps = key.isSharp();
 
-    m_tonic = key.getTonicPitch();
-    m_minor = key.isMinor();
-
-    m_minorNotesOffset =     m_scene
-                           ->getMatrixWidget()
-                           ->getNoteNamesOffsetMinors()
-                         ? 9
-                         : 0;
+    m_tonic        = key.getTonicPitch();
+    m_minor        = key.isMinor();
+    m_offsetMinors = m_scene->getMatrixWidget()->getNoteNamesOffsetMinors();
 
     m_alternateMinorNotes =   m_scene
                             ->getMatrixWidget()
                             ->getNoteNamesAlternateMinors();
+
+    m_degree =   (  pitch
+                  + (   m_minor && m_offsetMinors
+                     ? 21   // C->A, +9 but make sure always positive
+                     : 12)  // make sure always positive
+                  - m_tonic)
+               % 12;
+
 
     m_prevShowName = showName;
     m_prevTime     = time;
@@ -488,19 +714,6 @@ const
         return dynamic_cast<QAbstractGraphicsShapeItem *>(m_drumItem);
     else  // safety check, can't happen
         return nullptr;
-}
-
-Qt::BrushStyle
-MatrixElement::tiedNoteFill()
-const
-{
-    // if the note has TIED_FORWARD or TIED_BACK properties, draw it with a
-    // different fill pattern
-    if (event()->has(BaseProperties::TIED_FORWARD) ||
-        event()->has(BaseProperties::TIED_BACKWARD))
-        return Qt::Dense2Pattern;
-    else
-        return Qt::SolidPattern;
 }
 
 void
@@ -585,15 +798,14 @@ MatrixElement::setCurrent(bool current)
     QAbstractGraphicsShapeItem *item = getActiveItem();
     if (!item) return;
 
-    QColor  color = noteColor();
-
-    item->setBrush(QBrush(color, tiedNoteFill()));
+    const QBrush brush(noteBrush());
+    item->setBrush(brush);
     item->setPen(outlinePen());
 
     item->setZValue(current ? ACTIVE_SEGMENT_NOTE_Z : NORMAL_SEGMENT_NOTE_Z);
 
     if (m_textItem) {
-        m_textItem->setBrush(textColor(color));
+        m_textItem->setBrush(textColor(brush.color()));
         m_textItem->setZValue(current ? ACTIVE_SEGMENT_TEXT_Z
                                       : NORMAL_SEGMENT_TEXT_Z);
     }
@@ -609,15 +821,13 @@ MatrixElement::getMatrixElement(QGraphicsItem *item)
 
 void MatrixElement::setColor()
 {
-    QColor  color = noteColor();
-
     QAbstractGraphicsShapeItem *item = getActiveItem();
     if (!item) return;
 
-    item->setBrush(QBrush(color, tiedNoteFill()));
+    const QBrush brush(noteBrush());
+    item->setBrush(brush);
     item->update();
-
-    if (m_textItem) m_textItem->setBrush(textColor(color));
+    if (m_textItem) m_textItem->setBrush(textColor(brush.color()));
 
     if (item == m_noteItem && m_noteSelectItem)
         m_noteSelectItem->setBrush(selectionBorderColor(m_noteItem));
@@ -625,8 +835,7 @@ void MatrixElement::setColor()
         m_drumSelectItem->setBrush(selectionBorderColor(m_drumItem));
 }
 
-QColor
-MatrixElement::noteColor()
+QBrush MatrixElement::noteBrush()
 const
 {
     const MatrixWidget* const   widget = m_scene->getMatrixWidget();
@@ -638,7 +847,7 @@ const
         colour = QColor(GRAY_RED_COMPONENT,
                         GRAY_GREEN_COMPONENT,
                         GRAY_BLUE_COMPONENT);
-        return colour;
+        return QBrush(colour);
     }
 
     // For darkening non-current segment notes
@@ -646,20 +855,11 @@ const
                      LIGHTEN = 133; // >100 is lighten for QColor::lighter()
 
     if (event()->has(BaseProperties::TRIGGER_SEGMENT_ID)) {
-        //!!! Using gray for trigger events and events from other,
-        // non-active segments won't work. This should be handled some
-        // other way, with a color outside the range of possible velocity
-        // choices, which probably leaves some kind of curious light
-        // blue or something.
-        //
-        // Was colour = Qt:gray in setCurrent() before refactor into
-        // noteColor()
-        colour = Qt::cyan;
-        if (colorAllSegments && !m_current) {
-            // Make dimmer to differentiate vs current segment
-            colour = colour.darker(DARKEN);
-        }
-        return colour;
+        // Was historically solid Qt::cyan as contrasting color to
+        // green->red spectrum of velocity colors. That now potentially
+        // conflicting with segment and/or pitch colors, so using
+        // black/gray pixmap.
+        return *triggerNoteBrush;
     }
 
     if (noteColorType == MatrixWidget::NoteColorType::VELOCITY) {
@@ -669,8 +869,9 @@ const
             if (m_current) colour = colour.lighter(LIGHTEN);
             else           colour = colour.darker(DARKEN);
         }
+        return QBrush(colour);
     }
-    else {  // MatrixWidget::NoteColorType::SEGMENT || SEGMENT_AND_VELOCITY
+    else if (noteColorType != MatrixWidget::NoteColorType::PITCH) {
         const RosegardenDocument* document = m_scene->getDocument();
         const Composition &composition = document->getComposition();
         colour = composition.getSegmentColourMap().
@@ -684,9 +885,18 @@ const
                 colour = colour.darker(100 + MIDDLE_VELOCITY - m_velocity);
             }
         }
+        return QBrush(colour);
     }
-
-    return colour;
+    else {  // noteColorType == MatrixWidget::NoteColorType::PITCH)
+        if (m_minor) {
+            if (m_offsetMinors)
+                return *majorScaleBrushes[m_degree % 12];
+            else
+                return *minorScaleBrushes[m_degree];
+        }
+        else
+            return *majorScaleBrushes[m_degree];
+    }
 }
 
 QColor
@@ -694,6 +904,9 @@ MatrixElement::textColor(
 const QColor noteColor)
 const
 {
+    // Note pixmap QBrushes (accidental/out-of-key notes in
+    // MatrixWidget::NoteColorType::PITCH mode) return black for
+    // color(), so this returns white which is desired.
     int intensity = qGray(noteColor.rgb());
     if (intensity > 112) return Qt::black;
     else                 return Qt::white;
@@ -732,4 +945,4 @@ const
     }
 }
 
-}  // namespace
+}  // namespace Rosegarden

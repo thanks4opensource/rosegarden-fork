@@ -86,6 +86,7 @@ MatrixScene::MatrixScene() :
     graphicsTextPool(this),
     graphicsIsotropicRectPool(this),
     graphicsIsotropicDiamondPool(this),
+    graphicsEllipsePool(this),
     m_widget(nullptr),
     m_document(nullptr),
     m_observerAdded(false),
@@ -653,8 +654,11 @@ MatrixScene::recreateKeyHighlights()
         const int *hsteps = key.isMinor() ? minorSteps : majorSteps;
 
         for (int j = 0; j < HCOUNT; ++j) {
-            int pitch = hsteps[j] + offset;
             QColor color(colors[j]);
+
+            // Need to fill in between 0 and offset (i.e. key)
+            int pitch = -12 + hsteps[j] + offset;
+            if (pitch < 0) pitch += 12;
 
             while (pitch < 128) {
                 QGraphicsRectItem *rect;

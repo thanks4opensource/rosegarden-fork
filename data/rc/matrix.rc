@@ -49,7 +49,7 @@
     <text>&amp;View</text>
     <Menu name="Notes">
       <text>Notes</text>
-      <Action name="show_note_names" text="Show note names" checked="false" />
+      <Action name="show_note_names" text="Show note labels" checked="false" />
       <Menu name="NoteNames">
         <text>Note names</text>
         <Action name="note_names_off"
@@ -90,10 +90,10 @@
         <Action name="c_major_flats" text="C major flats: C, D♭, D, E♭, ...A, B♭, B"
 		checked="true" />
         <Action name="offset_minor_keys"
-		text="Relative in-key major: 6, ♯6/♭7, 7, ... ♯5/♭6 --- La-based solfège --- 9, 10, 11, 0, ... 7, 8"
+		text="In-key relative major: 6, ♯6/♭7, 7, ... ♯5/♭6 --- La-based solfège --- 9, 10, 11, 0, ... 7, 8"
 		checked="false" />
         <Action name="alternate_minor_keys"
-		text="Alternate in-key minor diatonics: 3,6,7 vs ♭3,♭6,♭7"
+		text="In-key alternate minor diatonics: 3,6,7 vs ♭3,♭6,♭7"
 		checked="false" />
       </Menu>
       <Action name="show_percussion_durations" text="Show percussion durations" checked="false" />
@@ -102,6 +102,7 @@
         <Action name="velocity_color" text="Velocity" checked="true" />
         <Action name="segment_color" text="Segment" checked="false" />
         <Action name="segment_velocity_color" text="Segment+velocity" checked="false" />
+        <Action name="pitch_color" text="Pitch" checked="false" />
         <Separator/>
         <Action name="color_only_active" text="Only active" checked="true" />
       </Menu>

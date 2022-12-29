@@ -63,7 +63,8 @@ MatrixMover::MatrixMover(MatrixWidget *parent, MatrixToolBox *toolbox) :
     m_quickCopy(false),
     m_lastPlayedPitch(-1),
     m_crntElementCrntTime(-1),
-    m_prevDiffPitch(IMPOSSIBLE_DIFF_PITCH)
+    m_prevDiffPitch(IMPOSSIBLE_DIFF_PITCH),
+    m_mouseMoved(false)
 {
     createMenu();
     if (!m_cursor      ) m_cursor       = makeCursor("move_cursor", 11, 11);
@@ -90,6 +91,7 @@ MatrixMover::handleLeftButtonPress(const MatrixMouseEvent *e)
     RG_DEBUG << "handleLeftButtonPress() : snapped time = " << e->snappedLeftTime << ", el = " << e->element;
 
     m_isFinished = false;
+    m_mouseMoved = false;
 
     if (!e->element) return;
 
@@ -230,6 +232,8 @@ MatrixMover::handleMouseMove(const MatrixMouseEvent *e)
     if (!e || (e->buttons == Qt::NoButton && overlaySelectOrSegment(e)))
         return NO_FOLLOW;
 
+    m_mouseMoved = true;
+
     setContextHelpForPos(e);
 
     if (!m_currentElement || !m_currentViewSegment) return NO_FOLLOW;
@@ -294,7 +298,8 @@ MatrixMover::handleMouseRelease(const MatrixMouseEvent *e)
 {
     m_isFinished = true;
 
-    if (!e) return;
+    if (!e || !m_mouseMoved) return;
+    m_mouseMoved = false;
 
     RG_DEBUG << "handleMouseRelease() - newPitch = " << e->pitch;
 

@@ -231,6 +231,7 @@ public:
     GraphicsItemPool<IsotropicTextItem>     graphicsTextPool;
     GraphicsItemPool<IsotropicRectItem>     graphicsIsotropicRectPool;
     GraphicsItemPool<IsotropicDiamondItem>  graphicsIsotropicDiamondPool;
+    GraphicsItemPool<QGraphicsEllipseItem>  graphicsEllipsePool;
 
     bool getKeySignaturesChanged() const
         { return m_keySignaturesChanged; }

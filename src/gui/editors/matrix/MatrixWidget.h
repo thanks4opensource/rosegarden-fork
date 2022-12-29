@@ -100,7 +100,8 @@ public:
     enum class NoteColorType {
         VELOCITY,
         SEGMENT,
-        SEGMENT_AND_VELOCITY
+        SEGMENT_AND_VELOCITY,
+        PITCH
     };
 
     enum class NoteNameType {

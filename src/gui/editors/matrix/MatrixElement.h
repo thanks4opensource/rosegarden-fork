@@ -24,7 +24,9 @@
 #include "base/ViewElement.h"
 
 class QAbstractGraphicsShapeItem;
+class QBrush;
 class QColor;
+class QGraphicsEllipseItem;
 class QGraphicsItem;
 class QGraphicsRectItem;
 
@@ -66,6 +68,10 @@ public:
                   long pitchOffset,
                   const Segment *segment);
     ~MatrixElement() override;
+
+    // Workaround because can't statically init QPixmaps before
+    // Qt is up and running.
+    static void initPixmaps();
 
     /// Returns true if the wrapped event is a note
     bool isNote() const;
@@ -153,15 +159,17 @@ protected:
     ShowName m_prevShowName;
     timeT m_prevTime;
     unsigned m_tonic;
+    unsigned m_degree;
     bool m_sharps;
     bool m_minor;
-    unsigned m_minorNotesOffset;
+    bool m_offsetMinors;
     bool m_alternateMinorNotes;
     QGraphicsRectItem *m_noteItem;
     IsotropicDiamondItem *m_drumItem;
     IsotropicTextItem *m_textItem;
     IsotropicRectItem *m_noteSelectItem;
     IsotropicDiamondItem *m_drumSelectItem;
+    QGraphicsEllipseItem *m_tiedNoteItem;
 
     std::set<QGraphicsRectItem*> m_onceHadToolTips;
 
@@ -196,7 +204,8 @@ protected:
     bool getKeyInfo(const ChordNameRuler*,
                     const bool chordNameRulerIsVisible,
                     const ShowName showName,
-                    const timeT time);
+                    const timeT time,
+                    const unsigned pitch = 0);
 
     // Common code used by reconfigure(timeT, timeT, int, int),
     // setCurrent(), and setColor().
@@ -207,13 +216,12 @@ protected:
 
     // Common code used by reconfigure(timeT, timeT, int, int)
     // and setCurrent(bool).
-    QColor noteColor() const;
+    QBrush noteBrush() const;
+
     QPen outlinePen() const { return QPen(Qt::black, 0); };
 
     // Common code used by setSelected() and setCurrent()
     QAbstractGraphicsShapeItem *getActiveItem() const;
-
-    Qt::BrushStyle tiedNoteFill() const;
 
 private:
     /// Adjust the item to reflect the given values, not those of our event

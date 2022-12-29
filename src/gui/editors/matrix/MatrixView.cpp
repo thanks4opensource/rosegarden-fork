@@ -133,7 +133,6 @@
 namespace Rosegarden
 {
 
-
 MatrixView::MatrixView(RosegardenDocument *doc,
                        const std::vector<Segment *>& segments,
                        QWidget *parent) :
@@ -148,6 +147,9 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     // Many actions are created here
     // ??? MEMORY LEAK (confirmed)
     m_commandRegistry = new MatrixCommandRegistry(this);
+
+    // Workaround for inability to static initialize
+    MatrixElement::initPixmaps();
 
     setupActions();
 
@@ -411,6 +413,9 @@ MatrixView::setShowNoteColorTypeAndAll()
         break;
     case MatrixWidget::NoteColorType::SEGMENT_AND_VELOCITY:
         findAction("segment_velocity_color")->setChecked(true);
+        break;
+    case MatrixWidget::NoteColorType::PITCH:
+        findAction("pitch_color")->setChecked(true);
         break;
     }
     m_matrixWidget->setNoteColorType(colorType);
@@ -777,10 +782,12 @@ MatrixView::setupActions()
     createAction("velocity_color", SLOT(slotNoteColors()));
     createAction("segment_color", SLOT(slotNoteColors()));
     createAction("segment_velocity_color", SLOT(slotNoteColors()));
+    createAction("pitch_color", SLOT(slotNoteColors()));
     QActionGroup *noteColorAg = new QActionGroup(this);
     noteColorAg->addAction(findAction("velocity_color"));
     noteColorAg->addAction(findAction("segment_color"));
     noteColorAg->addAction(findAction("segment_velocity_color"));
+    noteColorAg->addAction(findAction("pitch_color"));
     createAction("color_only_active", SLOT(slotNoteColorsAllSegments()));
 
     createAction("note_names_off",         SLOT(slotNoteNames()));
@@ -2091,6 +2098,11 @@ MatrixView::slotNoteColors()
     }
     else if (name == "segment_velocity_color") {
         newColorType = MatrixWidget::NoteColorType::SEGMENT_AND_VELOCITY;
+        newColorTypeInt = static_cast<int>(newColorType);
+        settings.setValue("note_color_type", newColorTypeInt);
+    }
+    else if (name == "pitch_color") {
+        newColorType = MatrixWidget::NoteColorType::PITCH;
         newColorTypeInt = static_cast<int>(newColorType);
         settings.setValue("note_color_type", newColorTypeInt);
     }
