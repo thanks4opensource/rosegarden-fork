@@ -206,6 +206,7 @@ namespace Preferences
     bool getJACKLoadCheck();
 
     // Experimental
+
     bool getBug1623();
 
     void setAutoChannels(bool value);

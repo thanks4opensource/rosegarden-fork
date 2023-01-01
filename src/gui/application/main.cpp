@@ -802,8 +802,8 @@ int main(int argc, char *argv[])
          "of Rosegarden. For documentation, source code, and to report "
          "bugs in this version, go to:"
          "<br><a style=\"color:LightGreen\""
-         "href=\"https://github.com/thanks4opensource/rosegarden\">"
-         "https://github.com/thanks4opensource/rosegarden</a></p>"
+         "href=\"https://github.com/thanks4opensource/rosegarden-fork\">"
+         "https://github.com/thanks4opensource/rosegarden-fork</a></p>"
         ).arg(manualURL));
 
         label->setWordWrap(true);

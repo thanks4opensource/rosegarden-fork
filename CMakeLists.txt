@@ -19,13 +19,12 @@ cmake_minimum_required(VERSION 3.1)
 project(rosegarden)
 
 # Version
-set(ROSEGARDEN_VERSION "thanks4opensource (fork)")
+set(ROSEGARDEN_VERSION "23.06 (thanks4opensource-fork)")
 
-# t4os date
-set(ROSEGARDEN_VERSION_DATE "2022-12-29")
+# thanks4opensource/thanks4opensrc version date
+set(ROSEGARDEN_VERSION_DATE "2022-12-31")
 
 # Codename
-set(ROSEGARDEN_VERSION "23.06")
 set(ROSEGARDEN_CODENAME "Flutterbye")
 #set(ROSEGARDEN_CODENAME "Grace Note")
 #set(ROSEGARDEN_CODENAME "Hermosa")

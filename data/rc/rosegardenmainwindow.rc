@@ -131,11 +131,13 @@
 
   <Menu name="settings">
     <text>&amp;View</text>
-      <!--
-      <Action name="debug_dump_segments" text="Dump segments" />
-      -->
-      <Action name="view_doc_properties" text="Document P&amp;roperties..." />
-      <Separator/>
+    <!--
+    <Action name="debug_dump_segments" text="Dump segments" />
+    -->
+    <Action name="view_doc_properties" text="Document P&amp;roperties..." />
+
+    <Separator/>
+
     <Menu name="toolbars" append="show_merge">
       <text>&amp;Toolbars</text>
       <!-- JAS "show_stock_toolbar" is "options_show_toolbar" in matrix.rc and notation .rc -->
@@ -154,16 +156,24 @@
       <Action name="show_chord_name_ruler" text="Show Cho&amp;rd/Key Ruler" checked="false" append="show_merge" />
       <Action name="show_tempo_ruler" text="Show Te&amp;mpo Ruler" checked="true" append="show_merge" />
     </Menu>
-  <Separator append="show_merge" />
+
+    <Separator append="show_merge" />
+
     <Action name="show_transport" text="Show Tra&amp;nsport" checked="true" append="show_merge" shortcut="T" shortcut-context="application" />
     <!-- JAS "show_inst_segment_parameters" is state dependent but not checkable -->
     <Action name="show_inst_segment_parameters" text="Show Special &amp;Parameters" shortcut="P" checked="true" append="show_merge" />
-  <Separator append="show_merge" />
+
+    <Separator append="show_merge" />
+
     <Action name="show_previews" text="Show Segment Pre&amp;views" checked="true" append="show_merge" />
     <Action name="show_segment_labels" text="Sh&amp;ow Segment Labels" checked="true" append="show_merge" />
     <Action name="show_tracklabels" text="Show Track &amp;Labels" checked="true" append="show_merge" />
     <!-- Action name="toggle_all" append="show_merge" /> -->
     <Action name="show_status_bar" text="Show St&amp;atusbar" checked="true" append="show_merge" />
+
+    <separator />
+
+    <action name="full_screen" text="Full Screen" shortcut="F11" checked="false" />
   </Menu>
 
   <Menu name="document">
@@ -291,9 +301,9 @@
     <Action name="split" text="S&amp;plit" icon="split" shortcut="F7" group="tools_segment" checked="false" />
   <Separator/>
     <Menu name="Transport">
-      <text>&amp;Transport</text>
+      <text>T&amp;ransport</text>
       <!-- JAS need to know how to add Qt::KeypadModifier in Human Readable shortcut for Play 'KP_Enter'-->
-      <Action name="play" text="&amp;Play" icon="transport-play" shortcut="Ctrl+Enter, Enter, Media Play, Ctrl+Return" shortcut-context="application" checked="false" />
+      <Action name="play" text="&amp;Play" icon="transport-play" shortcut="Ctrl+Enter, Enter, Media Play, Ctrl+Return" shortcut-context="application" />
       <Action name="stop" text="&amp;Stop" icon="transport-stop" shortcut="Insert, Media Stop" shortcut-context="application" />
       <!-- JAS swapped rewind / ffwd to match matrix.rc -->
       <Action name="rewind" text="Re&amp;wind" icon="transport-rewind" shortcut="PgUp, Media Previous" shortcut-context="application" />
@@ -518,7 +528,7 @@
 <State name="got_audio">
   <enable>
     <Action name="audio_manager"/>
-        <Action name="audio_mixer"/>
+	<Action name="audio_mixer"/>
   </enable>
 </State>
 
