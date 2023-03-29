@@ -1,11 +1,10 @@
-
 /* -*- c-basic-offset: 4 indent-tabs-mode: nil -*- vi:set ts=8 sts=4 sw=4: */
 
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -31,6 +30,7 @@
 
 #include "base/Event.h"
 #include "base/PropertyName.h"
+#include "base/Segment.h"
 
 class QAction;
 class QMenu;
@@ -48,6 +48,7 @@ class RosegardenDocument;
 class Composition;
 class ChordAnalyzer;
 class Key;
+class ConflictingKeyChanges;
 
 
 /**
@@ -55,7 +56,7 @@ class Key;
  * describing the chords in a composition.
  */
 
-class ChordNameRuler : public QWidget
+class ChordNameRuler : public QWidget, public SegmentObserver
 {
     Q_OBJECT
 
@@ -66,24 +67,32 @@ public:
     //   key changes, and for copying chords into a segment as
     //   text events (via external code's receipt of signal).
 
+    // What window this ruler is in because enabled menu options and
+    // connections to set of signals handled differ.
+    enum class ParentEditor {
+        TRACK,
+        MATRIX,
+        NOTATION,
+    };
+
     // Will use all segments in composition as sources for notes
     // for chord analysis.
-    ChordNameRuler(RulerScale *rulerScale,
+    ChordNameRuler(QWidget* parent,
+                   RulerScale *rulerScale,
                    RosegardenDocument *doc,
-                   bool keyChangingEnabled = false,
-                   bool chordCopyingEnabled = false,
+                   const ParentEditor parentEditor,
                    int height = 0,
-                   QWidget* parent = nullptr);
+                   ConflictingKeyChanges* conflictingKeyChanges = nullptr);
 
     // Will use all only specified segments as sources for notes
     // for chord analysis.
-    ChordNameRuler(RulerScale *rulerScale,
+    ChordNameRuler(QWidget* parent,
+                   RulerScale *rulerScale,
                    RosegardenDocument *doc,
-                   std::vector<Segment *> &segments,
-                   bool keyChangingEnabled = false,
-                   bool chordCopyingEnabled = false,
+                   const std::vector<Segment *> &segments,
+                   const ParentEditor parentEditor,
                    int height = 0,
-                   QWidget* parent = nullptr);
+                   ConflictingKeyChanges* conflictingKeyChanges = nullptr);
 
     ~ChordNameRuler() override;
 
@@ -123,57 +132,106 @@ public:
         DOUBLE,
     };
 
-    // Segment to use fo Key at current time for key-relative chord labelling
-    void setCurrentSegment(const Segment *segment, bool forceRecalc);
-    const Segment *chordNamesSegment() const { return m_chordAndKeyNames; }
+    // Accessors
+    //
 
-    // Used by MatrixScene::slotKeySignaturesChanged()
-    bool conflictingKeyChanges() const { return m_conflictingKeyChanges; }
+    const std::map<const timeT, const std::string> &chordNames() const
+    { return m_chords; }
 
     // Used by MatrixElement methods to determine if should label
     // notes with chord degrees.
-    bool haveChords() const { return isVisible() && m_showChords; }
+    bool haveChords() const {
+        return (m_isVisible && m_showChords) || m_analyzeWhileHidden;
+    }
 
-    // Remove/add segment from current set used as sources for notes
-    // for chord analysis
-    void removeSegment(const Segment *segment);
-    void addSegment(Segment *segment);
+    // For RosegardenMainViewWidget (main window) which doesn't keep track
+    // by/for itself.
+    const Segment *getCurrentSegment()
+    const {
+        return   m_currentSegment == &m_defaultSegment
+               ? nullptr
+               : m_currentSegment;
+    }
 
-    void analyzeChordsAndKeyChanges(bool emitSignal=true);
+
+    // SegmentObserver notifications
+    void endMarkerTimeChanged(const Segment*, bool)   override;
+    void startChanged        (const Segment*, timeT)  override;
+    void segmentDeleted      (const Segment*)         override;
+
+    // Segment to use for Key at current time for key-relative chord labelling
+    void setCurrentSegment(const Segment *segment);
+
+    // Remove/add  segment from current set used as sources of
+    // notes for chord analysis
+    void removeSegment(Segment *segment);
+    void    addSegment(Segment *segment);
+
+    // One or more segments have changed from pitched to percussion or
+    // vice-versa. Is brute-force regeneration of all m_segments
+    // active flags and Segment notifications signals, but is rare,
+    // non-realtime, edge case.
+    void resetPercussionSegments();
+
+    // Calls ChordAnalyzer::labelChords() and then Qt update() (redisplay)
+    //   conditionally depending on internal states/modes.
+    // Public for client/owners (matrix editor) to call in desired order
+    //   vs. other processing.
+    // Otherwise triggered from slotCommandExecuted() (connected to
+    //   CommandHistory::commandExecuted), As well as from internal UI menu
+    //   slots and other internal methods (setVisible(), setCurrentSegment(),
+    //   etc) if needed as per internal states/modes.
+    bool analyzeChords();
 
     // Ruler drawing size hints and settings
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
     void setMinimumWidth(int width) { m_width = width; }
 
+    // Finds chord closest within quantization to given time.
+    // Returns pitch class 0..11, or -1 if no chord.
+    // For external use labeling note in-chord function, e.g. by MatrixElement.
+    int chordRootPitchAtTime(timeT) const;
 
-    // For external use labeling note in-key degrees, e.g. by MatrixElement
-    const Key keyAtTime(const timeT t) const;
-    // For external use by MatrixScene::recreateKeyHighlights()
-    timeT getNextKeyTime(const timeT currentKeyTime) const;
+    // Qt APIs
+    void setVisible(const bool visible) override;
+    bool isShown() const { return m_isVisible; };  // Can't override isVisible()
 
-    // Pitch class 0..11, or -1 if no chord
-    // For external use labeling note in-chord function, e.g. by MatrixElement
-    int chordRootPitchAtTime(const timeT) const;
+    void setAnalyzeWhileHidden(const bool analyze);
 
 signals:
+    // To notify matrix editor that might need to update note labels
+    //   if are displaying chord degrees.
+    // Emitted when UI menu invoked that triggers call to analyzeChords()
+    //   which might change chord root notes.
+    // Adding/removing key signatures handled separately by Segment
+    //  notification of event addition/removal and then later
+    //  acted upon when CommandHistory::commandExecuted/commandUnxecuted
+    //  signaled.
     void chordAnalysisChanged();
-    void insertKeyChange();  // pop up notation editor key change dialog
-    void copyChords();       // notation editor copy ruler chords to text
+
+    void insertKeyChange();  // Pop up notation editor key change dialog
+    void copyChords();       // Notation editor, copy ruler chords to text
 
 
 // See documentation for methods at definitions/implementations in .cpp file
 
 public slots:
-    void slotScrollHoriz(int x); // To synchronize with rest of GUI view elements
+    void slotScrollHoriz(int x); // Synchronize with rest of GUI view elements
+    void slotCommandExecuted();
+    void slotNoteAddedOrRemoved(const Segment*, const Event*, bool);
+    void slotKeyAddedOrRemoved (const Segment*, const Event*, bool);
+    void slotNoteModified      (const Segment*, const Event*);
 
 protected:
+    // Qt signals
     void paintEvent           (QPaintEvent*) override;
     void mousePressEvent      (QMouseEvent*) override;
+    void mouseReleaseEvent    (QMouseEvent*) override;
     void mouseDoubleClickEvent(QMouseEvent*) override;
 
+
 protected slots:
-    void slotSegmentContentsChanged();
     void slotInsertKeyChange();
     void slotCopyChords();
     void slotChooseActiveSegments();
@@ -193,28 +251,144 @@ protected slots:
     void slotSetNameStyles();
 
 private:
-    struct SegmentAndActive {
-        Segment *segment;  // Not const because ChordAnalyzer::labelChords
-                           //   inserts C major key change at beginning if
-                           //   no key change there.
-        bool     active;   // true if segment's notes being used for
-                           //   chord analysis
+    class LongestNotes {
+        // Keeps track of the longest note in a segment because chord
+        //   analysis needs to begin that duration before the first
+        //   note in range of times being analyzed (notes starting
+        //   before the begin time of the range  but continuing past
+        //   it contribute contribute to chords).
+        // Sets a miniumum of a whole note which in 99.9% of compositons
+        //   will never be exceeded, but the 0.01% of cases with organ
+        //   pedal points, bagpipes andor hurdy-gurdy drones, etc, need
+        //   to be correctly handled.
+
+      public:
+        static const int MINIMUM = 3840;  // Whole note in MIDI ticks
+
+        LongestNotes()
+        {
+            m_longestNotes[MINIMUM] = 1;
+        }
+
+        timeT longest() const
+        {
+            // Can't fail because always have at least (MINIMUM, 1)
+            return std::prev(m_longestNotes.end())->first;
+        }
+
+        void add(const timeT noteDuration)
+        {
+            if (noteDuration <= MINIMUM)
+                return;  // Don't bother incrementing/decrementing default.
+            auto found = m_longestNotes.find(noteDuration);
+            if (found == m_longestNotes.end())
+                m_longestNotes[noteDuration] = 1;
+            else
+                ++found->second;
+        }
+
+        void remove(const timeT noteDuration)
+        {
+            if (noteDuration <= MINIMUM)
+                return;  // Don't remove default, longest() relies on having.
+            auto found = m_longestNotes.find(noteDuration);
+            if (found == m_longestNotes.end())
+                return;
+            if (found->second == 1)
+                m_longestNotes.erase(found);
+            else
+                --found->second;
+        }
+
+      protected:
+        // Map of (duration, count)
+        // Always has at least (MINIMUMUM, 1) so don't have to
+        //   special-case check.
+        std::map<timeT, unsigned> m_longestNotes;
     };
 
-    void createMenuAndTooltip();
-    bool chooseSegments(const QString&, const std::vector<Segment*>&);
-    std::vector<SegmentAndActive>::iterator findSegment(const Segment*);
-    void resetActiveSegmentIndices();
+    struct SegmentInfo {
+        // Active in chord analysis, time range of modified notes,
+        // and LongestNotes (see above)
+
+        SegmentInfo()
+        :   active        (true),
+            isPercussion  (false),
+            minChangedTime(std::numeric_limits<timeT>::max()),
+            maxChangedTime(std::numeric_limits<timeT>::min())
+        {}
+
+        bool haveChangedRange() const
+        {
+            return maxChangedTime > minChangedTime;
+        }
+
+        void reset()
+        {
+            minChangedTime = std::numeric_limits<timeT>::max();
+            maxChangedTime = std::numeric_limits<timeT>::min();
+        }
+
+        void addNote(
+        const Event* const  note)
+        {
+            timeT   duration = note->getDuration(),
+                    start    = note->getAbsoluteTime(),
+                    stop     = start + duration;
+
+            if (start < minChangedTime) minChangedTime = start;
+            if (stop  > maxChangedTime) maxChangedTime = stop;
+
+            longestNotes.add(duration);
+        }
+
+
+        void removeNote(
+        const Event* const  note)
+        {
+            // Can't modify min/maxChangedTimes because might be
+            //   other notes holding down those limits.
+            // Not worth expense of trying to keep track of
+            //   counts of multiple notes at time, etc.
+
+            timeT   duration = note->getDuration(),
+                    start    = note->getAbsoluteTime(),
+                    stop     = start + duration;
+
+            if (start < minChangedTime) minChangedTime = start;
+            if (stop  > maxChangedTime) maxChangedTime = stop;
+
+            longestNotes.remove(duration);
+        }
+
+        bool            active,          // Use for chord analysis
+                        isPercussion;    // For when change to/from
+        timeT           minChangedTime,  // If both are 0, use whole
+                        maxChangedTime;  // composition time range
+        LongestNotes    longestNotes;    // See LongestNotes, above
+    };
+
+    void init(const std::vector<Segment*> &segments);
+
+    void createMenuAndToolTip();
+    void updateToolTip();
+
     timeT noteDurationToMidiTicks(const NoteDuration);
+
+    void removeOrderedSegment(const Segment*);
+
+    void setSlashChordMenus();
 
     RosegardenDocument *m_doc;
 
     ChordAnalyzer *m_analyzer;  // chord analysis engine(s)
 
-    bool    m_showChords;
-    bool    m_showKeyChanges;
-    bool    m_keyChangingEnabled;
-    bool    m_chordCopyingEnabled;
+    ParentEditor             m_parentEditor;
+    ConflictingKeyChanges   *m_conflictingKeyChanges;
+    bool                     m_ownConflictingKeyChanges,
+                             m_showChords,
+                             m_showKeyChanges,
+                             m_hideKeyChanges; // temporary, middle mouse button
 
     // ruler scale info
     int     m_height;
@@ -223,10 +397,6 @@ private:
 
     RulerScale  *m_rulerScale;
     Composition *m_composition;
-
-    // For getting current set of segments if not explictly set
-    // by second constructor variant and/or modified via removeSegment()
-    unsigned int m_compositionRefreshStatusId;
 
     QMenu       *m_menu;
     QAction     *m_showChordsAction,
@@ -284,48 +454,48 @@ private:
                 *m_altMinorKeys,
                 *m_nonDiatonicChords;
 
-    bool m_enableChooseActiveSegments;
-
     // For key-relative chord analysis
     const Segment *m_currentSegment;
+          Segment  m_defaultSegment;  // for use when no real m_currentSegment
 
-    std::vector<SegmentAndActive>  m_segments;
+    std::map<const Segment*, SegmentInfo> m_segments;
 
-    unsigned m_numActiveSegments;
+    // For CheckableListDialog in chooseSegments() so that are in
+    // same order as constructed by parent editor (currently only
+    // matrix does correctly, notation is wrong and track/main
+    // doesn't enable chooseSegments() menu action).
+    std::vector<Segment*> m_orderedSegments;
 
-    std::vector<unsigned> m_activeSegmentIndices;  // for CheckableListDialog
+    // Generated by ChordAnalyer::labelChords().
+    std::map<const timeT, const std::string>    m_chords;
 
-    // Contains text events generated by ChordAnalyer::labelChords(),
-    // both analyzed chords and extracted key changes.
-    Segment     *m_chordAndKeyNames;
-
-    // For external use labeling note in-key degrees, e.g. by MatrixElement
-    std::map<timeT, const Key> m_keys;
     // For external use labeling note in-chord function, e.g. by MatrixElement
-    std::map<timeT, int> m_roots;
-
-
+    std::map<const timeT, int> m_roots;
 
     // Flags and settings
-    bool           m_implicitSegments,       // not maintained by client
-                   m_conflictingKeyChanges,  // optimize if re-anlyze needed
-                   m_chordNameStylesUpdated, // initialize chord analyzer once
-                   m_doUnarpeggiation;       // which chord analysis algorithm
-    NoteDuration   m_quantization,           // for "note change" algorithm
-                   m_unarpeggiation;         // for "per unit time" algorithm
-    timeT          m_quantizationTime,       // for "note change" algorithm
-                   m_unarpeggiationTime;     // for "per unit time" algorithm
-    ChordNameType  m_chordNameType;          // labeling style
-    ChordSlashType m_chordSlashType;         // labeling style slash/inversion
+    bool           m_isVisible,             // see setVisible() in .cpp file
+                   m_analyzeWhileHidden,    // for matrix editor chord labels
+                   m_doUnarpeggiation,      // which chord analysis algorithm
+                   m_keysDirty,             // key changes need recalc/update
+                   m_notesDirty,            // need chord analysis
+                   m_chordsDirty,           // need to re-analyze chords
+                   m_namingModeChanged,     // to force despite !m_keyDependent
+                   m_keyDependent;          // some chord analysis modes are
+    NoteDuration   m_quantization,          // for "note change" algorithm
+                   m_unarpeggiation;        // for "per unit time" algorithm
+    timeT          m_quantizationTime,      // for "note change" algorithm
+                   m_unarpeggiationTime;    // for "per unit time" algorithm
+    ChordNameType  m_chordNameType;         // labeling style
+    ChordSlashType m_chordSlashType;        // labeling style slash/inversion
 
     // Text settings
     QFont        m_font,
                  m_boldFont;
     QFontMetrics m_fontMetrics,
                  m_boldFontMetrics;
-};
 
+};  // class ChordNameRuler
 
-}
+}   // namespace Rosegarden
 
 #endif

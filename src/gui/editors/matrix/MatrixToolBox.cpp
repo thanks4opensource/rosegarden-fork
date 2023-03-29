@@ -161,20 +161,11 @@ MatrixToolBox::checkKeysStateOnEntry() {
 void
 MatrixToolBox::updateToolsMenus(const Segment* /*segment*/)
 {
-#if 0   // t4os
-    // Doesn't work because MatrixTool::updateMenu() changing QLabel
-    // for QAction in QWidgetAction doesn't work
-    for (auto baseTool : m_tools) {
-        MatrixTool *matrixTool = dynamic_cast<MatrixTool*>(baseTool);
-        if (matrixTool) matrixTool->updateMenu(segment);
-    }
-#else
-    for (auto baseTool : m_tools) {
+    for (auto &baseTool : m_tools) {
         MatrixTool *matrixTool = dynamic_cast<MatrixTool*>(baseTool);
         if (matrixTool && matrixTool->hasMenu())
             matrixTool->createMenu();
     }
-#endif
 }
 
 void
@@ -353,6 +344,10 @@ MatrixToolBox::handleMouseMove(const MatrixMouseEvent *e)
 void
 MatrixToolBox::handleMouseRelease(const MatrixMouseEvent *e)
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nMatrixToolBox::handleMouseRelease()";
+#endif
+
     if (m_hadDoubleClick) {
         m_hadDoubleClick = false;
         // MatrixTool::handleMouseDoubleClick() had set m_isFinished to false.

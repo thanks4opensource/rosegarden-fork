@@ -3,7 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -18,8 +19,9 @@
 #ifndef RG_TRACKEDITOR_H
 #define RG_TRACKEDITOR_H
 
-#include "base/MidiProgram.h"
 #include "base/Event.h"
+#include "base/MidiProgram.h"
+#include "base/Selection.h"
 #include "gui/editors/segment/TrackButtons.h"
 
 #include <QString>
@@ -75,6 +77,8 @@ public:
                 SimpleRulerScale *rulerScale,
                 bool showTrackLabels);
 
+    ~TrackEditor();
+
     // ??? These accessors are mostly for RosegardenMainViewWidget.
     //     Consider moving the code from RosegardenMainViewWidget into
     //     here and wrapping in functions at a higher level of
@@ -87,6 +91,7 @@ public:
     StandardRuler   *getTopStandardRuler()    { return m_topStandardRuler; }
     StandardRuler   *getBottomStandardRuler() { return m_bottomStandardRuler; }
     TrackButtons    *getTrackButtons()        { return m_trackButtons; }
+    QLabel          *getExtantKeyLabel()      { return m_extantKeyLabel; }
     //RulerScale      *getRulerScale()          { return m_rulerScale; }
 
     /// Calls update() on each of the rulers.
@@ -105,6 +110,9 @@ public:
     void deleteSelectedSegments();
     void turnRepeatingSegmentToRealCopies();
     void turnLinkedSegmentsToRealCopies();
+
+    // Public for RosegardenMainViewWidget::slotShowChordNameRuler()
+    void setExtantKeyLabel();
 
 signals:
     /**
@@ -146,6 +154,7 @@ signals:
      */
     //void needUpdate();
 
+
 private slots:
     /// Set the position pointer during playback
     /**
@@ -175,6 +184,8 @@ private slots:
     void slotVerticalScrollTrackButtons(int y);
 
     /// Triggers a refresh if the composition has changed.
+    //  t4os: NEEDS TO BE COMPLETELY RE-ARCHITECTED AS PER
+    //        TED FELIX COMMENTS IN IMPLEMENTATION
     void slotCommandExecuted();
 
     /// Adjust the size of the TrackButtons to match the CompositionView.
@@ -187,6 +198,10 @@ private slots:
     //void slotCanvasScrolled(int, int);
     //void slotSegmentOrderChanged(int section, int fromIdx, int toIdx);
     //void slotTrackButtonsWidthChanged();
+
+    // To call setExtantKeyLabel() and ChordNameRuler::setCurrentSegment()
+    void slotSelectedSegments (const SegmentSelection&);
+    void slotKeyAddedOrRemoved(const Segment*, const Event*, bool);
 
 private:
 
@@ -201,9 +216,14 @@ private:
     /// Wrapper around CommandHistory::addCommand().
     void addCommandToHistory(Command *command);
 
+    // Info display
+    void setExtantKeyLabelFromScrollbar();
+
+
     //--------------- Data members ---------------------------------
 
     RosegardenDocument      *m_doc;
+    RosegardenMainViewWidget    *m_view;
     unsigned int             m_compositionRefreshStatusId;
 
     // Segment Canvas
@@ -224,6 +244,12 @@ private:
     ChordNameRuler          *m_chordNameRuler;
     StandardRuler           *m_topStandardRuler;
     StandardRuler           *m_bottomStandardRuler;
+
+    // Info display
+    QLabel                  *m_extantKeyLabel;
+    const Segment           *m_currentSegment;
+    bool                     m_keysDirty;
+    std::string              m_extantKeyString;
 
     //unsigned int             m_canvasWidth;
     //typedef std::map<Segment *, unsigned int> SegmentRefreshStatusIdMap;

@@ -3,7 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -79,27 +80,38 @@ ListEditView::ListEditView(std::vector<Segment *> segments,
 
     m_centralFrame = new QFrame(this);
     m_centralFrame->setObjectName("centralframe");
-	m_centralFrame->setMinimumSize( 500, 300 );
-	m_centralFrame->setMaximumSize( 2200, 1400 );
+        m_centralFrame->setMinimumSize( 500, 300 );
+        m_centralFrame->setMaximumSize( 2200, 1400 );
 
-	//
-	m_grid = new QGridLayout(m_centralFrame);
-	m_centralFrame->setLayout( m_grid );
+        //
+        m_grid = new QGridLayout(m_centralFrame);
+        m_centralFrame->setLayout( m_grid );
 
-	// Note: We add Widget bottom-right, so the grid gets the propper col,row count
-	// NbLayoutRows, cols
-	//m_grid->addWidget( new QWidget(this), NbLayoutRows, cols);
+        // Note: We add Widget bottom-right, so the grid gets the propper col,row count
+        // NbLayoutRows, cols
+        //m_grid->addWidget( new QWidget(this), NbLayoutRows, cols);
 
 
-	//this->setLayout( new QVBoxLayout(this) );
-	//this->layout()->addWidget( m_centralFrame );
-	setCentralWidget( m_centralFrame );
+        //this->setLayout( new QVBoxLayout(this) );
+        //this->layout()->addWidget( m_centralFrame );
+        setCentralWidget( m_centralFrame );
 
     initSegmentRefreshStatusIds();
 }
 
 ListEditView::~ListEditView()
 {
+      RosegardenDocument
+    ::currentDocument
+    ->getComposition()
+     .deleteRefreshStatusId(m_compositionRefreshStatusId);
+
+    for (unsigned   ndx = 0 ;
+                       ndx < m_segments.size()
+                    && ndx < m_segmentsRefreshStatusIds.size() ;
+                  ++ndx)
+        m_segments[ndx]->deleteRefreshStatusId(m_segmentsRefreshStatusIds[ndx]);
+
     delete m_timeSigNotifier;
 
 //&&& Detact CommandHistory
@@ -146,21 +158,21 @@ ListEditView::paintEvent(QPaintEvent* e)
 
     /*
         if (m_inPaintEvent) {
-    	NOTATION_DEBUG << "ListEditView::paintEvent: in paint event already";
-    	if (e) {
-    	    if (m_havePendingPaintEvent) {
-    		if (m_pendingPaintEvent) {
-    		    QRect r = m_pendingPaintEvent->rect().unite(e->rect());
-    		    *m_pendingPaintEvent = QPaintEvent(r);
-    		} else {
-    		    m_pendingPaintEvent = new QPaintEvent(*e);
-    		}
-    	    } else {
-    		m_pendingPaintEvent = new QPaintEvent(*e);
-    	    }
-    	}
-    	m_havePendingPaintEvent = true;
-    	return;
+        NOTATION_DEBUG << "ListEditView::paintEvent: in paint event already";
+        if (e) {
+            if (m_havePendingPaintEvent) {
+                if (m_pendingPaintEvent) {
+                    QRect r = m_pendingPaintEvent->rect().unite(e->rect());
+                    *m_pendingPaintEvent = QPaintEvent(r);
+                } else {
+                    m_pendingPaintEvent = new QPaintEvent(*e);
+                }
+            } else {
+                m_pendingPaintEvent = new QPaintEvent(*e);
+            }
+        }
+        m_havePendingPaintEvent = true;
+        return;
         }
     */
     //!!!    m_inPaintEvent = true;
@@ -258,11 +270,11 @@ ListEditView::paintEvent(QPaintEvent* e)
     // !!! m_inPaintEvent = false;
     /*
         if (m_havePendingPaintEvent) {
-    	e = m_pendingPaintEvent;
-    	m_havePendingPaintEvent = false;
-    	m_pendingPaintEvent = 0;
-    	paintEvent(e);
-    	delete e;
+        e = m_pendingPaintEvent;
+        m_havePendingPaintEvent = false;
+        m_pendingPaintEvent = 0;
+        paintEvent(e);
+        delete e;
         }
     */
 }

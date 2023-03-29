@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -58,6 +58,7 @@ class ControlRulerWidget;
 class StandardRuler;
 class TempoRuler;
 class ChordNameRuler;
+class ConflictingKeyChanges;
 class Device;
 class Instrument;
 class Thumbwheel;
@@ -113,6 +114,7 @@ public:
         DEGREE,
         MOVABLE_DO,
         INTEGER_KEY,
+        VELOCITY,
     };
 
     enum class ChordSpellingType {
@@ -146,8 +148,7 @@ public:
     /// setInstrumentOverride == true
     /// Optional Segment* argument if caller already has that,
     /// otherwise will get from MatrixScene::getCurrentSegment()
-    void updateToCurrentSegment(bool setInstrumentOverride,
-                                const Segment *segment = nullptr);
+    void updateToCurrentSegment(const Segment *segment);
 
     /// MatrixScene::segmentsContainNotes()
     bool segmentsContainNotes() const;
@@ -162,12 +163,37 @@ public:
     /// MatrixScene::setSnap()
     void setSnap(timeT);
 
-    bool chordNameRulerIsVisible() const;
-    ChordNameRuler *getChordNameRuler() const { return m_chordNameRuler; }
+    void updateStandardRulers();  // Can't be inline
+
+    bool chordNameRulerIsVisible() const;  // Can't be inline
+    ChordNameRuler *chordNameRuler() const { return m_chordNameRuler; }
+    // Returns false if aborted setting invisible
     void setChordNameRulerVisible(bool visible);
+
+    ConflictingKeyChanges *conflictingKeyChanges() const
+        { return m_conflictingKeyChanges; }
+
+    void setExtantKeyLabel(int x=0, const bool xProvided=false);
+
     void setTempoRulerVisible(bool visible);
-    // Check note label/chord mode
-    bool needUpdateNoteLabels();
+
+    // Used (only) by MatrixScene::updateNotes()
+    //
+    bool needUpdateNoteLabels() const {
+        return    m_showNoteNames
+               && (   m_keyDependentNotes
+                   || m_chordSpellingType != ChordSpellingType::OFF);
+    }
+    bool needUpdateNoteColors() const {
+        return m_noteColorType == NoteColorType::PITCH;
+    }
+
+    // Used by various MatrixView methods
+    //
+    bool needChordNameRuler() const {
+        return m_showNoteNames && m_chordDependentNotes;
+    }
+    void setChordNameRulerAnalyzeWhileHiddenMode() const;
 
     /// Show the highlight on the piano/percussion rulers.
     void showHighlight(bool visible);
@@ -222,23 +248,19 @@ public:
 
     NoteColorType getNoteColorType() const
                   { return m_noteColorType; }
-    void          setNoteColorType(const NoteColorType colorType)
-                  { m_noteColorType = colorType; }
+    void          setNoteColorType(const NoteColorType colorType);
 
     bool getNoteColorAllSegments() const
          { return m_noteColorAllSegments; }
     void setNoteColorAllSegments(const bool all)
          { m_noteColorAllSegments = all; }
 
-    NoteNameType getNoteNameType() const
-                 { return m_noteNameType; }
-    void         setNoteNameType(const NoteNameType nameType)
-                 { m_noteNameType = nameType; }
+    NoteNameType getNoteNameType() const { return m_noteNameType; }
+    void setNoteNameType(const NoteNameType nameType);
 
     ChordSpellingType getChordSpellingType() const
                  { return m_chordSpellingType; }
-    void         setChordSpellingType(const ChordSpellingType nameType)
-                 { m_chordSpellingType = nameType; }
+    void setChordSpellingType(const ChordSpellingType nameType);
 
     bool getNoteNamesCmajFlats() const
          { return m_noteNamesCmajFlats; }
@@ -254,6 +276,10 @@ public:
          { return m_noteNamesAlternateMinors; }
     void setNoteNamesAlternateMinors(const bool alternate)
          { m_noteNamesAlternateMinors = alternate; }
+
+    bool notesAreKeyDependent()   const { return   m_keyDependentNotes; }
+    bool notesAreChordDependent() const { return m_chordDependentNotes; }
+    bool notesAreColorDependent() const { return m_colorDependentNotes; }
 
     /// Velocity for new notes (and moved notes, too).
     int getCurrentVelocity() const { return m_currentVelocity; }
@@ -340,16 +366,16 @@ protected:
 #endif
 
 private slots:
-    /// Called when the document is modified in some way.
-    void slotDocumentModified(bool);
-
-    /// Called when segment(??) colors change
-    void slotDocColoursChanged();
-
     /// Connected to Panned::zoomIn() for ctrl+wheel.
     void slotZoomIn();
     /// Connected to Panned::zoomOut() for ctrl+wheel.
     void slotZoomOut();
+    // Connected to Panned::zoomVertical for ctrl+shift+wheel
+    void slotZoomVertical(int);  // +1 left, -1 right
+    // Connected to Panned::zoomHorizontal for alt+ctrl+wheel
+    void slotZoomHorizontal(int);  // +1 left, -1 right
+    // Connected to Panned::panLeftRifht for shift+wheel
+    void slotPanLeftRight(int);   // +1 in (bigger), -1 out (smaller)
 
     /// Connected from Panner::zoomFitVertical(bool) signal
     void slotZoomFitNotes(const unsigned mode,
@@ -480,7 +506,6 @@ private:
     Panner *m_panner; // I own this
     void zoomInFromPanner();
     void zoomOutFromPanner();
-    void setExtantKeyLabel(int x=0, const bool xProvided=false);
 
     QWidget *m_changerWidget;
     Thumbwheel *m_segmentChanger;
@@ -541,7 +566,6 @@ private:
     /// Hide pitch ruler highlight when mouse move is not related to a pitch change.
     bool m_highlightVisible;
 
-
     // These need to be accessed by MatrixElement::reconfigure() each
     // time a percussion segment note moves/etc., and getting from
     // the QSettings persistent database is too slow.
@@ -559,6 +583,11 @@ private:
     bool m_noteNamesCmajFlats;
     bool m_noteNamesOffsetMinors;
     bool m_noteNamesAlternateMinors;
+
+    // Set along with and according to above
+    bool   m_keyDependentNotes,
+         m_chordDependentNotes,
+         m_colorDependentNotes;
 
     // Tools
     MatrixToolBox *m_toolBox; // I own this
@@ -588,6 +617,7 @@ private:
     // Rulers
 
     ChordNameRuler *m_chordNameRuler; // I own this
+    ConflictingKeyChanges *m_conflictingKeyChanges; // I own this
     TempoRuler *m_tempoRuler; // I own this
     StandardRuler *m_topStandardRuler; // I own this
     StandardRuler *m_bottomStandardRuler; // I own this

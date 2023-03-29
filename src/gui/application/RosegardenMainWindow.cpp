@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -880,7 +880,6 @@ RosegardenMainWindow::setupActions()
     createAction("rewindtobeginning", SLOT(slotRewindToBeginning()));
     createAction("fastforwardtoend", SLOT(slotFastForwardToEnd()));
     createAction("toggle_loop", SLOT(slotLoopButtonClicked()));
-    createAction("toggle_tracking", SLOT(slotToggleTracking()));
 #if 0  // t4os: master version looping
     createAction("loop", SLOT(slotLoop()));
 #endif
@@ -1171,6 +1170,11 @@ RosegardenMainWindow::initView()
     }
 
     m_view->show();
+
+    // Need to manually call here because !isVisible() at initialization
+    // (which is checked to prevent unnecessary updates) otherwise
+    // don't get initial display at startup.
+    m_view->getTrackEditor()->setExtantKeyLabel();
 
     connect(m_view->getTrackEditor()->getCompositionView(),
             &CompositionView::showContextHelp,
@@ -3973,9 +3977,9 @@ RosegardenMainWindow::slotDeleteEmptyTracks()
     // don't hold list of segments in them. Instead have to do this
     // ass-backward search for non-empty ones and subtract.
     std::set<TrackId> nonEmptyTracks;
-    for (auto segment : composition.getSegments()) {
+    for (const Segment* const segment : composition.getSegments()) {
         bool hasNotes = false;
-        for (auto event : *segment) {
+        for (const Event* const event : *segment) {
             if (event->isa("note")) {
                 hasNotes = true;
                 break;
@@ -3986,7 +3990,7 @@ RosegardenMainWindow::slotDeleteEmptyTracks()
     }
 
     std::vector<TrackId> emptyTracks;
-    for (auto idAndTrack : composition.getTracks()) {
+    for (const auto &idAndTrack : composition.getTracks()) {
         InstrumentId instrumentId = idAndTrack.second->getInstrument();
         Instrument  *instrument = document->getStudio().
                                     getInstrumentById(instrumentId);

@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -46,6 +46,7 @@
 #include "document/RosegardenDocument.h"
 #include "gui/application/RosegardenMainWindow.h"
 #include "gui/application/RosegardenMainViewWidget.h"
+#include "gui/general/GUIPalette.h"
 #include "gui/rulers/ChordNameRuler.h"
 #include "gui/rulers/TempoRuler.h"
 #include "gui/rulers/LoopRuler.h"
@@ -90,6 +91,7 @@ TrackEditor::TrackEditor(RosegardenDocument *doc,
                          bool showTrackLabels) :
     QWidget(mainViewWidget),
     m_doc(doc),
+    m_view(mainViewWidget),
     m_compositionRefreshStatusId(doc->getComposition().getNewRefreshStatusId()),
     m_compositionView(nullptr),
     m_compositionModel(nullptr),
@@ -101,7 +103,9 @@ TrackEditor::TrackEditor(RosegardenDocument *doc,
     m_tempoRuler(nullptr),
     m_chordNameRuler(nullptr),
     m_topStandardRuler(nullptr),
-    m_bottomStandardRuler(nullptr)
+    m_bottomStandardRuler(nullptr),
+    m_currentSegment(nullptr),
+    m_keysDirty(true)             // see setExtantKeyLabel()
     //m_canvasWidth(0)
 {
     // Accept objects dragged and dropped onto this widget.
@@ -114,6 +118,27 @@ TrackEditor::TrackEditor(RosegardenDocument *doc,
 
     Composition &comp = m_doc->getComposition();
     m_playTracking = comp.getMainFollowPlayback();
+}
+
+TrackEditor::~TrackEditor()
+{
+#if 0  // Can't be done due to unfortunate desing whereby a temporary
+       //   document is created and immediately destructed during load
+       //   from file/url/etc.
+       // This TrackEditor is also destructed, but after the
+       //   RosegardenDocument and/or Composition, so the following
+       //   segfaults.
+       // Annoying, but doesn't leak because Composition::m_refreshStatusArray
+       //   has been destroyed anyway.
+       //   refresh status id.
+    m_doc->getComposition().deleteRefreshStatusId(m_compositionRefreshStatusId);
+#elif 0  // This doesn't work either (and requires adding CompositionObserver
+         // as additional base class.
+    if (m_doc && !isCompositionDeleted())
+          m_doc
+        ->getComposition()
+         .deleteRefreshStatusId(m_compositionRefreshStatusId);
+#endif
 }
 
 void
@@ -139,12 +164,19 @@ TrackEditor::init(RosegardenMainViewWidget *mainViewWidget)
 
     // Top Rulers
 
-    m_chordNameRuler = new ChordNameRuler(m_rulerScale,
+    m_extantKeyLabel = new QLabel();
+    m_extantKeyLabel->setStyleSheet(
+        QString("QLabel {color : white;"
+                        "font-weight : bold;"
+                        "qproperty-alignment : AlignRight}"));
+    grid->addWidget(m_extantKeyLabel, 0, 0);
+
+    m_chordNameRuler = new ChordNameRuler(this,
+                                          m_rulerScale,
                                           m_doc,
-                                          false,  // no key change support
-                                          false,  // no copying chords to text
-                                          20,
-                                          this);
+                                          ChordNameRuler::ParentEditor::TRACK,
+                                          20);  // height
+
     grid->addWidget(m_chordNameRuler, 0, 1);
 
     m_tempoRuler = new TempoRuler(m_rulerScale,
@@ -295,6 +327,10 @@ TrackEditor::init(RosegardenMainViewWidget *mainViewWidget)
             m_chordNameRuler, &ChordNameRuler::slotScrollHoriz);
     connect(m_compositionView->horizontalScrollBar(), &QAbstractSlider::sliderMoved,
             m_chordNameRuler, &ChordNameRuler::slotScrollHoriz);
+    connect(m_compositionView->horizontalScrollBar(),
+            &QScrollBar::valueChanged,
+            this,
+            &TrackEditor::setExtantKeyLabelFromScrollbar);
 
     // Was only emitted from dead code.
     //connect(this, SIGNAL(needUpdate()),
@@ -304,6 +340,10 @@ TrackEditor::init(RosegardenMainViewWidget *mainViewWidget)
             &CompositionModelImpl::selectionChanged,
             mainViewWidget,
             &RosegardenMainViewWidget::slotSelectedSegments);
+    connect(m_compositionView->getModel(),
+            &CompositionModelImpl::selectionChanged,
+            this,
+            &TrackEditor::slotSelectedSegments);
 
     connect(m_compositionView, &RosegardenScrollView::viewportResize,
             this, &TrackEditor::slotViewportResize);
@@ -589,6 +629,24 @@ TrackEditor::slotVerticalScrollTrackButtons(int y)
 
 void TrackEditor::slotCommandExecuted()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\nTrackEditor::commandExecuted()"
+             << CommandHistory::getInstance()->lastCommandExecuted()
+             << "\n "
+             << (  CommandHistory::getInstance()->commandIsExecuting()
+                 ? "COMMAND" : "!command")
+             << (  CommandHistory::getInstance()->macroCommandIsExecuting()
+                 ? "MACRO" : "!macro");
+#endif
+
+    // t4os: NEEDS TO BE COMPLETELY RE-ARCHITECTED AS PER
+    //       TED FELIX COMMENTS, BELOW
+    // (with exception of t4os-added call to setExtantKeyLabel() at end
+
+    // t4os: Slight improvement ...
+    if (CommandHistory::getInstance()->macroCommandIsExecuting())
+        return;
+
     // ??? This routine doesn't belong here.  It is doing things for other
     //     objects.  Those objects should take care of themselves.
 
@@ -660,6 +718,9 @@ void TrackEditor::slotCommandExecuted()
     // ??? The children should paint themselves in response to changes.
     //     TrackEditor shouldn't care.
     update();
+
+    // This is the one and only thing that should be done here
+    setExtantKeyLabel();
 }
 
 void TrackEditor::slotViewportResize()
@@ -677,6 +738,95 @@ void TrackEditor::slotViewportResize()
     // In this case, that's the height of the bottom ruler and the horizontal
     // scrollbar, if it exists.
     grid->setRowMinimumHeight(4, m_compositionView->height() - viewportHeight);
+}
+
+void TrackEditor::slotSelectedSegments(const SegmentSelection &segments)
+{
+    const Segment *segment =   segments.empty()
+                             ? nullptr
+                             : *segments.begin();
+
+    if (m_currentSegment && segment != m_currentSegment)
+        disconnect(m_currentSegment, &Segment    ::keyAddedOrRemoved,
+                   this            , &TrackEditor::slotKeyAddedOrRemoved);
+
+    m_currentSegment = segment;
+    m_keysDirty      = true;    // really need a m_conflictingKeyChanges
+
+    m_chordNameRuler->setCurrentSegment(segment);
+    setExtantKeyLabel();
+
+    if (m_currentSegment)
+        connect(m_currentSegment, &Segment    ::keyAddedOrRemoved,
+                this            , &TrackEditor::slotKeyAddedOrRemoved);
+}
+
+void
+TrackEditor::slotKeyAddedOrRemoved(
+const Segment   *segment,
+const Event     *,
+bool            )
+{
+    if (m_currentSegment && segment == m_currentSegment)
+        m_keysDirty = true;
+}
+
+void
+TrackEditor::setExtantKeyLabelFromScrollbar()
+{
+    m_keysDirty = true;
+    setExtantKeyLabel();
+}
+
+void
+TrackEditor::setExtantKeyLabel()
+{
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\nTrackEditor::setExtantKeyLabel()"
+             << (m_keysDirty ? "dirty" : "clean")
+             << (m_extantKeyLabel->isVisible() ? "visible" : "hidden")
+             << (m_currentSegment ? m_currentSegment->getLabel() : "<nullptr>");
+#endif
+
+    if (!m_currentSegment || !m_extantKeyLabel->isVisible()) {
+        m_extantKeyLabel->setText(QString());
+        // Do not unset m_keysDirty to false here.
+        // Need to keep dirty so that when re-showing after visible and
+        //   current segment and/or keys have changed will generate
+        //   new/correct text.
+        m_extantKeyString = "";
+        return;
+    }
+
+    if (!m_keysDirty) return;
+
+    auto    x         = m_compositionView->horizontalScrollBar()->value();
+    timeT   beginTime = m_rulerScale->getTimeForX(x);
+
+    if (beginTime < m_currentSegment->getStartTime())
+        beginTime = m_currentSegment->getStartTime();
+
+    auto keyIter = m_currentSegment->getKeySignatureIterAtTime(beginTime);
+    const std::string keyName(    m_currentSegment
+                                ->keySignatureIterIsValid(keyIter)
+                              ? keyIter->second.getUnicodeName()
+                              : "C major");
+
+    QString             qstring( QString("%1: %2  ")
+                                .arg(QString::fromStdString(  m_currentSegment
+                                                            ->getLabel()))
+                                .arg(QString::fromStdString(keyName)));
+    const std::string   keyString(qstring.toStdString());
+
+    if (keyString != m_extantKeyString) {
+        m_extantKeyString = keyString;
+        m_extantKeyLabel->setText(qstring);
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+        qDebug() << "  text:" << qstring;
+#endif
+    }
+
+    m_keysDirty = false;
 }
 
 void TrackEditor::dragEnterEvent(QDragEnterEvent *e)

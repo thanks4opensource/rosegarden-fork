@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -177,6 +177,7 @@ public:
      *
      * See slotDocumentModified() and emitDocumentModified().
      */
+    // Emits
     void setModified();
 
     /**
@@ -301,7 +302,10 @@ public:
     void signalNotesTied  (const EventContainer&);
     void signalNotesUntied(const EventContainer&);
 
-    void signalKeySignaturesChanged(bool inserted);
+    // Passed a vector of segments checks that if a key signature
+    // change event in a segment at a given time all other segments
+    // have the same key signature change at that timer.
+    // Returns true if all match, false otherwise.
 
     /**
      * returns the composition (the principal constituent of the document)
@@ -543,10 +547,6 @@ public:
 
     void stealLockFile(RosegardenDocument *other);
 
-#if 0  // t4os: master version looping
-    /// Consistent loop button behavior across all windows.
-    void loopButton(bool checked);
-#endif
 
 public slots:
     /**
@@ -593,6 +593,14 @@ signals:
      */
     void documentModified(bool);
 
+    // Tell windows to update their titles.
+    //
+    // Emitted by clearModifiedStatus() and by setModified(), but
+    // the latter only conditionally and at much lower frequency
+    // rate than documentModified().
+    //
+    void updateWindowTitle(bool);
+
     /**
      * Emitted during playback, to suggest that views should track along,
      * as well as when pointer is moved via a click on the loop ruler.
@@ -633,11 +641,6 @@ signals:
     void markerDeleted (Marker*);
     void markerModified(Marker*);
 
-#if 0  // t4os: master version looping
-    /// Emitted whenever the Composition loop fields change.
-    void loopChanged();
-#endif
-
     /**
      * We probably want to keep this notification as a special case.
      * The reason being that to detect a change to the color list will
@@ -654,7 +657,6 @@ signals:
     void notesTied  (const EventContainer&);
     void notesUntied(const EventContainer&);
 
-    void keySignaturesChanged(bool inserted);
 
 private:
     /**
@@ -679,18 +681,6 @@ private:
     bool xmlParse(QString fileContents, QString &errMsg,
                   bool permanent,
                   bool &cancelled);
-
-    /**
-     * Set the "auto saved" status of the document
-     * Doc. modification sets it to false, autosaving
-     * sets it to true
-     */
-    void setAutoSaved(bool s) { m_autoSaved = s; }
-
-    /**
-     * Returns whether the document should be auto-saved
-     */
-    bool isAutoSaved() const { return m_autoSaved; }
 
     /**
      * Returns the name of the autosave file

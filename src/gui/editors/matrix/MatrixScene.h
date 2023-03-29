@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -93,8 +93,9 @@ public:
     void setSegments(RosegardenDocument *document,
                      std::vector<Segment *> segments);
 
-    void handleEventAdded(Event *);
-    void handleEventRemoved(Event *);
+    // SegmentObserver method forwarded from MatrixViewSegment
+    void handleSegmentEndMarkerTimeChanged(const Segment*, bool);
+    void handleSegmentStartChanged        (const Segment*, timeT);
 
     void setSelection(EventSelection* s, bool preview) override;
     EventSelection *getSelection() const override  { return m_selection; }
@@ -115,11 +116,13 @@ public:
     Segment *getCurrentSegment();
     void setCurrentSegment(const Segment* const);
 
+    unsigned getCurrentSegmentIndex() const { return m_currentSegmentIndex; }
+    unsigned segmentIndexEnd()        const { return m_segments.size(); }
+
     Segment *getPriorSegment();
     Segment *getNextSegment();
 
     const std::vector<Segment*> &getSegments() const { return m_segments; }
-
 
     MatrixViewSegment *getCurrentViewSegment();
 
@@ -146,22 +149,23 @@ public:
 
     void playNote(Segment &segment, int pitch, int velocity = -1);
 
-    // SegmentObserver method forwarded from MatrixViewSegment
-    void segmentEndMarkerTimeChanged(const Segment *s, bool shorten);
-
     /// Pass on to all Segments
     void setHorizontalZoomFactor(double factor);
     /// Pass on to all Segments
     void setVerticalZoomFactor(double factor);
 
-    /// update all ViewSegments
-    void updateAllSegments(bool onlyPercussion=false);
+    enum class UpdateNotes {
+        CHECK,
+        FORCE,
+        NEVER
+    };
 
-    /// just colors of notes
-    void updateAllSegmentsColors();
+    void updateNotes(const UpdateNotes checkIfLabelsNeeded,
+                     const UpdateNotes checkIfColorsNeeded);
 
-    /// just in one segment
-    void updateCurrentSegmentNames();
+    void updateNoteLabels();
+    void updateNoteColors();
+    void updatePercussionNotes();
 
     void recreatePitchHighlights();
 
@@ -233,12 +237,6 @@ public:
     GraphicsItemPool<IsotropicDiamondItem>  graphicsIsotropicDiamondPool;
     GraphicsItemPool<QGraphicsEllipseItem>  graphicsEllipsePool;
 
-    bool getKeySignaturesChanged() const
-        { return m_keySignaturesChanged; }
-    void setKeySignaturesChanged(bool changed)
-        { m_keySignaturesChanged = changed; }
-
-    void updateNoteLabels();
 
 signals:
 #if 0   // SIGNAL_SLOT_ABUSE
@@ -267,14 +265,13 @@ signals:
 
 
 public slots:
-    void slotNotesTied  (const EventContainer &notes);
-    void slotNotesUntied(const EventContainer &notes);
+    void slotNoteAddedOrRemoved(const Segment*, Event*, bool);
+    void slotNoteModified      (const Segment*, const Event*);
+    void  slotKeyAddedOrRemoved(const Segment*, Event*, bool);
+    void slotNotesTiedUntied   (const EventContainer &notes);
 
-
-// t4os -- see comment in constructor implemementation
 protected slots:
     void slotCommandExecuted();
-    void slotKeySignaturesChanged();
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent *) override;
@@ -294,9 +291,12 @@ protected:
     void keyReleaseEvent(QKeyEvent*) override;
 
     // CompositionObserver notifications
+        //              forwarded from  MatrixViewSegment::segmentDeleted
+        // No, Going back to using this.
     void segmentRemoved(const Composition *, Segment *) override;
     void trackChanged(const Composition *,Track*) override;
     void segmentTrackChanged(const Composition *, Segment *, TrackId) override;
+    void timeSignatureChanged(const Composition *) override;
 
 private:
     MatrixWidget *m_widget; // I do not own this
@@ -332,7 +332,11 @@ private:
 
     HighlightType m_highlightType;
 
-    bool m_keySignaturesChanged;
+    bool    m_notesChanged,
+            m_keysChanged,
+            m_currentSegmentKeysChanged,
+            m_segmentChanged,
+            m_timeSignatureChanged;
 
     // These are the background items -- the grid lines and the shadings
     // used to highlight the first, third and fifth in the current key

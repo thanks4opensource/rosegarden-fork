@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
     See the AUTHORS file for more details.
 
     This file is Copyright 2002
@@ -17,11 +17,17 @@
     COPYING included with this distribution for more information.
 */
 
-#include <string>
-#include <map>
 #include <algorithm>
-#include <iterator>  // prev()
-#include <cmath> // fabs(), pow()
+#include <array>
+#include <cmath>    // fabs(), pow()
+#include <iterator> // prev()
+#include <map>
+#include <string>
+
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+#include <iostream>
+#include <iomanip>
+#endif
 
 #include "base/NotationTypes.h"
 #include "AnalysisTypes.h"
@@ -33,6 +39,7 @@
 #include "misc/ConfigGroups.h"
 #include "misc/Preferences.h"
 #include "gui/rulers/ChordNameRuler.h"
+#include "document/RosegardenDocument.h"   // t4osDEBUG
 
 #include "Sets.h"
 #include "Quantizer.h"
@@ -139,12 +146,16 @@ ChordType
             Sus2                    = CT(NON, NON, "sus2"),         // sus2
             Sus4                    = CT(NON, NON, "sus4"),         // sus4
             DominantSeventhNo5      = CT(NON, NON, "7no5"),         // 7no5
+            DominantSeventhNo3      = CT(NON, NON, "7no3"),         // 7no3
             MinorSeventhNo5         = CT(MIN, NON, "7no5"),         // m7no5
             MajorSeventhNo5         = CT(MJ7, NON, "7no5"),         // maj7no5
             Add2No5                 = CT(MAJ, ADD, "2no5"),         // add2no5
             Add4No5                 = CT(MAJ, ADD, "4no5"),         // add4no5
             MinorAdd9No5            = CT(MIN, ADD, "9no5"),         // madd9no5
             MinorMajorSeventhNo5    = CT(MIN, MJ7, "7no5"),         // mM7no5
+            Flat5                   = CT(NON, NON, u8"\u266d5"),    // b5
+            VienneseTrichord        = CT(NON, NON,
+                                         u8"\u266d2\u266d5no3"),    // viennese
             // 4 notes ...
             DominantSeventh         = CT(NON, NON, "7"),            // 7
             MinorSeventh            = CT(MIN, NON, "7"),            // m7
@@ -168,8 +179,8 @@ ChordType
             SeventhFlatNineNo5      = CT(NON, NON, u8"7\u266d9no5"),// 7b9no5
             SeventhSharpNineNo5     = CT(NON, NON, u8"7\u266f9no5"),// 7#9no5
             MajorSeventhSharp11No5  = CT(MJ7, NON, u8"7\u266f11no5"),// M7#11no5
-            SixthAddNineNo5         = CT(NON, NON, "6+9no5"),       // 6add9no5
-            MinorSixthAddNineNo5    = CT(MIN, NON, "6+9no5"),       // m6add9no5
+            SixthAddNineNo5         = CT(NON, NON, "6add9no5"),     // 6add9no5
+            MinorSixthAddNineNo5    = CT(MIN, NON, "6add9no5"),     // m6add9no5
             EleventhNo5No9          = CT(NON, NON, "11no5,9"),      // 11no5no9
             MajorEleventhNo5No9     = CT(MJ7, NON, "11no5,9"),      // M11no5no9
             // 5 notes ...
@@ -180,21 +191,20 @@ ChordType
             SeventhSharpNine        = CT(NON, NON, u8"7\u266f9"),   // 7#9
             SeventhSharpEleven      = CT(NON, NON, u8"7\u266f11"),  // 7#11
             MajorSeventhSharpEleven = CT(MJ7, NON, u8"7\u266f11"),  // M7#11
-            SixthAddNine            = CT(NON, NON, "6+9"),          // 6add9
-            MinorSixthAddNine       = CT(MIN, NON, "6+9"),          // m6add9
+            SixthAddNine            = CT(NON, NON, "6add9"),        // 6add9
+            MinorSixthAddNine       = CT(MIN, NON, "6add9"),        // m6add9
             EleventhNo9             = CT(NON, NON, "11no9"),        // 11no9
-            MajorEleventhNo9        = CT(MJ7, NON, "11no9"),        // M11no9
             EleventhNo5             = CT(NON, NON, "11no5"),        // 11no5
             MinorEleventhNo5        = CT(MIN, NON, "11no5"),        // m11no5
             MajorEleventhNo5        = CT(MJ7, NON, "11no5"),        // M11no5
-            AugmentedEleventhNo5    = CT(AUG, NON, "11no5"),        // +11no5
+            AugmentedEleventhNo5    = CT(NON, NON, u8"\u266f11no5"),// #11no5
             MinorThirteenthNo5No7   = CT(MIN, NON, "13no5,7"),      // m13no5no7
             ThirteenthNo5No9        = CT(NON, NON, "13no5,9"),      // 13no5no9
             // 6 notes ...
             Eleventh                = CT(NON, NON, "11"),           // 11
             MinorEleventh           = CT(MIN, NON, "11"),           // m11
             MajorEleventh           = CT(MJ7, NON, "11"),           // M11
-            AugmentedEleventh       = CT(AUG, NON, "11"),           // +11
+            AugmentedEleventh       = CT(NON, NON, u8"\u266f11"),   // #11
             ThirteenthNo5           = CT(NON, NON, "13no5"),        // 13no5
             MajorThirteenthNo5      = CT(MJ7, NON, "13no5"),        // M13no5
             MinorThirteenthNo7      = CT(MIN, NON, "13no7"),        // m13no7
@@ -578,20 +588,25 @@ class ChordAnalyzerImpl
 
     // Implementation of ChordAnalyzer::labelChords(). See .h file
     // for description of input and output arguments.
-    void labelChords(Segment                        &chordsAndKeys,
-                     std::map<timeT, const Key>     &keys,
-                     std::map<timeT, int>           &roots,
-                     bool                           &conflictingKeyChanges,
-                     const std::vector<Segment*>     segments,
+    void labelChords(std::map<const timeT,
+                              const std::string>    &chords,
+                     std::map<const timeT, int>     &roots,
+                     const std::vector<const Segment*>   &segments,
                      const Segment                  *currentSegment,
-                     const bool                      keysOnly,
-                     const timeT                     timeWindow,
-                     bool                            onePerTimePeriod);
+                     const timeT                     quantizationWindow,
+                     const timeT                     arpeggiationWindow,
+                     bool                            onePerTimePeriod
+                     ,
+                     const bool                      wholeComposition,
+                     const timeT                     beginTime,
+                     const timeT                     endTime);
 
     // Analyze notes and add resulting chord text name to "chords",
     // and root to "roots".
-    void addChord(Segment               &chords,
-                  std::map<timeT, int>  &roots,
+    void addChord(std::map<const timeT,
+                           const std::string>   &chords,
+                  std::map<const timeT,
+                            int>        &roots,
                   const Key             &key,
                   const unsigned         mask,
                   const unsigned         bass,
@@ -604,6 +619,9 @@ class ChordAnalyzerImpl
     // labelChords() time.
     void setChordLabels();
 
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+  public:
+#endif
     // Notes and key changes in ChordAnalyzer::labelChords() segments
     // combined into one data structure.
     struct NoteOrKey {
@@ -612,18 +630,23 @@ class ChordAnalyzerImpl
         NoteOrKey(const unsigned char p, const NoteOrKey::OnOffKey ook)
         : count(1), pitch(p), onOffKey(ook) {}
 
-        NoteOrKey(const std::string &kn)
-        : name(kn), count(0), pitch(0), onOffKey(KEY) {}
+        NoteOrKey(const Key &k)
+        :   key(k),
+            onOffKey(KEY)
+        {}
 
-        // Key info
-        const std::string   name;
+        Key                 key;
+
         // Note info
-        unsigned            count;   // # of simultaneous same pitch on/off notes
+        unsigned            count;  // # of simultaneous same pitch on/off notes
         unsigned short      pitch;
         OnOffKey            onOffKey;
     };
-    using NotesAndKeys = std::multimap<unsigned, NoteOrKey>;
+    using NotesAndKeys = std::multimap<timeT, NoteOrKey>;
 
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+  protected:  // (because debug-made above public)
+#endif
     // Collect user-specified settings into one place so don't
     //   have to go back to external Preferences class to fetch.
     // Also so different chord name rulers can have different settings
@@ -662,15 +685,16 @@ class ChordAnalyzerImpl
 
     // The two analysis algorithms
     //
-    void labelChordsAtNotesOnOff(const NotesAndKeys         &notesAndKeys,
-                                 Segment                    &chords,
-                                 std::map<timeT, int>       &roots,
-                                 const timeT                 quantizationTime);
+    void labelChordsAtNotesOnOff(const NotesAndKeys             &notesAndKeys,
+                                 std::map<const timeT,
+                                          const std::string>    &chords,
+                                 std::map<const timeT, int>     &roots);
 
-    void labelChordsOnePerTimePeriod(const NotesAndKeys     &notesAndKeys,
-                                    Segment                 &chords,
-                                    std::map<timeT, int>    &roots,
-                                    const timeT              timePeriod);
+    void labelChordsOnePerTimePeriod(const NotesAndKeys           &notesAndKeys,
+                                     std::map<const timeT,
+                                              const std::string>  &chords,
+                                    std::map<const timeT, int>    &roots,
+                                    const timeT                   timePeriod);
 
     ChordMaps            m_chordMaps;
     LabelMode            m_labelMode;
@@ -680,6 +704,37 @@ class ChordAnalyzerImpl
                         *m_romanLowerChordLabels,
                         *m_slashLabels;
 };  // class ChordAnalyzerImpl
+
+#if 0  // #ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+namespace {
+
+static const char *ON_OFF_KEY_STRINGS[] = {"ON ", "OFF", "KEY"};
+
+std::ostream& operator<<(
+std::ostream                                            &stream,
+const std::pair<timeT, ChordAnalyzerImpl::NoteOrKey>     noteOrKey)
+{
+    bool isKey(   noteOrKey.second.onOffKey
+               == ChordAnalyzerImpl::NoteOrKey::OnOffKey::KEY);
+
+    stream << std::setw(6)
+           << noteOrKey.first
+           << "  "
+           << std::setw(2)
+           << (isKey ? 0 : noteOrKey.second.count)
+           << "#  "
+           << std::setw(3)
+           << (isKey ? 0 : noteOrKey.second.pitch)
+           << "   "
+           << ON_OFF_KEY_STRINGS[static_cast<unsigned>(
+                                 noteOrKey.second.onOffKey)]
+           << ' '
+           << (isKey ? noteOrKey.second.key.getName() : "");
+    return stream;
+}
+}  // namespace (anonymous)
+#endif
+
 
 ChordAnalyzerImpl::ChordAnalyzerImpl()
 :
@@ -695,14 +750,33 @@ ChordAnalyzerImpl::ChordAnalyzerImpl()
 // Add chord text string to "chords", and root pitch to "roots"
 void
 ChordAnalyzerImpl::addChord(
-Segment                 &chords,
-std::map<timeT, int>    &roots,
-const Key               &key,
-const unsigned           mask,    // bits set to chord notes pitch classes
-const unsigned           bass,    // lowest note in chord
-const unsigned           tenor,   // second lowest note in chord
-const timeT              time)    // time of chord
+std::map<const timeT,
+         const std::string> &chords,
+std::map<const timeT, int>  &roots,
+const Key                   &key,
+const unsigned               mask,    // bits set to chord notes pitch classes
+const unsigned               bass,    // lowest note in chord
+const unsigned               tenor,   // second lowest note in chord
+const timeT                  time)    // time of chord
 {
+#if 0  // #ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    std::cerr << "ChordAnalyzerImpl::addChord() "
+              << key.getName()
+              << " 0x"
+              << std::hex
+              << std::setfill('0')
+              << std::setw(3)
+              << mask
+              << std::dec
+              << std::setfill(' ')
+              << " "
+              << bass
+              << " "
+              << tenor
+              << " "
+              << time
+              << std::endl;
+#endif
     if (!mask) return;  // output nothing, not even "n/c", if no notes
 
     // Analyze chord from notes
@@ -772,27 +846,32 @@ const timeT              time)    // time of chord
         if (m_labelMode.slashType != ChordNameRuler::ChordSlashType::OFF) {
             unsigned bassDegree = bass % 12;
             if (bassDegree != chordLabel.rootPitch() || foundAdded) {
-                // Letter names are always absolute (concert pitch)
-                if (  m_labelMode.nameType
-                    != ChordNameRuler::ChordNameType::PITCH_LETTER) {
+                if (   m_labelMode.nameType !=   ChordNameRuler
+                                               ::ChordNameType
+                                               ::PITCH_LETTER
+                    && m_labelMode.nameType !=   ChordNameRuler
+                                               ::ChordNameType
+                                               ::PITCH_INTEGER)
+                {
                     if (m_labelMode.slashType ==   ChordNameRuler
                                                  ::ChordSlashType
                                                  ::CHORD_TONE)
-                        bassDegree =   (bassDegree + 12 - chordLabel.rootPitch())
+                        bassDegree =   (  bassDegree
+                                        + 12
+                                        - chordLabel.rootPitch())
                                      % 12;
-                else if (m_labelMode.keyRelative)
-                    bassDegree = (bassDegree + 12 - key.getTonicPitch()) % 12;
+                    else if (m_labelMode.keyRelative)
+                        bassDegree =   (bassDegree + 12 - key.getTonicPitch())
+                                     % 12;
                 }
                 name += "/" + m_slashLabels[bassDegree];
             }
         }
 
-        Text text(name, Text::ChordName);
-        chords.insert(text.getAsEvent(time));
+        chords.emplace(time, name);
     }
     else {
-        Text text(ChordTypes::NoChord.name(), Text::ChordName);
-        chords.insert(text.getAsEvent(time));
+        chords.emplace(time, ChordTypes::NoChord.name());
         roots[time] = -1;
     }
 }  // ChordAnalyzerImpl::addChord()
@@ -927,9 +1006,9 @@ void ChordAnalyzerImpl::setChordLabels()
 void
 ChordAnalyzerImpl::labelChordsAtNotesOnOff(
 const NotesAndKeys          &notesAndKeys,
-Segment                     &chords,
-std::map<timeT, int>        &roots,
-const timeT                  quantizationTime)
+std::map<const timeT,
+         const std::string> &chords,
+std::map<const timeT, int>  &roots)
 {
     // Bitmask of pitch classes, 0x1==C,0 0x800==B,11.
     unsigned mask = 0;
@@ -941,21 +1020,42 @@ const timeT                  quantizationTime)
     std::map<unsigned, unsigned> pitches; // pitch, count
 
     // Current key
-    Key key;
+    Key                   key;
+    m_activeKey.tonic   = key.getTonicPitch();
+    m_activeKey.isMinor = key.isMinor();
+    m_activeKey.isSharp = isSharpKey(key);
+    setChordLabels();
 
     // Go through newly created notesAndKeys which are in strict time order
     auto timeAndNoteOrKeyIter = notesAndKeys.begin();
     while (timeAndNoteOrKeyIter != notesAndKeys.end()) {
-        timeT time = timeAndNoteOrKeyIter->first;
         const NoteOrKey &noteOrKey(timeAndNoteOrKeyIter->second);
+        timeT   time = timeAndNoteOrKeyIter->first;
+
+#if 0  // #ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+        std::cerr << "one per: "
+                  << key.getName()
+                  << " "
+                  << time
+                  << " "
+                  << *timeAndNoteOrKeyIter
+                  << " 0x"
+                  << std::hex
+                  << std::setw(3)
+                  << std::setfill('0')
+                  << mask
+                  << std::dec
+                  << std::setfill(' ')
+                  << std::endl;
+#endif
 
         if (noteOrKey.onOffKey == NoteOrKey::KEY) {
-            Text text(noteOrKey.name, Text::KeyName);
-            chords.insert(text.getAsEvent(time));
-            key = Key(noteOrKey.name);
+            key = noteOrKey.key;
+
             m_activeKey.tonic   = key.getTonicPitch();
             m_activeKey.isMinor = key.isMinor();
             m_activeKey.isSharp = isSharpKey(key);
+
             setChordLabels();
             ++timeAndNoteOrKeyIter;
             continue;
@@ -971,7 +1071,7 @@ const timeT                  quantizationTime)
 
             auto existingPitch = pitches.find(pitch);
             if (existingPitch == pitches.end())
-                pitches.insert({pitch, 1});
+                pitches.emplace(pitch, 1);
             else
                 existingPitch->second += count;
         }
@@ -988,9 +1088,11 @@ const timeT                  quantizationTime)
             }
         }
 
-        // Wait until have all notes at this time +/- quantization
+        // Wait until have all notes at this time.
+        // Note times were already quantized in labelChords().
         if (   (++timeAndNoteOrKeyIter == notesAndKeys.end() && mask != 0)
-            ||    timeAndNoteOrKeyIter->first - time >  quantizationTime) {
+            ||    timeAndNoteOrKeyIter->first > time)
+        {
             unsigned bass  = 0,
                      tenor = 0;
             auto pitchIter = pitches.begin();
@@ -1021,10 +1123,11 @@ const timeT                  quantizationTime)
 
 void
 ChordAnalyzerImpl::labelChordsOnePerTimePeriod(
-const NotesAndKeys          &notesAndKeys,
-Segment                     &chords,
-std::map<timeT, int>        &roots,
-const timeT                  timePeriod)
+const NotesAndKeys              &notesAndKeys,
+std::map<const timeT,
+         const std::string>     &chords,
+std::map<const timeT, int>      &roots,
+const timeT                      timePeriod)
 {
     // Bitmask of pitch classes, 0x1==C,0 0x800==B,11.
     unsigned mask = 0;
@@ -1039,7 +1142,11 @@ const timeT                  timePeriod)
     std::vector<std::pair<unsigned, unsigned>> pendingOffs;  // pitch, count
 
     // Current key
-    Key key;
+    Key                   key;
+    m_activeKey.tonic   = key.getTonicPitch();
+    m_activeKey.isMinor = key.isMinor();
+    m_activeKey.isSharp = isSharpKey(key);
+    setChordLabels();
 
     class PendingRemover {
       public:
@@ -1076,16 +1183,40 @@ const timeT                  timePeriod)
 
     // Checks to prevent outputting duplicate/unchanged chords
     bool  notesChanged  = false;
-    timeT beginTime     = notesAndKeys.begin()->first,
-          endTime       = beginTime + timePeriod + 1;
+    timeT beginTime     =    notesAndKeys.begin()->first
+                          - (notesAndKeys.begin()->first % timePeriod),
+            endTime     = beginTime + timePeriod;
     auto  lastNoteOrKey = std::prev(notesAndKeys.end());
 
-    endTime -= endTime % timePeriod;
+#if 0  // #ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "ChordAnalyzerImpl::labelChordsOnePerTimePeriod()";
+#endif
 
     // Go through newly created notesAndKeys which are in strict time order
     for (auto   timeAndNoteOrKeyIter  = notesAndKeys.begin() ;
                 timeAndNoteOrKeyIter != notesAndKeys.end() ;
               ++timeAndNoteOrKeyIter) {
+
+#if 0  // #ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+        std::cerr << "  "   // t4osDEBUG
+                  << std::setw(5)
+                  << beginTime
+                  << " -> "
+                  << std::setw(5)
+                  << endTime
+                  << "  "
+                  << (notesChanged ? "chng" : "nope")
+                  << "  "
+                  << std::setbase(16)
+                  << "0x"
+                  << std::setw(3)
+                  << std::setfill('0')
+                  << mask
+                  << std::setfill(' ')
+                  << std::setbase(10)
+                  << *timeAndNoteOrKeyIter
+                  << std::endl;
+#endif
 
         const NoteOrKey &noteOrKey(timeAndNoteOrKeyIter->second);
         unsigned count       = noteOrKey.count,
@@ -1094,12 +1225,12 @@ const timeT                  timePeriod)
         timeT    time        = timeAndNoteOrKeyIter->first;
 
         if (noteOrKey.onOffKey == NoteOrKey::KEY) {
-            Text text(noteOrKey.name, Text::KeyName);
-            chords.insert(text.getAsEvent(timeAndNoteOrKeyIter->first));
-            key = Key(noteOrKey.name);
+            key = noteOrKey.key;
+
             m_activeKey.tonic   = key.getTonicPitch();
             m_activeKey.isMinor = key.isMinor();
             m_activeKey.isSharp = isSharpKey(key);
+
             setChordLabels();
             continue;
         }
@@ -1132,12 +1263,11 @@ const timeT                  timePeriod)
                 notesChanged = false;
             }
 
-            for (auto pendingOff : pendingOffs)
+            for (const auto &pendingOff : pendingOffs)
                 pendingRemover(pendingOff.first, pendingOff.second);
             pendingOffs.clear();
 
             beginTime  = time;
-            beginTime -= beginTime % timePeriod;
             endTime    = beginTime + timePeriod;
         }
         else
@@ -1149,7 +1279,7 @@ const timeT                  timePeriod)
 
             auto existingPitch = pitches.find(pitch);
             if (existingPitch == pitches.end())
-                pitches.insert({pitch, count});
+                pitches.emplace(pitch, count);
             else
                 existingPitch->second += count;
             notesChanged = true;
@@ -1158,8 +1288,14 @@ const timeT                  timePeriod)
             if (time == beginTime)
                 pendingRemover(pitch, count);
             else
+#if 0
                 pendingOffs.push_back(std::pair<unsigned, unsigned>(pitch,
                                                                     count));
+#else
+                pendingOffs.emplace_back(std::piecewise_construct,
+                                         std::forward_as_tuple(pitch),
+                                         std::forward_as_tuple(count));
+#endif
         }
     }
 }  // labelChordsOnePerTimePeriod()
@@ -1185,9 +1321,12 @@ const unsigned  bass,
 
     // Find matching chord types/names (match == same set of pitch classes)
     const unsigned mapIndex = numPitches - NOTES_MAPS_NDX_OFFSET;
-    for (ChordMap::iterator   i  = m_chordMaps[mapIndex].find(mask) ;
-                              i != m_chordMaps[mapIndex].end() ;
-                            ++i) {
+    bool             nonDiatonicChords = Preferences::nonDiatonicChords.get();
+    const ChordMap  &chordMap(m_chordMaps[mapIndex]);
+    for (ChordMap::const_iterator     i  = chordMap.find(mask) ;
+                                      i != chordMap.cend() ;
+                                    ++i)
+    {
 
         // Loop initializer finds first. Exit loop as soon as past
         //   possible multiple enharmonic variations.
@@ -1196,7 +1335,7 @@ const unsigned  bass,
         if (i->first != mask)
             break;
 
-        if (Preferences::nonDiatonicChords.get()) {
+        if (nonDiatonicChords) {
             // Include non-diatonic chords.
             chord = &i->second;
             if (i->second.m_rootPitch == (bass % 12))
@@ -1266,12 +1405,15 @@ ChordMaps::ChordMaps()
                                       ChordTypes::Sus2,
                                       ChordTypes::Sus4,
                                       ChordTypes::DominantSeventhNo5,
+                                      ChordTypes::DominantSeventhNo3,
                                       ChordTypes::MinorSeventhNo5,
                                       ChordTypes::MajorSeventhNo5,
                                       ChordTypes::Add2No5,
                                       ChordTypes::Add4No5,
                                       ChordTypes::MinorAdd9No5,
-                                      ChordTypes::MinorMajorSeventhNo5};
+                                      ChordTypes::MinorMajorSeventhNo5,
+                                      ChordTypes::Flat5,
+                                      ChordTypes::VienneseTrichord};
     SCNST ChordType chordTypes4[]  = {ChordTypes::DominantSeventh,  // 4 notes
                                       ChordTypes::MinorSeventh,
                                       ChordTypes::MajorSeventh,
@@ -1308,7 +1450,6 @@ ChordMaps::ChordMaps()
                                       ChordTypes::SixthAddNine,
                                       ChordTypes::MinorSixthAddNine,
                                       ChordTypes::EleventhNo9,
-                                      ChordTypes::MajorEleventhNo9,
                                       ChordTypes::EleventhNo5,
                                       ChordTypes::MinorEleventhNo5,
                                       ChordTypes::MajorEleventhNo5,
@@ -1365,12 +1506,15 @@ ChordMaps::ChordMaps()
         CHORD3(2, 7),                       // Sus2
         CHORD3(5, 7),                       // Sus4
         CHORD3(4, 10),                      // 7no5
+        CHORD3(7, 10),                      // 7no3
         CHORD3(3, 10),                      // m7no5
         CHORD3(4, 11),                      // maj7no5
         CHORD3(2, 4),                       // add2no5
         CHORD3(4, 5),                       // add4no5
         CHORD3(2, 3),                       // madd9no5
         CHORD3(3, 11),                      // mM7no5
+        CHORD3(4, 6),                       // b5
+        CHORD3(1, 6),                       // viennese
     };
     SCEXP unsigned chordMasks4[] = {        // 4 notes ...
 #define CHORD4(P2,P3,P4) (CHORD3(P2,P3) | (1<<(P4)))
@@ -1413,7 +1557,6 @@ ChordMaps::ChordMaps()
         CHORD5(4, 7,  9,  2),               // SixthAddNine
         CHORD5(3, 7,  9,  2),               // MinorSixthAddNine
         CHORD5(4, 5,  7, 10),               // 11no9
-        CHORD5(4, 6,  7, 11),               // M11no9
         CHORD5(2, 4,  5, 10),               // 11no5
         CHORD5(2, 3,  5, 10),               // m11no5
         CHORD5(2, 4,  5, 11),               // M11no5
@@ -1486,12 +1629,13 @@ ChordMaps::ChordMaps()
                                     & ((1 << 12) - 1))
                                 |  (     basicChordMasks[map][chord]
                                       >> (12 - root));
-                 m_chordMaps[map]
-                .insert(
-                ChordMap::value_type(mask,
-                                     ChordData(basicChordTypes[map][chord],
-                                               root,
-                                               true)));
+                m_chordMaps[map].emplace(std::piecewise_construct,
+                                         std::forward_as_tuple(mask),
+                                         std::forward_as_tuple(basicChordTypes
+                                                               [map]
+                                                               [chord],
+                                                               root,
+                                                               true));
             }
     }
 
@@ -1578,7 +1722,7 @@ ChordAnalyzerImpl::updateChordNameStyles()
     }
 
     for (unsigned map = 0 ; map < ChordMaps::NUMBER_OF_CHORD_MAPS ; ++map)
-        for (auto maskChord : m_chordMaps.chordMaps(map)) {
+        for (const auto &maskChord : m_chordMaps.chordMaps(map)) {
             ChordType &chord(maskChord.second.m_type);
             unsigned class0 = chord.classes()[0],
                      class1 = chord.classes()[1];
@@ -2275,47 +2419,72 @@ void ChordAnalyzer::updateChordNameStyles() { m_impl->updateChordNameStyles(); }
 // See documentation in .h file
 void
 ChordAnalyzer::labelChords(
-Segment                         &chordsAndKeys,
-std::map<timeT, const Key>      &keys,
-std::map<timeT, int>            &roots,
-bool                            &conflictingKeyChanges,
-const std::vector<Segment*>      segments,
-const Segment                   *currentSegment,
-const bool                       keysOnly,
-const timeT                      timeWindow,
-bool                             onePerTimePeriod)
+std::map<const timeT,
+         const std::string>         &chords,
+std::map<const timeT, int>          &roots,
+const std::vector<const Segment*>   &segments,
+const Segment                       *currentSegment,
+const timeT                          quantizationWindow,
+const timeT                          arpeggiationWindow,
+bool                                 onePerTimePeriod,
+const bool                           wholeComposition,
+const timeT                          beginTime,
+const timeT                          endTime)
 {
-    m_impl->labelChords(chordsAndKeys,
-                        keys,
+    m_impl->labelChords(chords,
                         roots,
-                        conflictingKeyChanges,
                         segments,
                         currentSegment,
-                        keysOnly,
-                        timeWindow,
-                        onePerTimePeriod);
-}
+                        quantizationWindow,
+                        arpeggiationWindow,
+                        onePerTimePeriod
+                        ,
+                        wholeComposition,
+                        beginTime,
+                        endTime
+                       );
+}  // ChordAnalyzer::labelChords()
 
 void
 ChordAnalyzerImpl::labelChords(
-Segment                         &chords,
-std::map<timeT, const Key>      &keys,
-std::map<timeT, int>            &roots,
-bool                            &conflictingKeyChanges,
-const std::vector<Segment*>      segments,
-const Segment                   *currentSegment,
-const bool                       keysOnly,
-const timeT                      timeWindow,
-bool                             onePerTimePeriod)
+std::map<const timeT,
+         const std::string>         &chords,
+std::map<const timeT, int>          &roots,
+const std::vector<const Segment*>   &segments,
+const Segment                       *currentSegment,
+const timeT                          quantizationWindow,
+const timeT                          arpeggiationWindow,
+bool                                 onePerTimePeriod,
+const bool                           wholeComposition,
+const timeT                          beginTime,
+const timeT                          endTime)
 {
-    if (segments.empty()) return;
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    Composition &composition(  RosegardenDocument
+                             ::currentDocument
+                             ->getComposition());
 
-    // NOTE: Significant percentage of code/algorithms below necessary
-    //       to support the rare edge cases of having conflicting key
-    //       changes at the same time in multiple segments. Return
-    //       parameter "conflictingKeyChanges" returns status to
-    //       upstream caller e.g. for matrix editor to relabel notes
-    //       if in labeling mode requiring knowledge of current key.
+    qDebug() << "ChordAnalyzerImpl::labelChords()"
+             << (onePerTimePeriod ? "UNARPEGGIATE" : "ON-OFF")
+             << " qnt:"
+             << quantizationWindow
+             << " un:"
+             << arpeggiationWindow
+             << "  *****";
+    if (wholeComposition)
+        qDebug() << "  whole composition";
+    else {
+        qDebug() << "  rng:"
+                 << beginTime
+                 << '='
+                 << composition.getMusicalTimeStringForAbsoluteTime(beginTime)
+                 << " -> "
+                 << endTime
+                 << composition.getMusicalTimeStringForAbsoluteTime(endTime);
+    }
+#endif
+
+    if (segments.empty()) return;
 
     class NoteOrKeyEqual {
       public:
@@ -2334,63 +2503,157 @@ bool                             onePerTimePeriod)
 
     NotesAndKeys notesAndKeys;
 
-    for (auto segment : segments) {
-        bool needDefaultKeyAtSegmentStart = true;
-        for (auto event : *segment) {
-            if (event->getAbsoluteTime() > segment->getStartTime())
-                break;
-            else if (event->isa(Key::EventType)) {
-                needDefaultKeyAtSegmentStart = false;
-                break;
-            }
-        }
+    if (!currentSegment)  // Safety check, shouildn't ever be called without
+        currentSegment = segments[0];   // Already checked for empty() above
 
-        if (needDefaultKeyAtSegmentStart) {
-            Key cMajor; // default is C major
-            segment->insert(cMajor.getAsEvent(segment->getStartTime()));
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    unsigned numberOfKeys = 0;
+#endif
+    auto getBeginAndEndIters = [wholeComposition,
+                                onePerTimePeriod,
+                                arpeggiationWindow,
+                                beginTime,
+                                endTime]
+    (
+    Segment::iterator   &beginIter,
+    Segment::iterator   &endIter,
+    const Segment       *adjustSegment)
+    {
+        if (wholeComposition) {
+            beginIter = adjustSegment->begin();
+            endIter   = adjustSegment->  end();
         }
+        else {
+            timeT   adjustedBegin = beginTime,
+                    adjustedEnd   =   endTime;
+
+            if ( onePerTimePeriod) {
+                adjustedBegin -= beginTime % arpeggiationWindow;
+
+                adjustedEnd += arpeggiationWindow;
+                adjustedEnd -= adjustedEnd % arpeggiationWindow;
+            }
+
+            if (adjustedBegin < adjustSegment->getStartTime())
+                adjustedBegin = adjustSegment->getStartTime();
+            if (  adjustedEnd > adjustSegment->getEndTime  ())
+                  adjustedEnd = adjustSegment->getEndTime  ();
+
+            beginIter = adjustSegment->findTimeConst(adjustedBegin);
+              endIter = adjustSegment->findTimeConst(adjustedEnd  );
+        }
+    };  // getBeginAndEndIters()
+
+    // Get key changes from current segment
+    // Must do before notes (from all segments) so if at same time
+    //   as note will come before in multimap ordering.
+    auto keys    = currentSegment->keySignatureMap();
+    auto keyIter = keys.begin();
+
+    // Make sure key at beginning of notesAndKeys so always have
+    // key when iterating and hit notes.
+    if (keyIter == keys.end())
+        // Default C major at
+        notesAndKeys.emplace(std::piecewise_construct,
+                             std::forward_as_tuple(  currentSegment
+                                                   ->getStartTime()),
+                             std::forward_as_tuple(Key()));
+    else if (keyIter->first != currentSegment->getStartTime()) {
+        // Copy first key to beginning in case not already there so never
+        // without key. Matches matrix editor and ConflictingKeyChanges
+        // semantics that first key "propgates" to beginning of segment,
+        // not default C major up until first key change.
+#if 0  // #ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+        qDebug() << "  first key:"
+                 << keyIter->second.getName()
+                 << '@'
+                 << keyIter->first
+                 << " but instead"
+                 << currentSegment->getStartTime();
+#endif
+        notesAndKeys.emplace(currentSegment->getStartTime(), keyIter->second);
     }
 
-    if (!currentSegment)
-        currentSegment = segments[0];
+    // Insert all keys (if any) at correct times
+    for ( ; keyIter != keys.end() ; ++keyIter) {
+#if 0  // #ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+        qDebug() << "  Nth key:  "   // t4osDEBUG
+                 << keyIter->second.getName()
+                 << '@'
+                 << keyIter->first;
+#endif
+        notesAndKeys.emplace(keyIter->first, keyIter->second);
+    }
 
-    // For finding conflicting key changes
-    std::map<timeT, std::pair<std::string, unsigned>> keyChanges;
-    conflictingKeyChanges = false;
+    timeT halfQuantization = quantizationWindow / 2;
+    auto  quantize         = [halfQuantization, quantizationWindow](
+                             timeT t) {
+                                 t += halfQuantization;
+                                 return t - t % quantizationWindow;
+                             };
 
-    for (auto segment : segments) {
-        for (auto event : *segment) {
-            timeT time = event->getAbsoluteTime();
+    Segment::iterator   beginIter,
+                          endIter;
+    for (const Segment* const segment : segments) {
+        getBeginAndEndIters(beginIter, endIter, segment);
+#if 0  // #ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+        std::cerr << "  segment: " << segment->getLabel();
+        std::cerr << "  begin: ";
+        if (beginIter == segment->end())
+            std::cerr << "<end()>";
+        else
+            std::cerr << (*beginIter)->getAbsoluteTime()
+                      << '='
+                      <<  composition
+                         .getMusicalTimeStringForAbsoluteTime(
+                          (*beginIter)->getAbsoluteTime());
+        std::cerr << "  end: ";
+        if (endIter == segment->end())
+            std::cerr << "<end()>";
+        else
+            std::cerr << (*endIter)->getAbsoluteTime()
+                      << '='
+                      <<  composition
+                         .getMusicalTimeStringForAbsoluteTime(
+                          (*endIter)->getAbsoluteTime());
+        std::cerr << std::endl;
+#endif
 
-            if (event->isa(Key::EventType)) {
-                if (!conflictingKeyChanges) { // Once found don't have to check
-                    const std::string &name = Key(*event).getName();
-                    auto keyChange = keyChanges.find(time);
-                    if (keyChange == keyChanges.end())
-                        keyChanges.insert({time, {name, 1}});
-                    else if (keyChange->second.first != name)
-                        conflictingKeyChanges = true;
-                    else
-                        ++keyChange->second.second;
-                }
-
-                if (segment == currentSegment) {  // Only current segment's keys
-                    Key key(*event);
-                    notesAndKeys.insert({time, NoteOrKey(key.getName())});
-                    keys        .insert({time, key});
-                }
-            }
-
+        for (auto eventIter = beginIter ; eventIter != endIter ; ++eventIter) {
+            auto event = *eventIter;
             if (!event->isa(Note::EventType))
-                continue;
+                continue;  // Keys already handled above, ignore anything else.
 
+            timeT time         = event->getAbsoluteTime(),
+                  offTime      = time + event->getDuration();
             unsigned pitch     = event->get<Int>(BaseProperties::PITCH);
-            timeT    offTime   = time + event->getDuration();
             auto     allAtTime = notesAndKeys.equal_range(time);
 
+            if (onePerTimePeriod) {
+                // Pretend that all notes span full modulo-aligned time period
+                if (offTime % arpeggiationWindow != 0)
+                    offTime += arpeggiationWindow;
+                offTime  = offTime - offTime % arpeggiationWindow;
+                time     =    time -    time % arpeggiationWindow;
+            }
+            else if (quantizationWindow > 0) {  // doing chords at notes on/off
+                // Round to nearest quantizationWindow
+                time    = quantize(time);
+                offTime = quantize(offTime);
+            }
+
+            if (offTime == time)
+                continue;  // Zero-length note, maybe due to quantization
+
             if (allAtTime.first == allAtTime.second) {
-                notesAndKeys.insert({   time, NoteOrKey(pitch,NoteOrKey::ON )});
-                notesAndKeys.insert({offTime, NoteOrKey(pitch,NoteOrKey::OFF)});
+                notesAndKeys.emplace(std::piecewise_construct,
+                                     std::forward_as_tuple(time),
+                                     std::forward_as_tuple(pitch,
+                                                           NoteOrKey::ON));
+                notesAndKeys.emplace(std::piecewise_construct,
+                                     std::forward_as_tuple(offTime),
+                                     std::forward_as_tuple(pitch,
+                                                           NoteOrKey::OFF));
                 continue;
             }
 
@@ -2398,7 +2661,10 @@ bool                             onePerTimePeriod)
                                       allAtTime.second,
                                       NoteOrKeyEqual(pitch, NoteOrKey::ON));
             if (found == allAtTime.second)
-                notesAndKeys.insert({time, NoteOrKey(pitch, NoteOrKey::ON)});
+                notesAndKeys.emplace(std::piecewise_construct,
+                                     std::forward_as_tuple(time),
+                                     std::forward_as_tuple(pitch,
+                                                           NoteOrKey::ON));
             else
                 ++found->second.count;
 
@@ -2407,40 +2673,32 @@ bool                             onePerTimePeriod)
                                  allAtTime.second,
                                  NoteOrKeyEqual(pitch, NoteOrKey::OFF));
             if (found == allAtTime.second)
-                notesAndKeys.insert({offTime, NoteOrKey(pitch, NoteOrKey::OFF)});
+                notesAndKeys.emplace(std::piecewise_construct,
+                                     std::forward_as_tuple(offTime),
+                                     std::forward_as_tuple(pitch,
+                                                           NoteOrKey::OFF));
             else
                 ++found->second.count;
         }
     }
 
-    // Above had checked for any conflicting key changes at same time.
-    // Now check for non-conflicting key changes at same time but one
-    //   or more segments without a key change at that time.
-    if (!conflictingKeyChanges)
-        for (auto keyChange : keyChanges)
-            if (keyChange.second.second != segments.size())
-                conflictingKeyChanges = true;
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << " "
+             << notesAndKeys.size()
+             << "notes and keys "
+             << numberOfKeys;
+#endif
 
     if (notesAndKeys.empty()) return;
-
-    if (keysOnly) {
-        for (const auto  &timeAndNoteOrKey : notesAndKeys)
-            if (timeAndNoteOrKey.second.onOffKey == NoteOrKey::KEY)
-                 chords.insert( Text(timeAndNoteOrKey.second.name,
-                                     Text::KeyName)
-                               .getAsEvent(timeAndNoteOrKey.first));
-        return;
-    }
 
     if (onePerTimePeriod) labelChordsOnePerTimePeriod(notesAndKeys,
                                                       chords,
                                                       roots,
-                                                      timeWindow);
+                                                      arpeggiationWindow);
     else                  labelChordsAtNotesOnOff    (notesAndKeys,
                                                       chords,
-                                                      roots,
-                                                      timeWindow);
-}  // labelChords()
+                                                      roots);
+}  // ChordAnalyzerImpl::labelChords()
 
 
 namespace AnalysisHelper

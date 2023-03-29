@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
     See the AUTHORS file for more details.
 
     This program is free software; you can redistribute it and/or
@@ -279,9 +279,9 @@ Composition::Composition() :
 Composition::~Composition()
 {
     if (!m_observers.empty()) {
-        RG_WARNING << "dtor: WARNING:" << m_observers.size() << "observers still extant:";
+        RG_DEBUG << "dtor: WARNING:" << m_observers.size() << "observers still extant:";
         for (const CompositionObserver *observer : m_observers) {
-            RG_WARNING << "  " << (void *)(observer) << ":" << typeid(*observer).name();
+            RG_DEBUG << "  " << (void *)(observer) << ":" << typeid(*observer).name();
         }
     }
 
@@ -863,9 +863,6 @@ Composition::clear()
     m_defaultTempo = getTempoForQpm(120.0);
     m_minTempo = 0;
     m_maxTempo = 0;
-#if 0  // t4os: master version looping
-    m_loopMode = LoopOff;
-#endif
     m_loopStart = 0;
     m_loopEnd = 0;
     m_loopRangeIsActive = false;
@@ -2397,14 +2394,6 @@ std::string Composition::toXmlString() const
         composition << "\" loopstart=\"" << m_loopStart;
         composition << "\" loopend=\"" << m_loopEnd;
     }
-#if 0  // t4os: master version looping
-    const bool isLooping = (m_loopMode == LoopOn);
-    composition << "\" islooping=\"" << isLooping;
-#endif
-
-#if 0   // No longer applicable, new haveLoopRange(), loopRangeActived(),
-    composition << "\" islooping=\"" << m_isLooping;
-#endif
 
     composition << "\" startMarker=\"" << m_startMarker;
     composition << "\" endMarker=\"" << m_endMarker;
@@ -2638,6 +2627,21 @@ Composition::enforceArmRule(const Track *track)
     }
 }
 
+bool
+Composition::trackIsPercussion(
+const Track* const track)
+const
+{
+    const Instrument* const
+    instrument =   RosegardenDocument::currentDocument
+                 ->getStudio()
+                  .getInstrumentById(track->getInstrument());
+
+    return (  instrument
+            ? static_cast<bool>(instrument->getKeyMapping())
+            : false);
+}
+
 void
 Composition::notifySegmentAdded(Segment *s) const
 {
@@ -2726,7 +2730,17 @@ Composition::notifySegmentTrackChanged(Segment *s, TrackId oldId, TrackId newId)
     // origin or destination track, we need to notify the change
     // of its repeat end time
 
+    bool isPercussion = trackIsPercussion(newId);
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "Composition::notifySegmentTrackChanged()"
+             << oldId
+             << "->"
+             << newId
+             << (isPercussion ? "drum" : "notes");
+#endif
+
     for (const_iterator i = begin(); i != end(); ++i) {
+        if ((*i) == s) s->setIsPercussion(isPercussion);
 
         if (((*i)->getTrack() == oldId || (*i)->getTrack() == newId)
             && ((*i)->isRepeating())
@@ -2792,6 +2806,13 @@ void
 Composition::notifyTrackChanged(Track *t)
 {
     enforceArmRule(t);
+
+    const bool      isPercussion = trackIsPercussion(t);
+    const TrackId   trackId      = t->getId();
+
+    for (Segment *segment : *this)
+        if (segment->getTrack() == trackId)
+            segment->setIsPercussion(isPercussion);
 
     for (ObserverSet::const_iterator i = m_observers.begin();
             i != m_observers.end(); ++i) {

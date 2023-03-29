@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -76,11 +76,6 @@ public:
     virtual void setName(QString name);
 
     virtual const std::vector<Command *>& getCommands() { return m_commands; }
-
-    /// These can be overridden by derived classes for any purpose,
-    /// e.g. to emit a specific signal.
-    virtual void postExecute() {};
-    virtual void postUnexecute() {};
 
 
 protected:

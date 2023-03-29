@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
     See the AUTHORS file for more details.
 
     This program is free software; you can redistribute it and/or
@@ -916,6 +916,9 @@ public:
         m_refreshStatusArray.updateRefreshStatuses();
     }
 
+    void deleteRefreshStatusId(const unsigned id) {
+        m_refreshStatusArray.deleteRefreshStatusId(id);
+    }
 
     /// Change notification mechanism.
     /// @see removeObserver()
@@ -1124,6 +1127,11 @@ protected:
 
     /// No more than one armed track per instrument.
     void enforceArmRule(const Track *track);
+
+    bool trackIsPercussion(const Track* const) const;
+    bool trackIsPercussion(const TrackId id) const {
+        return trackIsPercussion(getTrackById(id));
+    }
 
     typedef std::list<CompositionObserver *> ObserverSet;
     ObserverSet m_observers;

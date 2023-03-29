@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -43,6 +43,7 @@ class IsotropicRectItem;
 class IsotropicTextItem;
 class IsotropicDiamondItem;
 class ChordNameRuler;
+class Key;
 
 /// A note on the matrix editor.
 /**
@@ -66,15 +67,13 @@ public:
                   Event *event,
                   bool drum,
                   long pitchOffset,
-                  const Segment *segment);
+                  const Segment *segment,
+                  const unsigned segmentIndex);
     ~MatrixElement() override;
 
     // Workaround because can't statically init QPixmaps before
     // Qt is up and running.
     static void initPixmaps();
-
-    /// Returns true if the wrapped event is a note
-    bool isNote() const;
 
     // return at least 6.0 for width, addresses #1502, avoids drawing velocity
     // bars that are too small to see and manipulate for extremely short notes
@@ -93,16 +92,26 @@ public:
     void setCurrent(bool current);
 
     /// Adjust the item to reflect the values of our event
-    void reconfigure();
+    void reconfigure(const bool       needKey = true,
+                     const Key* const key     = nullptr);
 
     /// Adjust the item to reflect the given values, not those of our event
-    void reconfigure(int velocity);
+    void reconfigure(const int          velocity,
+                     const bool         needKey = true,
+                     const Key* const   key     = nullptr);
 
     /// Adjust the item to reflect the given values, not those of our event
-    void reconfigure(timeT time, timeT duration);
+    void reconfigure(const timeT        time,
+                     const timeT        duration,
+                     const bool         needKey = true,
+                     const Key* const   key     = nullptr);
 
     /// Adjust the item to reflect the given values, not those of our event
-    void reconfigure(timeT time, timeT duration, int pitch);
+    void reconfigure(const timeT        time,
+                     const timeT        duration,
+                     const int          pitch,
+                     const bool         needKey = true,
+                     const Key* const   key     = nullptr);
 
     // See comment at m_segment
     const Segment *getSegment() const  { return m_segment; }
@@ -111,25 +120,23 @@ public:
 
     static MatrixElement *getMatrixElement(QGraphicsItem *);
 
-    void setColor();
+    void setLabel(const bool keyDependent, const Key* const);
+    void setColor(const bool keyDependent, const Key* const);
 
     void setDrumMode(bool isDrum) { m_drumMode = isDrum;}
 
     bool isSelected() const { return m_selected; }
 
+    timeT getTime() const { return m_time; }
+
     // Z values for occlusion/layering of object in graph display.
-    // Diffence between NORMAL_ and ACTIVE_  needed when notes from
+    // Diffence between levels needed when notes from
     // different segments overlay each other at same pitch and time
     // to ensure that mouse click will get active segment's note
     // regardless if clicked on note or text (latter in case
     // "View -> Show note names" is in effect).
-    static constexpr float SELECTED_SEGMENT_TEXT_Z =   6.0,
-                           SELECTED_SEGMENT_NOTE_Z =   5.0,
-                           SELECTION_BORDER_Z      =   4.0,
-                           ACTIVE_SEGMENT_TEXT_Z   =   3.0,
-                           ACTIVE_SEGMENT_NOTE_Z   =   2.0,
-                           NORMAL_SEGMENT_TEXT_Z   =   1.0,
-                           NORMAL_SEGMENT_NOTE_Z   =   0.0,
+static constexpr float     SEGMENT_Z_INCREMENT     =   2.0,
+                           LOWEST_SEGMENT_Z        =   0.0,
                            VERTICAL_BAR_LINE_Z     =  -8.0,
                            HORIZONTAL_LINE_Z       =  -9.0,
                            VERTICAL_BEAT_LINE_Z    = -10.0,
@@ -137,12 +144,19 @@ public:
 
 
 protected:
-    // Current vs m_prevShowName decison if expensive getKeyInfo() is necessary
-    enum class ShowName {
-        SKIP  = 0,  // 0 vs non-zero in case have to cast to bool
-        SHOW  = 1,  // "     "   "   "   "    " "  "  "   "   "
-        UNSET = 2,  // "     "   "   "   "    " "  "  "   "   "
-    };
+    float segmentNoteZ(const unsigned segmentIndex) const
+    {
+        return LOWEST_SEGMENT_Z + SEGMENT_Z_INCREMENT * segmentIndex;
+    }
+    float segmentTextZ(const unsigned segmentIndex) const
+    {
+        return segmentNoteZ(segmentIndex) + 1;
+    }
+
+    void setLabel(const timeT   time,
+                  const int     pitch,
+                  const double  x0,
+                  const QBrush  &brush);
 
     static const unsigned GRAY_RED_COMPONENT   = 200,
                           GRAY_GREEN_COMPONENT = 200,
@@ -156,10 +170,13 @@ protected:
     bool m_drumDisplay;
     bool m_current;
     bool m_selected;
-    ShowName m_prevShowName;
-    timeT m_prevTime;
+    bool m_showName;
+    std::string m_keyName;
+    timeT m_time;
+    int m_pitch;
     unsigned m_tonic;
     unsigned m_degree;
+    bool m_keyRelative;
     bool m_sharps;
     bool m_minor;
     bool m_offsetMinors;
@@ -194,18 +211,23 @@ protected:
     // Future work: Might also allow elimination of m_pitchOffset, above.
     const Segment *m_segment;
 
+    // For setting Z values of QGraphicsItems.
+    const unsigned  m_segmentIndex;
+    const float     m_noteZ,
+                    m_textZ,
+                    m_activeSegmentNoteZ,     // must be in this order to init
+                    m_activeSegmentTextZ,     //  "   "  "   "     "   "   "
+                    m_selectionBorderZ,       //  "   "  "   "     "   "   "
+                    m_selectedSegmentNoteZ,   //  "   "  "   "     "   "   "
+                    m_selectedSegmentTextZ;   //  "   "  "   "     "   "   "
 
-    // Get key info at time, and set m_prevTime and m_prevShowName
+    // Get key info at time, and set m_showName, m_time, and m_pitch.
     // Checking of latter two in reconfigure(...) avoids expensive
     //   Segment::getKeyAtTime() unless necessary.
-    // Returns false if no chord name ruler and time is outside
-    //   of MatrixScene::getCurrentSegment() span (so as not to
-    //   display any key-relative note names in that case).
-    bool getKeyInfo(const ChordNameRuler*,
-                    const bool chordNameRulerIsVisible,
-                    const ShowName showName,
-                    const timeT time,
-                    const unsigned pitch = 0);
+    void getKeyInfo(const Key*          key,
+                    const bool          showName,
+                    const timeT         time,
+                    const int           pitch);
 
     // Common code used by reconfigure(timeT, timeT, int, int),
     // setCurrent(), and setColor().
@@ -225,7 +247,13 @@ protected:
 
 private:
     /// Adjust the item to reflect the given values, not those of our event
-    void reconfigure(timeT time, timeT duration, int pitch, int velocity);
+    void reconfigure(const timeT        time,
+                     const timeT        duration,
+                     const int          pitch,
+                     const int          velocity,
+                     const bool         needKey,
+                     const Key* const   key);
+
 };
 
 

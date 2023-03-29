@@ -3,11 +3,12 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
- 
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -139,6 +140,13 @@ signals:
      * See MatrixWidget::slotZoomOut() and NotationWidget::slotZoomOut().
      */
     void zoomOut();
+    // Emitted on shift+wheel
+    void panLeftRight(int);   // +1 left, -1 right
+    // Emitted on shift+ctrl+wheel
+    void zoomVertical(int); // +1 in (bigger), -1 out (smaller)
+    // Emitted on atl+ctrl+wheel
+    void zoomHorizontal(int);   // +1 in (bigger), -1 out (smaller)
+
 
 public slots:
     /// Actually, this only centers the viewport.

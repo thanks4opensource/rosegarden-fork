@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -280,16 +280,22 @@ void RosegardenDocument::clearModifiedStatus()
     m_autoSaved = true;
 
     emit documentModified(false);
+    emit updateWindowTitle(false);  // More specific, less frequent.
 }
 
 void RosegardenDocument::slotDocumentModified()
 {
+    bool wasModified = m_modified;
+
     m_modified = true;
     m_autoSaved = false;
 
     m_composition.invalidateDurationCache();
 
     emit documentModified(true);
+
+    if (!wasModified)
+        emit updateWindowTitle(true);   // More specific, less frequent.
 }
 
 void RosegardenDocument::slotDocumentRestored()
@@ -345,28 +351,12 @@ const EventContainer &notes)
 {
     emit notesTied(notes);
 }
-
 void
 RosegardenDocument::signalNotesUntied(
 const EventContainer &notes)
 {
     emit notesUntied(notes);
 }
-
-#ifdef BUILD_DEBUG
-void
-RosegardenDocument::signalKeySignaturesChanged(bool)
-{
-    // t4os -- crashes in test_segment_transposecommand
-    // emit keySignaturesChanged(inserted);
-}
-#else
-void
-RosegardenDocument::signalKeySignaturesChanged(bool inserted)
-{
-    emit keySignaturesChanged(inserted);
-}
-#endif
 
 QString RosegardenDocument::getAutoSaveFileName()
 {
@@ -390,8 +380,9 @@ void RosegardenDocument::slotAutoSave()
 {
     //     RG_DEBUG << "RosegardenDocument::slotAutoSave()";
 
-    if (isAutoSaved() || !isModified())
-        return ;
+    if (m_autoSaved || !isModified())
+        return;
+    m_autoSaved = false;
 
     QString autoSaveFileName = getAutoSaveFileName();
 
@@ -1180,7 +1171,12 @@ bool RosegardenDocument::saveDocument(const QString& filename,
     QFileInfo fileInfo(filename);
 
     if (!fileInfo.exists()) { // safe to write directly
-        return saveDocumentActual(filename, errMsg, autosave);
+        bool success = saveDocumentActual(filename, errMsg, autosave);
+        if (success) {
+            if (autosave) m_autoSaved = true;
+            else          clearModifiedStatus();
+        }
+        return success;
     }
 
     if (fileInfo.exists()  &&  !fileInfo.isWritable()) {
@@ -1228,6 +1224,9 @@ bool RosegardenDocument::saveDocument(const QString& filename,
         errMsg = tr("Failed to rename temporary output file '%1' to desired output file '%2'").arg(tempFileName).arg(filename);
         return false;
     }
+
+    if (autosave) m_autoSaved = true;
+    else          clearModifiedStatus();
 
     return true;
 }
@@ -1397,10 +1396,8 @@ bool RosegardenDocument::saveDocumentActual(const QString& filename,
         CommandHistory::getInstance()->documentSaved();
     }
 
-    setAutoSaved(true);
-
     return true;
-}
+}  // saveDocumentActual()
 
 bool RosegardenDocument::exportStudio(const QString& filename,
                                       QString &errMsg,
@@ -2612,10 +2609,9 @@ RosegardenDocument::loopRangeChanged(bool rangeWasFixed,
          || wasOutsideSegments)
          && !dontShow)
     {
-        QMessageBox messageBox;
-        QCheckBox *checkBox = new QCheckBox(tr("Don't show this warning"));
-
-        QString message;
+        QMessageBox  messageBox;
+        QCheckBox   *checkBox = new QCheckBox(tr("Don't show this warning"));
+        QString      message;
 
         if (segmentsChanged)
             message = tr("Segments changed. Invalid loop range\n"
@@ -2632,6 +2628,7 @@ RosegardenDocument::loopRangeChanged(bool rangeWasFixed,
         else
             message += tr("Previous valid range restored.\n");
 
+        messageBox.setIcon(QMessageBox::Warning);
         messageBox.setText(message);
         messageBox.addButton(QMessageBox::Ok);
         messageBox.setCheckBox(checkBox);
@@ -2659,6 +2656,7 @@ RosegardenDocument::setLoopRangeIsActive(bool active)
         if (dontShow) return;
 
         QMessageBox messageBox;
+        messageBox.setIcon(QMessageBox::Warning);
         QCheckBox *checkBox = new QCheckBox(tr("Don't show this warning"));
 
         messageBox.setText(tr("No loop range to activate.\n\n"
@@ -3279,33 +3277,5 @@ void RosegardenDocument::release()
     delete m_lockFile;
     m_lockFile = nullptr;
 }
-
-#if 0  // t4os: master version looping
-void
-RosegardenDocument::loopButton(bool checked)
-{
-    const bool loop = (m_composition.getLoopStart() != m_composition.getLoopEnd());
-
-    if (Preferences::getAdvancedLooping()) {
-        // Menu item checked?
-        if (checked) {
-            if (loop)
-                m_composition.setLoopMode(Composition::LoopOn);
-            else
-                m_composition.setLoopMode(Composition::LoopAll);
-        } else {  // Button unpressed, turn looping off.
-            m_composition.setLoopMode(Composition::LoopOff);
-        }
-    } else {
-        // If a loop range is set, and the menu item is checked...
-        if (loop  &&  checked)
-            m_composition.setLoopMode(Composition::LoopOn);
-        else
-            m_composition.setLoopMode(Composition::LoopOff);
-    }
-
-    emit loopChanged();
-}
-#endif
 
 }

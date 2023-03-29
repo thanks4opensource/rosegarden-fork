@@ -4,8 +4,8 @@
 /*
     Rosegarden
     A sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
     See the AUTHORS file for more details.
 
     This program is free software; you can redistribute it and/or
@@ -30,6 +30,7 @@
 #include "RealTime.h"
 #include "MidiProgram.h"
 #include "MidiTypes.h"  // for Controller::EventType
+#include "Segment.h"
 
 #include <QColor>
 #include <QSharedPointer>
@@ -163,7 +164,13 @@ public:
     /**
      * If isMIDI(), type of segment's track's instrument, otherwise false
      */
-    bool isPercussion() const;
+    bool isPercussion() const { return m_isPercussion; }
+    bool isPercussion()
+    {
+        if (!m_isPercussionSet) setIfIsPercussion();
+        return m_isPercussion;
+    }
+    void setIsPercussion(bool isPercussion) { m_isPercussion = isPercussion; }
 
     /**
      * Get the element name this class will have when serialised
@@ -430,6 +437,9 @@ public:
     /// Erase a single Event
     void erase(iterator pos);
 
+    // Notify that an event has been modified.
+    void eventModified(const Event*);
+
     /// Erase a set of Events
     void erase(iterator from, iterator to);
 
@@ -447,6 +457,27 @@ public:
      * end() otherwise
      */
     iterator findSingle(Event*);
+
+    // For sequential access to events.
+    // Warning: Client code should not hold on to persistent iterators.
+    struct ClefKeyCmp {
+        bool operator()(const Event *e1, const Event *e2) const
+        {
+            if (e1->getType() == e2->getType())
+                return Event::EventCmp()(e1, e2);
+            else
+                return e1->getType() < e2->getType();
+        }
+    };
+    typedef std::multiset<Event*, ClefKeyCmp> ClefKeyList;
+    const ClefKeyList *clefKeyList() const { return m_clefKeyList; }
+
+    using KeySignatureMap = std::map<const timeT, Key>;
+    const KeySignatureMap &keySignatureMap() const { return m_keySignatureMap; }
+    const KeySignatureMap::const_iterator
+          getKeySignatureIterAtTime(const timeT) const;
+    bool keySignatureIterIsValid(const KeySignatureMap::const_iterator iter)
+        const { return iter != m_keySignatureMap.cend(); }
 
     /**
      * Returns an iterator pointing to the first element starting at
@@ -567,6 +598,8 @@ public:
      * quick call.
      */
     Key getKeyAtTime(timeT time, timeT &ktime) const;
+
+    // Also See clefKeyList(), above.
 
     /**
      * If there is another key change following the given time, return
@@ -803,6 +836,12 @@ public:
     void  addObserver(SegmentObserver *obs);
     void removeObserver(SegmentObserver *obs);
 
+    // Copy events of given type from a Segment to and EventContainer.
+    // Clears EventContainer before copying.
+    static void copyEventsOfType(      EventContainer   &copies,
+                                 const Segment          *segment,
+                                 const std::string       eventType);
+
     //////
     //
     // REFRESH STATUS
@@ -813,11 +852,19 @@ public:
         return m_refreshStatusArray.getNewRefreshStatusId();
     }
 
+    bool haveRefreshStatus(unsigned int id) const {
+        return m_refreshStatusArray.haveRefreshStatus(id);
+    }
+
     SegmentRefreshStatus &getRefreshStatus(unsigned int id) {
         return m_refreshStatusArray.getRefreshStatus(id);
     }
 
     void updateRefreshStatuses(timeT startTime, timeT endTime);
+
+    void deleteRefreshStatusId(const unsigned id) {
+        m_refreshStatusArray.deleteRefreshStatusId(id);
+    }
 
     //////
     //
@@ -952,6 +999,7 @@ public:
 
 private:
     void checkInsertAsClefKey(Event *e) const;
+    void setIfIsPercussion();
 
     /**
      * (Re)compute the internally remembered verse count.
@@ -969,6 +1017,13 @@ private:
 
     TrackId m_trackId;
     SegmentType m_type;         // identifies Segment type
+    bool m_isPercussion;        // only valid if m_type == Internal
+    bool m_isPercussionSet;     // Rosegarden design makes (creation of
+                                // segments in temporary Composition, thren
+                                // no place to fix when real Composition
+                                // created) makes true initialization of
+                                // objects such as Segment impossible, so
+                                // have to resort to singleton-like garbage.
     std::string m_label;        // segment label
 
     unsigned int m_colourIndex; // identifies Colour Index (default == 0)
@@ -997,11 +1052,8 @@ private:
 
     RefreshStatusArray<SegmentRefreshStatus> m_refreshStatusArray;
 
-    struct ClefKeyCmp {
-        bool operator()(const Event *e1, const Event *e2) const;
-    };
-    typedef std::multiset<Event*, ClefKeyCmp> ClefKeyList;
-    mutable ClefKeyList *m_clefKeyList;
+    mutable ClefKeyList     *m_clefKeyList;
+    mutable KeySignatureMap  m_keySignatureMap;
 
     /// Marking for AddLayerCommand.  See setMarking().
     QString m_marking;
@@ -1025,10 +1077,36 @@ private: // stuff to support SegmentObservers
     timeT m_memoStart;
     timeT *m_memoEndMarkerTime;
 
+// Hybrid approach, in addition to "observer notifications" which should
+// all be rewritten as signals (particularly because many cause N-level
+// deep storms forwarded calls to nested components' methods).
 signals:
+    // Only used by ControlRulerWidget.
     void contentsChanged(timeT start, timeT end);
- public:
-    void signalChanged(timeT start, timeT end)
+
+    // Necessitated because e.g. RosegardenMainViewWidget::setExtantKeyLabel()
+    //   needs to know about key events, but neither it nor
+    //   RosegardenMainWindow, TrackEditor, etc. derive from any kind
+    //   of ObserverXxx class.
+    // Implementing both now as first step of "signals instead of
+    //   notifications" rearchitecture.
+    // Note that Event* can't be const due to deeply nested calls with
+    //   non-const Event, e.g. through EventSelection::contains(),
+    //   removeEvent(), and addRemoveEvent().
+    void noteAddedOrRemoved(const Segment*, Event*, bool added) const;
+    void  keyAddedOrRemoved(const Segment*, Event*, bool added) const;
+
+    // For commands that directly modify notes (i.e. BaseProperties::PITCH)
+    //   as opposed to using erase() and then insert(), so that
+    //   m_refreshStatusArray (time range of modified notes) gets updated.
+    // Commands e.g. TransposeCommand and InvertCommand
+    void noteModified(const Segment*, const Event*) const;
+
+public:
+    // Clumsy, raw, blunt sledgehammer: Used only by BasicCommand
+    // at end of every execute() and unexecute() regardless of what
+    // command may or may not have done.
+    void signalContentsChanged(timeT start, timeT end)
     { emit contentsChanged(start,end); }
 
 private:

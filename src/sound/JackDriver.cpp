@@ -5,7 +5,7 @@
     A sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
     See the AUTHORS file for more details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -226,16 +226,30 @@ JackDriver::initialise(bool reinitialise)
     jack_options_t jackOptions = JackNullOption;
     if (!autoStartJack) jackOptions = JackNoStartServer;
 
+    if ((jackOptions & JackNoStartServer) == JackNoStartServer)
+        return;
+
     jack_status_t jackStatus;
 
     // attempt connection to JACK server
     //
-    if ((m_client = jack_client_open(jackClientName.c_str(), jackOptions, &jackStatus)) == nullptr) {
-        RG_WARNING << "initialise() - JACK server not running.  jackStatus:" << qPrintable(QString::number(jackStatus, 16)) << "(hex)";
-        RG_WARNING << "  Attempt to start JACK server was " << (jackOptions & JackNoStartServer ? "NOT " : "") << "made per user config";
+    if (   (m_client = jack_client_open(jackClientName.c_str(),
+                                        jackOptions,
+                                        &jackStatus))
+        == nullptr) {
+        RG_WARNING << "initialise() - JACK server not running.  "
+                      "jackStatus:"
+                   << qPrintable(QString::number(jackStatus, 16))
+                   << "(hex)";
+        RG_WARNING << "  Attempt to start JACK server was "
+                   << (jackOptions & JackNoStartServer ? "NOT " : "")
+                   << "made per user config";
         // Also send to user log.
-        AUDIT << "JACK server not running.  jackStatus: 0x" << QString::number(jackStatus, 16) << "\n";
-        AUDIT << "  Attempt to start JACK server was " << (jackOptions & JackNoStartServer ? "NOT " : "") << "made per user config\n";
+        AUDIT << "JACK server not running.  jackStatus: 0x"
+              << QString::number(jackStatus, 16) << "\n";
+        AUDIT << "  Attempt to start JACK server was "
+              << (jackOptions & JackNoStartServer ? "NOT " : "")
+              << "made per user config\n";
         return ;
     }
 
@@ -263,8 +277,13 @@ JackDriver::initialise(bool reinitialise)
     m_sampleRate = jack_get_sample_rate(m_client);
     m_bufferSize = jack_get_buffer_size(m_client);
 
-    RG_DEBUG << "initialise() - JACK sample rate = " << m_sampleRate << "Hz, buffer size = " << m_bufferSize;
-    AUDIT << "JACK sample rate = " << m_sampleRate << "Hz, buffer size = " << m_bufferSize << '\n';
+    RG_DEBUG << "initialise() - JACK sample rate = "
+             << m_sampleRate << "Hz, buffer size = "
+             << m_bufferSize;
+    AUDIT << "JACK sample rate = "
+          << m_sampleRate
+          << "Hz, buffer size = "
+          << m_bufferSize << '\n';
 
     PluginFactory::setSampleRate(m_sampleRate);
 
@@ -333,7 +352,7 @@ JackDriver::initialise(bool reinitialise)
 
     const char **ports = jack_get_ports(m_client, nullptr, nullptr,
             JackPortIsPhysical | JackPortIsInput);
-    
+
     if (connectDefaultOutputs) {
 
         std::string playback_1, playback_2;
@@ -1994,7 +2013,7 @@ JackDriver::updateAudioData()
     if (!m_ok || !m_client)
         return ;
 
-#ifdef DEBUG_JACK_DRIVER 
+#ifdef DEBUG_JACK_DRIVER
     //RG_DEBUG << "updateAudioData() begin...";
 #endif
 
@@ -2161,7 +2180,7 @@ JackDriver::updateAudioData()
         }
     }
 
-#ifdef DEBUG_JACK_DRIVER 
+#ifdef DEBUG_JACK_DRIVER
     //RG_DEBUG << "updateAudioData() end";
 #endif
 }

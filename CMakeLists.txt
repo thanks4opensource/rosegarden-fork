@@ -1,7 +1,7 @@
 #   Rosegarden
 #   A MIDI and audio sequencer and musical notation editor.
-#   Copyright 2000-2022 the Rosegarden development team.
-#   Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+#   Copyright 2000-2023 the Rosegarden development team.
+#   Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 #
 #   Other copyrights also apply to some parts of this work.	 Please
 #   see the AUTHORS file and individual file headers for details.
@@ -91,6 +91,18 @@ endif()
 
 add_definitions(-DQT_NO_URL_CAST_FROM_STRING)
 add_definitions(-DUNSTABLE) # this is changed to STABLE by the release script
+
+# Uncomment to enable a complex set of qDebug()/std::cerr output statements
+#   intended to confirm that chord analysis, matrix editor note labeling, etc.
+#   is being done as, and only as, needed.
+# The output statements are designed to print three blank lines before the
+#   first line of a set tracing the methods/functions/arguments/code-paths
+#   triggered by a UI event.
+# This directive, the commandline "-D" option it enables, and the
+#   #ifdefs in the codebase that implement the functionality will all
+#   be removed at some point in time after testing provides
+#   confidence that the debugged code is correct.
+# add_definitions(-DCHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG)
 
 # Compiler flags
 

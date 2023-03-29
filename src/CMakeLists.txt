@@ -2,8 +2,8 @@
 
 #   Rosegarden
 #   A MIDI and audio sequencer and musical notation editor.
-#   Copyright 2000-2022 the Rosegarden development team.
-#   Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+#   Copyright 2000-2023 the Rosegarden development team.
+#   Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 #
 #   Other copyrights also apply to some parts of this work.	 Please
 #   see the AUTHORS file and individual file headers for details.
@@ -521,6 +521,7 @@ set(rg_CPPS
   base/Buss.cpp
   base/levenshtein.cpp
   base/Typematic.cpp
+  base/ConflictingKeyChanges.cpp
   sound/LADSPAPluginFactory.cpp
   sound/ControlBlock.cpp
   sound/WAVAudioFile.cpp

@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -146,7 +146,6 @@ BasicCommand::calculateStartTime(timeT given, Segment &segment)
 
     timeT actualStartTime = given;
 
-#if 1
     Segment::const_iterator i = segment.findTime(given);
 
     // For each Event at the given start time
@@ -157,19 +156,6 @@ BasicCommand::calculateStartTime(timeT given, Segment &segment)
         // Next event.
         ++i;
     }
-#else
-    // For each Event in the Segment
-    for (const Event *event : segment) {
-        // If this event is not at the given start time, bail.
-        if (event->getAbsoluteTime() != given)
-            break;
-
-        const timeT notationTime = event->getNotationAbsoluteTime();
-        // If the notation time is earlier, use it.
-        if (notationTime < given)
-            actualStartTime = notationTime;
-    }
-#endif
 
     return actualStartTime;
 }
@@ -241,9 +227,7 @@ BasicCommand::execute()
     RG_DEBUG << "execute() for " << getName() << ": updated refresh statuses "
              << updateStartTime << " -> " << m_modifiedEventsEnd;
 
-    m_segment->signalChanged(updateStartTime, m_modifiedEventsEnd);
-
-    postExecute();
+    m_segment->signalContentsChanged(updateStartTime, m_modifiedEventsEnd);
 
     RG_DEBUG << getName() << "after execute";
     RG_DEBUG << getName() << "segment" <<
@@ -314,9 +298,7 @@ BasicCommand::unexecute()
     RG_DEBUG << "unexecute() for " << getName() << ": updated refresh statuses "
              << updateStartTime << " -> " << m_modifiedEventsEnd;
 
-    m_segment->signalChanged(updateStartTime, m_modifiedEventsEnd);
-
-    postUnexecute();
+    m_segment->signalContentsChanged(updateStartTime, m_modifiedEventsEnd);
 
     RG_DEBUG << "unexecute() end.";
     RG_DEBUG << getName() << "after unexecute";
@@ -510,8 +492,5 @@ BasicCommand::calculateModifiedStartEnd()
     RG_DEBUG << "calculateModifiedStartEnd: " << m_modifiedEventsStart <<
         m_modifiedEventsEnd;
 }
-
-void BasicCommand::postExecute() {}
-void BasicCommand::postUnexecute() {}
 
 }

@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -29,6 +29,8 @@
 #include "MatrixView.h"
 #include "MatrixViewSegment.h"
 #include "PianoKeyboard.h"
+
+#include "base/ConflictingKeyChanges.h"
 
 #include "document/CommandHistory.h"
 #include "document/RosegardenDocument.h"
@@ -149,12 +151,16 @@ MatrixWidget::MatrixWidget(MatrixView *matrixView) :
     m_noteNamesCmajFlats(true),
     m_noteNamesOffsetMinors(false),
     m_noteNamesAlternateMinors(false),
+    m_keyDependentNotes(true),    // will be set, err on side of caution
+    m_chordDependentNotes(true),  //  "   "   " ,  "  "   "   "     "
+    m_colorDependentNotes(true),  //  "   "   " ,  "  "   "   "     "
     m_toolBox(nullptr),
     m_currentVelocity(100),
     m_lastZoomWasHV(true),
     m_lastH(0),
     m_lastV(0),
     m_chordNameRuler(nullptr),
+    m_conflictingKeyChanges(nullptr),
     m_tempoRuler(nullptr),
     m_topStandardRuler(nullptr),
     m_bottomStandardRuler(nullptr),
@@ -312,6 +318,12 @@ MatrixWidget::MatrixWidget(MatrixView *matrixView) :
             this, &MatrixWidget::slotZoomIn);
     connect(m_panned, &Panned::zoomOut,
             this, &MatrixWidget::slotZoomOut);
+    connect(m_panned, &Panned::zoomHorizontal,
+            this, &MatrixWidget::slotZoomHorizontal);
+    connect(m_panned, &Panned::zoomVertical,
+            this, &MatrixWidget::slotZoomVertical);
+    connect(m_panned, &Panned::panLeftRight,
+            this, &MatrixWidget::slotPanLeftRight);
 
     connect(m_panner, &Panner::pannedRectChanged,
             m_panned, &Panned::slotSetViewport);
@@ -379,10 +391,6 @@ MatrixWidget::MatrixWidget(MatrixView *matrixView) :
     // to the left are always highlighted to show which note we are on.
     m_panned->setMouseTracking(true);
 
-    connect(RosegardenDocument::currentDocument,
-                &RosegardenDocument::documentModified,
-            this, &MatrixWidget::slotDocumentModified);
-
     // Set up AutoScroller.
     m_autoScroller.connectScrollArea(m_panned);
 }
@@ -403,6 +411,8 @@ MatrixWidget::~MatrixWidget()
     // currently active one. Delete the other.
     if (m_pianoPitchRuler      != m_pitchRuler) delete m_pianoPitchRuler;
     if (m_percussionPitchRuler != m_pitchRuler) delete m_percussionPitchRuler;
+
+    delete m_conflictingKeyChanges;
 }
 
 void
@@ -438,7 +448,13 @@ MatrixWidget::setSegments(RosegardenDocument *document,
     delete m_scene;
     m_scene = new MatrixScene();
     m_scene->setMatrixWidget(this);
+
+    // Do before "new ConflictingKeyChanges()" below to ensure
+    // segments have key change at beginnings.
     m_scene->setSegments(document, segments);
+    // And from here onward use sorted m_scene->getSegments()
+    // instead of local segments if sort order is important
+    // (e.g. ChordNameRuler constructor).
 
     m_referenceScale = m_scene->getReferenceScale();
 
@@ -514,7 +530,13 @@ MatrixWidget::setSegments(RosegardenDocument *document,
     m_extantKeyLabelChords->setStyleSheet(
          QString("QLabel {background-color : %1;"
                           "color : black;"
-                          "font-weight: bold}")
+#if 1
+                          "font-weight: bold}"
+#else  // breaks vertical alignment for some reason
+                          "font-weight: bold;"
+                          "qproperty-alignment : AlignRight}"
+#endif
+         )
         .arg(GUIPalette::getColour(  GUIPalette
                                    ::ChordNameRulerBackground)
                                    .name()));
@@ -523,7 +545,6 @@ MatrixWidget::setSegments(RosegardenDocument *document,
                         HEADER_COL,
                         1,
                         1);
-
 
     m_topStandardRuler = new StandardRuler(document,
                                            m_referenceScale,
@@ -539,12 +560,21 @@ MatrixWidget::setSegments(RosegardenDocument *document,
                                   true,   // small
                                   ThornStyle::isEnabled());
 
-    m_chordNameRuler = new ChordNameRuler(m_referenceScale,
+
+
+    // Make sure MatrixScene::setSegments() has been called first
+    //   to ensure segments have key change at beginnings.
+    // OK to use segments instead of m_scene->getSegments()
+    //   because sort order not important
+    m_conflictingKeyChanges = new ConflictingKeyChanges(segments);
+    m_chordNameRuler = new ChordNameRuler(this,
+                                          m_referenceScale,
                                           document,
-                                          segments,
-                                          true,  // key change insert enabled
-                                          false, // no copying chords to text
-                                          24);   // height
+                                          m_scene->getSegments(),  // sorted
+                                          ChordNameRuler::ParentEditor::MATRIX,
+                                          24,       // height
+                                          m_conflictingKeyChanges);
+
     connect(m_chordNameRuler,
             &ChordNameRuler::insertKeyChange,
             m_view,
@@ -592,8 +622,6 @@ MatrixWidget::setSegments(RosegardenDocument *document,
     connect(m_document, &RosegardenDocument::pointerPositionChanged,
             this, &MatrixWidget::slotPointerPositionChanged);
 
-    updateToCurrentSegment(true);  // true == set instrument playback override
-
     // If there is only one Segment, hide the widgets that are only needed
     // for multiple Segments.
     if (segments.size() == 1) {
@@ -602,13 +630,12 @@ MatrixWidget::setSegments(RosegardenDocument *document,
     }
 
     // Go with zoom factors from the first Segment.
+    // OK to use segments instead of m_scene->getSegments()
+    // because doesn't matter which segment to use (all have
+    // same zoom factor).
     setHorizontalZoomFactor(segments[0]->matrixHZoomFactor);
     setVerticalZoomFactor(segments[0]->matrixVZoomFactor);
-
-    // For updating note, current segment info bar, and segment changer
-    connect(m_document, &RosegardenDocument::docColoursChanged,
-            this, &MatrixWidget::slotDocColoursChanged);
-}
+}  // setSegments()
 
 void
 MatrixWidget::generatePitchRuler()
@@ -880,6 +907,15 @@ MatrixWidget::zoomOutFromPanner()
     }
 }
 
+// Set extant key label widgets (m_extantKeyLabelChords and
+//   m_extantKeyLabelMarkers) to key in effect at time at
+//   beginning of visible range.
+// Only one is actually displayed at a time: m_extantKeyLabelChords
+//   if chord/key ruler is enabled/shown, m_extantKeyLabelMarkers
+//   otherwise.
+// But if blank m_extantKeyLabelChords if chord/key ruler and already
+//   have key change in ruler at beginning of time range (to avoid
+//   annoying duplicate display of same information).
 void
 MatrixWidget::setExtantKeyLabel(
 int         x,
@@ -890,19 +926,54 @@ const bool  xProvided)
         x = topLeft.x() * m_hZoomFactor;
     }
 
-    timeT                beginTime      = m_referenceScale->getTimeForX(x);
-    const Segment       *currentSegment = m_scene->getCurrentSegment();
-    const std::string    keyName        =   currentSegment
-                                          ->getKeyAtTime(beginTime)
-                                           .getName();
+    const Segment *currentSegment = m_scene->getCurrentSegment();
 
-    if (keyName != m_extantKeyName) {
-        m_extantKeyName = keyName;
-        QString qstring(QString::fromStdString(m_extantKeyName));
+    // t4osDEBUG: Don't really need this because will use new
+    // Segment::getKeyAtTimeFast() which returns first key signature
+    // regardless if time is before that, or even before start of
+    // segment.
+
+    // Use time at left of window unless current segment starts after
+    // in which case use segment time to key key at start of segment.
+    timeT beginTime = m_referenceScale->getTimeForX(x);
+
+    timeT   currentSegmentStartTime = currentSegment->getStartTime(),
+            documentStartTime       =   m_document
+                                      ->getComposition()
+                                      .getMinSegmentStartTime();
+
+    auto keyIter = currentSegment->getKeySignatureIterAtTime(beginTime);
+    bool isValid = currentSegment->keySignatureIterIsValid  (keyIter);
+    const std::string keyName(  isValid
+                              ? keyIter->second.getUnicodeName()
+                              : "C major");
+    bool   chordsLabelBlank
+         =    isValid
+           && keyIter->first    == currentSegmentStartTime
+           && beginTime         <= currentSegmentStartTime
+           && documentStartTime == currentSegmentStartTime;
+
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "MatrixWidget::setExtantKeyLabel()"
+             << m_extantKeyName
+             << "->"
+             << keyName
+             << (chordsLabelBlank ? "blank" : "label");
+#endif
+
+    if (   keyName != m_extantKeyName
+        || (   !chordsLabelBlank
+            && m_extantKeyLabelChords->text() == "")) {
+        QString qstring(QString(" %1").arg(QString::fromStdString(keyName)));
+
         m_extantKeyLabelMarkers->setText(qstring);
-        m_extantKeyLabelChords->setText(qstring);
+        if (!chordsLabelBlank) m_extantKeyLabelChords->setText(qstring);
+
+        m_extantKeyName = keyName;
     }
-}
+    if (chordsLabelBlank)
+        m_extantKeyLabelChords->setText(QString());
+}  // setExtantKeyLabel()
 
 void
 MatrixWidget::slotScrollRulers()
@@ -915,12 +986,14 @@ MatrixWidget::slotScrollRulers()
 
     // Scroll rulers accordingly
     // ( -2 : to fix a small offset between view and rulers)
+    // t4os: GET RID OF -2 HACK (and many other places in code which
+    //       clumsily attempt to match)
     m_topStandardRuler->slotScrollHoriz(x - 2);
     m_bottomStandardRuler->slotScrollHoriz(x - 2);
     m_tempoRuler->slotScrollHoriz(x - 2);
     m_chordNameRuler->slotScrollHoriz(x - 2);
 
-    setExtantKeyLabel(x, true);
+    setExtantKeyLabel(x - 2, true);  // t4os: -2 to un-fudge (needs to be fixed)
 }
 
 EventSelection *
@@ -1004,9 +1077,6 @@ MatrixWidget::previousSegment()
 #if 0   // Why would it have changed?
     updatePointer(m_document->getComposition().getPosition());
 #endif
-    clearSelection();
-    generatePitchRuler();
-    updateToCurrentSegment(true);  // true == set instrument playback override
 }
 
 void
@@ -1021,9 +1091,6 @@ MatrixWidget::nextSegment()
 #if 0   // Why would it have changed?
     updatePointer(m_document->getComposition().getPosition());
 #endif
-    clearSelection();
-    generatePitchRuler();
-    updateToCurrentSegment(true);  // true == set instrument playback override
 }
 
 Device *
@@ -1363,6 +1430,15 @@ MatrixWidget::setTempoRulerVisible(bool visible)
         m_tempoRuler->hide();
 }
 
+// Can't be inline because needs definition from StandardRuler.h
+void
+MatrixWidget::updateStandardRulers()
+{
+    m_topStandardRuler   ->updateStandardRuler();
+    m_bottomStandardRuler->updateStandardRuler();
+}
+
+// Can't be inline because needs definition from ChordNameRuler.h
 bool
 MatrixWidget::chordNameRulerIsVisible() const
 {
@@ -1370,26 +1446,24 @@ MatrixWidget::chordNameRulerIsVisible() const
 }
 
 void
-MatrixWidget::setChordNameRulerVisible(bool visible)
+MatrixWidget::setChordNameRulerVisible(
+bool visible)
 {
     if (visible) {
         m_extantKeyLabelMarkers->setVisible(false);
 
-        m_chordNameRuler->setCurrentSegment(m_view->getCurrentSegment(),
-                                            true);  // true == force recalc
-
-        m_extantKeyLabelChords->setVisible(true);
+        // Note labels already correct because ChordNameRuler is
+        // analyzing while hidden if necessary
         m_chordNameRuler->show();
-        m_chordNameRuler->analyzeChordsAndKeyChanges(false); // don't signal ...
-        m_scene->updateNoteLabels();                     // doing explitly
+        m_extantKeyLabelChords->setVisible(true);
     }
     else {
         m_extantKeyLabelChords->setVisible(false);
         m_chordNameRuler->hide();
         m_extantKeyLabelMarkers->setVisible(true);
-        m_scene->updateNoteLabels();
+        setChordNameRulerAnalyzeWhileHiddenMode();
     }
-}
+}  // setChordNameRulerVisible()
 
 void
 MatrixWidget::showEvent(QShowEvent * event)
@@ -1561,6 +1635,10 @@ MatrixWidget::slotSyncPannerZoomOut()
 void
 MatrixWidget::slotSegmentChangerMoved(int v)
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nMatrixWidget::slotSegmentChangerMoved()";
+#endif
+
     // see comments in slotPrimaryThumbWheelMoved() for an explanation of that
     // mechanism, which is repurposed and simplified here
 
@@ -1588,20 +1666,11 @@ MatrixWidget::slotSegmentChangerMoved(int v)
 
 void
 MatrixWidget::updateToCurrentSegment(
-bool setInstrumentOverride,
 const Segment *segment)
 {
-    Composition &composition = m_document->getComposition();
-
-    // Caller will provide if alread has, but if not ...
-    if (!segment) segment = m_scene->getCurrentSegment();
-
-    // This can happen when called from slotDocumentModified()
-    // and the last remaining last track in the editor is deleted.
-    // The actual removing of the segment and then closing of the
-    // ME seems to happen similarly to deleting the last segment,
-    // when MatrixScene::segmentRemoved() does "emit sceneDeleted()".
     if (!segment) return;
+
+    Composition &composition = m_document->getComposition();
 
     // set the changer widget background to the now current segment's
     // background, and reset the tooltip style to compensate
@@ -1627,11 +1696,9 @@ const Segment *segment)
                                     getInstrumentById(instrumentId);
     if (!instrument) return;
 
-    if (setInstrumentOverride) {
-        // Set to play MIDI with current segment's instrument
-        RosegardenSequencer::getInstance()->setTrackInstrumentOverride(
-            instrumentId, instrument->getNaturalChannel());
-    }
+    // Set to play MIDI with current segment's instrument
+    RosegardenSequencer::getInstance()->setTrackInstrumentOverride(
+        instrumentId, instrument->getNaturalChannel());
 
     // Not using setSegmenttrackinstrumentlabel() because that
     // calls segmentTrackInstrumentLabel() which goes through
@@ -1852,26 +1919,27 @@ MatrixWidget::slotInstrumentGone()
     m_instrument = nullptr;
 }
 
-bool
-MatrixWidget::needUpdateNoteLabels()
+void
+MatrixWidget::setChordNameRulerAnalyzeWhileHiddenMode()
+const
 {
-    // These modes require relabeling of notes due to possible key change.
-    return    m_noteNameType      == NoteNameType::DEGREE
-           || m_noteNameType      == NoteNameType::MOVABLE_DO
-           || m_noteNameType      == NoteNameType::INTEGER_KEY
-#if 0   // is not key-dependent
-           || m_chordSpellingType != ChordSpellingType::OFF
-#endif
-           ;
+    m_chordNameRuler->setAnalyzeWhileHidden(needChordNameRuler());
 }
 
+// Signal emitted from ChordNameRuler when user activates menu to change
+//   chord display in such a way that may have changed chord roots.
+// Not emitted on normal re-analysis as triggered from notes and/or keys
+//   changing from MatrixScene::CommandExecuted().
 void
 MatrixWidget::slotChordAnalysisChanged()
 {
-    // Only signaled from ChordNameRuler if needed (edge case of conflicting
-    // key changes among segments).
-    if (needUpdateNoteLabels())
-        m_scene->updateNoteLabels();
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "MatrixWidget::slotChordAnalysisChanged()";
+#endif
+    // handles if color and/or label needed
+    m_chordNameRuler->analyzeChords();
+    m_scene->updateNotes(MatrixScene::UpdateNotes::CHECK,   // labels
+                         MatrixScene::UpdateNotes::CHECK);  // colors
 }
 
 void
@@ -1881,60 +1949,56 @@ MatrixWidget::slotPlayPreviewNote(Segment *segment, int pitch)
 }
 
 void
-MatrixWidget::slotDocumentModified(bool /*arg*/)
-{
-    // This covers the test case when the user toggles the "Percussion"
-    // checkbox on the MIPP.  Also covers the test case where the key
-    // map changes due to a change in percussion program.
-
-    // ??? Eventually, this should do a full refresh of the
-    //     entire MatrixWidget and should cover all test cases where
-    //     the UI must update.  Unfortunately, the design of MatrixWidget
-    //     does not include an updateWidgets().  We'll probably have to
-    //     redesign and rewrite MatrixWidget before this becomes possible.
-
-#if 0
-    // All above comments long out-of-date and inapplicable.
-    // Code below no longer needed, is superfluous duplicate of nerw
-    // finer-grained notifications.
-    if (!m_scene->getCurrentSegment()) {
-        generatePitchRuler();
-        updateToCurrentSegment(false);  // false == don't set instrument
-                                        // playback override
-    }
-#endif
-}
-
-void
-MatrixWidget::slotDocColoursChanged()
-{
-#if 0   // Superfluous, for several reasons:
-        // When one or more segment's, colors change, get in order:
-        // MatrixViewSegment::appearanceChanged() <for each segment>
-        // MatrixWidget::slotDocColoursChanged()
-        // MatrixWidget::slotDocumentModified()
-        // MatrixScene::slotCommandExecuted()
-    m_scene->updateAllSegmentsColors();
-    updateToCurrentSegment(false);  // don't set instrument playback override
-#endif
-}
-
-void
 MatrixWidget::slotZoomIn()
 {
-    int v = m_lastH - 1;
-
-    m_Hzoom->setValue(v);
-    slotHorizontalThumbwheelMoved(v);
+    int v = m_lastHVzoomValue - 1;
+    m_HVzoom->setValue(v);
+    slotPrimaryThumbwheelMoved(v);
 }
 
 void
 MatrixWidget::slotZoomOut()
 {
-    int v = m_lastH + 1;
+    int v = m_lastHVzoomValue + 1;
+    m_HVzoom->setValue(v);
+    slotPrimaryThumbwheelMoved(v);
+}
 
+void
+MatrixWidget::slotZoomHorizontal(
+int leftRight)
+{
+    int v = m_lastH + leftRight;
     m_Hzoom->setValue(v);
     slotHorizontalThumbwheelMoved(v);
+}
+
+void
+MatrixWidget::slotZoomVertical(
+int upDown)
+{
+    int v = m_lastV + upDown;
+    m_Vzoom->setValue(v);
+    slotVerticalThumbwheelMoved(v);
+}
+
+void
+MatrixWidget::slotPanLeftRight(
+int leftRight)
+{
+    static const int PIXELS = 16;
+    int prevHScroll = m_panned->horizontalScrollBar()->sliderPosition(),
+         newHScroll = prevHScroll + leftRight * PIXELS;
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "MatrixWidget::slotPanLeftRight()"
+             << "leftRight: "
+             << leftRight
+             << " was:"
+             << prevHScroll
+             << " set to:"
+             << newHScroll;
+#endif
+    m_panned->horizontalScrollBar()->setSliderPosition(newHScroll);
 }
 
 void
@@ -1993,15 +2057,17 @@ const bool      ignorePercussion)
     if (lowestPitch == 128 && highestPitch == -1)
         return;
 
-    static const int EXTRA = 1;  // Show upper/lower outlines of high/low notes
+    // Show upper/lower outlines and selection borders of high/low notes
+    static const int    ZOOM_FUDGE = 10,
+                         PAN_FUDGE =  3;
     const double yPixels    =     (  (highestPitch - lowestPitch)
                                    + 1)  // top highest to bottom lowest
                                 * yRes
-                              + 4 * EXTRA;   // top and bottom space
+                              + ZOOM_FUDGE;
     m_vZoomFactor           = pannedRect.height() / yPixels;
     const int yScroll       = static_cast<int>(round(  (    (127 - highestPitch)
                                                           * yRes
-                                                        - EXTRA)    // top space
+                                                        - PAN_FUDGE)
                                                      * m_vZoomFactor));
     int prevHScroll         = 0;  // avoid compiler unititialized warning
 
@@ -2075,4 +2141,46 @@ void MatrixWidget::leaveEvent(QEvent* /*event*/)
 }
 #endif
 
+
+// Note label and color modes
+//
+
+void
+MatrixWidget::setNoteNameType(
+const NoteNameType nameType)
+{
+    switch (m_noteNameType = nameType) {
+        case NoteNameType::DEGREE:
+        case NoteNameType::MOVABLE_DO:
+        case NoteNameType::INTEGER_KEY:
+            m_keyDependentNotes = true;
+            break;
+
+        case NoteNameType::OFF:
+        case NoteNameType::CONCERT:
+        case NoteNameType::FIXED_DO:
+        case NoteNameType::INTEGER_ABSOLUTE:
+        case NoteNameType::RAW_MIDI:
+        case NoteNameType::VELOCITY:
+            m_keyDependentNotes = false;
+            break;
+    }
 }
+
+void
+MatrixWidget::setChordSpellingType(
+const ChordSpellingType nameType)
+{
+    m_chordDependentNotes = (   (m_chordSpellingType = nameType)
+                             != ChordSpellingType::OFF);
+}
+
+void
+MatrixWidget::setNoteColorType(
+const NoteColorType colorType)
+{
+    m_noteColorType        = colorType;
+    m_colorDependentNotes  = (colorType == NoteColorType::PITCH);
+}
+
+}   // namespace Rosegarden

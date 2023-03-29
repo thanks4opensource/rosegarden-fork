@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical matrix editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -27,6 +27,8 @@
 #include "MatrixToolBox.h"
 #include "MatrixViewSegment.h"
 #include "MatrixWidget.h"
+
+#include "base/ConflictingKeyChanges.h"
 
 #include "misc/Debug.h"
 #include "misc/Strings.h"
@@ -133,6 +135,8 @@
 namespace Rosegarden
 {
 
+bool MatrixView::warnAutoShowChordNameRuler = true;
+
 MatrixView::MatrixView(RosegardenDocument *doc,
                        const std::vector<Segment *>& segments,
                        QWidget *parent) :
@@ -140,6 +144,12 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     m_quantizations(BasicQuantizer::getStandardQuantizations()),
     m_inChordMode(false)
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nMatrixView::MatrixView():"
+             << segments.size()
+             << "segments";
+#endif
+
     m_document = doc;
     m_matrixWidget = new MatrixWidget(this);
     setCentralWidget(m_matrixWidget);
@@ -226,9 +236,10 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     findAction("scroll_to_follow")->setChecked(m_scrollToFollow);
     m_matrixWidget->setScrollToFollowPlayback(m_scrollToFollow);
 
+    setWindowIcon(IconLoader::loadPixmap("window-matrix"));
     slotUpdateWindowTitle();
-    connect(m_document, &RosegardenDocument::documentModified,
-            this, &MatrixView::slotUpdateWindowTitle);
+    connect(m_document, &RosegardenDocument::updateWindowTitle,
+            this,       &MatrixView::slotUpdateWindowTitle);
 
     // Set initial visibility ...
     bool view;
@@ -240,7 +251,7 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     view = settings.value("Chords ruler shown",
                           findAction("show_chords_ruler")->isChecked()
                          ).toBool();
-    setChordNameRulerActive(view);   // also sets menu checkmark
+    bool chordNameRulerOnAtStart = view;
 
     // ... and tempo ruler
     view = settings.value("Tempo ruler shown",
@@ -312,53 +323,46 @@ MatrixView::MatrixView(RosegardenDocument *doc,
     enableAutoRepeat("Transport Toolbar", "cursor_back");
     enableAutoRepeat("Transport Toolbar", "cursor_forward");
 
-#if 0   // t4os: master version looping
-    connect(RosegardenDocument::currentDocument,
-                &RosegardenDocument::loopChanged,
-            this, &MatrixView::slotLoopChanged);
-    // Make sure we are in sync.
-    slotLoopChanged();
-#endif
-
     // Show the pointer as soon as matrix editor opens (update pointer position,
     // but don't scroll)
     m_matrixWidget->showInitialPointer();
 
     readOptions();
 
+    // Want to show ChordNameRuler later/below after current segment set
+    if (m_matrixWidget && m_matrixWidget->chordNameRuler())
+        m_matrixWidget->chordNameRuler()->hide();
+
     show();
+
     // We have to do this after show() because the rulers need information
     // that isn't available until the MatrixView is shown.  (xScale)
     launchRulers(segments);
 
-    m_matrixWidget->getScene()->setKeySignaturesChanged(false);
+    // Needed to ensure current segment label (and color, and segment
+    // changer color, and current instrument playback) is correctly
+    // set to current (first) segment.
+    ChordNameRuler  *chordNameRuler(m_matrixWidget->chordNameRuler());
+    MatrixScene     *scene         (m_matrixWidget->getScene());
+    const Segment   *currentSegment(scene         ->getCurrentSegment());
 
-    // Force chord name ruler on if note labeling mode requires
-    if (      m_matrixWidget->getChordSpellingType()
-           != MatrixWidget::ChordSpellingType::OFF
+    chordNameRuler->setCurrentSegment(currentSegment);
 
-        ||    m_matrixWidget->getNoteNameType()
-           == MatrixWidget::NoteNameType::DEGREE
+    if (chordNameRulerOnAtStart)
+        setChordNameRulerVisible(true); // Will analyze(), show, etc.
+    else if (m_matrixWidget->needChordNameRuler())
+        chordNameRuler->analyzeChords();
 
-        ||    m_matrixWidget->getNoteNameType()
-           == MatrixWidget::NoteNameType::MOVABLE_DO
+    // Do regardless whether set visible so if is visible and chord
+    //   display turned off will still get required analysis when
+    //   e.g. changing between segments with conflicting key changes.
+    // In case need for note labeling
+    m_matrixWidget->setChordNameRulerAnalyzeWhileHiddenMode();
 
-        ||    m_matrixWidget->getNoteNameType()
-           == MatrixWidget::NoteNameType::INTEGER_KEY) {
-
-        // Notes have already been drawn but need to update with
-        // key-relative note names and/or chord spelling.
-        if (!findAction("show_chords_ruler")->isChecked())
-            // Need chord name ruler for chord note spelling
-            setChordNameRulerActive(true);
-
-        // Does recalculate (and redisplay since ruler is visible)
-        m_matrixWidget->getChordNameRuler()
-                       ->setCurrentSegment(getCurrentSegment(),
-                                           true);  // true == force recalc
-        m_matrixWidget->getScene()->updateNoteLabels();
-    }
-}
+    m_matrixWidget->updateToCurrentSegment(currentSegment);
+    scene         ->updateNotes(MatrixScene::UpdateNotes::FORCE,
+                                MatrixScene::UpdateNotes::FORCE);
+}  // constructor
 
 MatrixView::~MatrixView()
 {
@@ -371,7 +375,7 @@ MatrixView::setShowNoteNames()
     QSettings settings;
     settings.beginGroup(MatrixViewConfigGroup);
     bool show = qStrToBool(settings.value("show_note_names", false));
-    findAction("show_percussion_durations")->setChecked(show);
+    findAction("show_note_names")->setChecked(show);
     settings.endGroup();
     m_matrixWidget->setShowNoteNames(show);
 }
@@ -472,6 +476,9 @@ MatrixView::setShowNoteNameType()
     case MatrixWidget::NoteNameType::INTEGER_ABSOLUTE:
         findAction("absolute_integer_names")->setChecked(true);
         break;
+    case MatrixWidget::NoteNameType::VELOCITY:
+        findAction("velocity_note_names")->setChecked(true);
+        break;
     case MatrixWidget::NoteNameType::RAW_MIDI:
         findAction("midi_pitches")->setChecked(true);
         break;
@@ -544,16 +551,15 @@ MatrixView::closeEvent(QCloseEvent *event)
 void
 MatrixView::slotSegmentDeleted(Segment *s)
 {
-    RG_DEBUG << "slotSegmentDeleted()";
-
     std::vector<Segment *>::const_iterator segmentIter =
             std::find(m_segments.begin(), m_segments.end(), s);
 
-    // If found, delete it.
-    if (segmentIter != m_segments.end())
-        m_segments.erase(segmentIter);
+    if (segmentIter == m_segments.end()) return;
 
-    RG_DEBUG << "  Segments remaining:" << m_segments.size();
+    // Do in this order.
+    m_matrixWidget->chordNameRuler()->removeSegment(*segmentIter);
+
+    m_segments.erase(segmentIter);
 }
 
 void
@@ -585,8 +591,6 @@ MatrixView::slotUpdateWindowTitle(bool)
     if (m_segments.empty()) return;  // can't happen  except possibly at close
 
     setWindowTitle(m_currentWindowTitle);
-
-    setWindowIcon(IconLoader::loadPixmap("window-matrix"));
 }
 
 void
@@ -634,9 +638,6 @@ MatrixView::setupActions()
     createAction("toggle_loop", SLOT(slotLoopButtonClicked()));
     createAction("toggle_solo", SLOT(slotToggleSolo()));
     createAction("scroll_to_follow", SLOT(slotScrollToFollow()));
-#if 0  // t4os: master version looping
-    createAction("loop", SLOT(slotLoop()));
-#endif
     createAction("panic", SIGNAL(panic()));
     createAction("toggle_loop_active", SLOT(slotToggleLoopActive()));
     createAction("loop_from_selection", SLOT(slotLoopFromSelection()));
@@ -794,6 +795,7 @@ MatrixView::setupActions()
     createAction("concert_pitch_names",    SLOT(slotNoteNames()));
     createAction("fixed_do_solfege",       SLOT(slotNoteNames()));
     createAction("absolute_integer_names", SLOT(slotNoteNames()));
+    createAction("velocity_note_names",    SLOT(slotNoteNames()));
     createAction("midi_pitches",           SLOT(slotNoteNames()));
     createAction("degree_names",           SLOT(slotNoteNames()));
     createAction("movable_do_solfege",     SLOT(slotNoteNames()));
@@ -803,6 +805,7 @@ MatrixView::setupActions()
     noteNamesAg->addAction(findAction("concert_pitch_names"));
     noteNamesAg->addAction(findAction("fixed_do_solfege"));
     noteNamesAg->addAction(findAction("absolute_integer_names"));
+    noteNamesAg->addAction(findAction("velocity_note_names"));
     noteNamesAg->addAction(findAction("midi_pitches"));
     noteNamesAg->addAction(findAction("degree_names"));
     noteNamesAg->addAction(findAction("movable_do_solfege"));
@@ -1680,36 +1683,21 @@ MatrixView::slotScrollToFollow()
     m_document->getComposition().setEditorFollowPlayback(m_scrollToFollow);
 }
 
-#if 0  // t4os: master version looping
 void
-MatrixView::slotLoop()
+MatrixView::setChordNameRulerVisible(bool active)
 {
-    RosegardenDocument::currentDocument->loopButton(
-            findAction("loop")->isChecked());
-}
-
-void
-MatrixView::slotLoopChanged()
-{
-    Composition &composition =
-        RosegardenDocument::currentDocument->getComposition();
-
-    findAction("loop")->setChecked(
-            (composition.getLoopMode() != Composition::LoopOff));
-}
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nMatrixView::setChordNameRulerVisible()"
+             << active;
 #endif
 
-void
-MatrixView::setChordNameRulerActive(bool active)
-{
     findAction("show_chords_ruler")->setChecked(active);
-
-    m_matrixWidget->setChordNameRulerVisible(active);
-    m_matrixWidget->getScene()->recreatePitchHighlights();
 
     Preferences::setPreference(MatrixViewConfigGroup,
                                "Chords ruler shown",
                                active);
+
+    m_matrixWidget->setChordNameRulerVisible(active);
 }
 
 void
@@ -1717,7 +1705,13 @@ MatrixView::slotToggleChordsRuler()
 {
     bool view = findAction("show_chords_ruler")->isChecked();
 
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nMatrixView::slotToggleChordsRuler()  set:"
+             << (view ? "visible" : "invisible");
+#endif
+
     m_matrixWidget->setChordNameRulerVisible(view);
+
     m_matrixWidget->getScene()->recreatePitchHighlights();
 
     Preferences::setPreference(MatrixViewConfigGroup,
@@ -2054,8 +2048,24 @@ MatrixView::slotShowNames()
     settings.setValue("show_note_names", show);
     settings.endGroup();
     m_matrixWidget->setShowNoteNames(show);
-    m_matrixWidget->getScene()->updateNoteLabels();
-}
+
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nMatrixView::slotShowNames()"
+             << (show ? "show" : "hide")
+             << (  m_matrixWidget->needChordNameRuler()
+                 ? "need-ruler"
+                 : "no-ruler")
+             << (  findAction("show_chords_ruler")->isChecked()
+                 ? "is-checked"
+                 : "not-checked");
+#endif
+
+     m_matrixWidget->setChordNameRulerAnalyzeWhileHiddenMode();  // if needed
+    // Have toggled from on to off or vice-versa, so need to do regardless.
+    m_matrixWidget->getScene()
+                  ->updateNotes(MatrixScene::UpdateNotes::FORCE,    // labels
+                                MatrixScene::UpdateNotes::FORCE);   // colors
+}  // slotShowNames()
 
 void
 MatrixView::slotPercussionDurations()
@@ -2067,13 +2077,16 @@ MatrixView::slotPercussionDurations()
     settings.setValue("show_percussion_durations", show);
     settings.endGroup();
     m_matrixWidget->setShowPercussionDurations(show);
-    static constexpr bool onlyPercussion = true;
-    m_matrixWidget->getScene()->updateAllSegments(onlyPercussion);
+    m_matrixWidget->getScene()->updatePercussionNotes();
 }
 
 void
 MatrixView::slotNoteColors()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nMatrixView::slotNoteColors()";
+#endif
+
     QSettings settings;
     settings.beginGroup(MatrixViewConfigGroup);
     MatrixWidget::NoteColorType previousColorType =
@@ -2112,26 +2125,31 @@ MatrixView::slotNoteColors()
     m_matrixWidget->setNoteColorType(newColorType);
 
     // Only do if changed.
-    if (newColorType != previousColorType) {
-        m_matrixWidget->getScene()->updateAllSegmentsColors();
-    }
+    if (newColorType != previousColorType)
+        m_matrixWidget->getScene()->updateNoteColors();
 }
 
 void
 MatrixView::slotNoteColorsAllSegments()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nMatrixView::slotNoteColorsAllSegments()";
+#endif
     bool only = findAction("color_only_active")->isChecked();
     QSettings settings;
     settings.beginGroup(MatrixViewConfigGroup);
     settings.setValue("color_only_active", only);
     settings.endGroup();
     m_matrixWidget->setNoteColorAllSegments(!only);
-    m_matrixWidget->getScene()->updateAllSegmentsColors();
+    m_matrixWidget->getScene()->updateNoteColors();
 }
 
 void
 MatrixView::slotNoteNames()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nMatrixView::slotNoteNames()";
+#endif
     QSettings settings;
     settings.beginGroup(MatrixViewConfigGroup);
     MatrixWidget::NoteNameType previousNameType =
@@ -2141,27 +2159,23 @@ MatrixView::slotNoteNames()
                            MatrixWidget::NoteNameType::CONCERT)).toInt());
     MatrixWidget::NoteNameType newNameType = previousNameType;
 
-    bool needChordNameRuler = false;
     const QObject *s = sender();
     QString name = s->objectName();
     if (name == "fixed_do_solfege")
         newNameType = MatrixWidget::NoteNameType::FIXED_DO;
     else if (name == "absolute_integer_names")
         newNameType = MatrixWidget::NoteNameType::INTEGER_ABSOLUTE;
+    else if (name == "velocity_note_names")
+        newNameType = MatrixWidget::NoteNameType::VELOCITY;
     else if (name == "midi_pitches")
         newNameType = MatrixWidget::NoteNameType::RAW_MIDI;
     else if (name == "degree_names") {
-        needChordNameRuler = true;
         newNameType = MatrixWidget::NoteNameType::DEGREE;
     }
-    else if (name == "movable_do_solfege") {
-        needChordNameRuler = true;
+    else if (name == "movable_do_solfege")
         newNameType = MatrixWidget::NoteNameType::MOVABLE_DO;
-    }
-    else if (name == "key_integer_names") {
-        needChordNameRuler = true;
+    else if (name == "key_integer_names")
         newNameType = MatrixWidget::NoteNameType::INTEGER_KEY;
-    }
     else if (name == "note_names_off")
         newNameType = MatrixWidget::NoteNameType::OFF;
     else    // if (name == "concert_pitch_names")
@@ -2173,17 +2187,22 @@ MatrixView::slotNoteNames()
 
     m_matrixWidget->setNoteNameType(newNameType);
 
-    if (needChordNameRuler)
-        setChordNameRulerActive(true);
-
     // Only do if changed.
-    if (newNameType != previousNameType)
-        m_matrixWidget->getScene()->updateNoteLabels();
-}
+    if (newNameType != previousNameType && m_matrixWidget->getShowNoteNames()) {
+        m_matrixWidget->setChordNameRulerAnalyzeWhileHiddenMode(); // as needed
+        // Do regardless.
+        m_matrixWidget->getScene()
+                      ->updateNotes(MatrixScene::UpdateNotes::FORCE,   // labels
+                                    MatrixScene::UpdateNotes::FORCE);  // colors
+    }
+}  // slotNoteNames()
 
 void
 MatrixView::slotChordSpelling()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nMatrixView::slotChordSpelling()";
+#endif
     QSettings settings;
     settings.beginGroup(MatrixViewConfigGroup);
     MatrixWidget::ChordSpellingType prevChordSpellingType =
@@ -2211,24 +2230,19 @@ MatrixView::slotChordSpelling()
     m_matrixWidget->setChordSpellingType(newChordSpellingType);
 
     // Only do if changed.
-    if (newChordSpellingType != prevChordSpellingType) {
-        if (   newChordSpellingType != MatrixWidget::ChordSpellingType::OFF
-            && !m_matrixWidget->chordNameRulerIsVisible()) {
-            // Must have chord name ruler to do chord spelling in note names
-            setChordNameRulerActive(true);
-            QSettings settings;
-            settings.beginGroup(MatrixViewConfigGroup);
-            settings.setValue("Chords ruler shown", true);
-            settings.endGroup();
-            findAction("show_chords_ruler")->setChecked(true);
-        }
+    if (   newChordSpellingType != prevChordSpellingType
+        && m_matrixWidget->getShowNoteNames()) {
+        m_matrixWidget->setChordNameRulerAnalyzeWhileHiddenMode();
         m_matrixWidget->getScene()->updateNoteLabels();
     }
-}
+}  // slotChordSpelling()
 
 void
 MatrixView::slotNotesCmajFlats()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "MatrixView::slotNotesCmajFlats()";
+#endif
     bool flats = findAction("c_major_flats")->isChecked();
     // Use MatrixViewConfigGroup, not GeneralOptionsConfigGroup so
     // chord name ruler can have different settings (and so don't
@@ -2238,12 +2252,17 @@ MatrixView::slotNotesCmajFlats()
                                flats);
 
     m_matrixWidget->setNoteNamesCmajFlats(flats);
-    m_matrixWidget->getScene()->updateNoteLabels();
+    m_matrixWidget->getScene()
+                  ->updateNotes(MatrixScene::UpdateNotes::FORCE,   // labels
+                                MatrixScene::UpdateNotes::CHECK);  // colors
 }
 
 void
 MatrixView::slotOffsetMinors()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "MatrixView::slotOffsetMinors()";
+#endif
     bool offsetMinors = findAction("offset_minor_keys")->isChecked();
     // Use MatrixViewConfigGroup, not GeneralOptionsConfigGroup so
     // chord name ruler can have different settings (and so don't
@@ -2253,12 +2272,17 @@ MatrixView::slotOffsetMinors()
                                offsetMinors);
 
     m_matrixWidget->setNoteNamesOffsetMinors(offsetMinors);
-    m_matrixWidget->getScene()->updateNoteLabels();
+    m_matrixWidget->getScene()
+                  ->updateNotes(MatrixScene::UpdateNotes::FORCE,   // labels
+                                MatrixScene::UpdateNotes::CHECK);  // colors
 }
 
 void
 MatrixView::slotAlternateMinors()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "MatrixView::slotAlternateMinors()";
+#endif
     bool alternateMinors = findAction("alternate_minor_keys")->isChecked();
     // Use MatrixViewConfigGroup, not GeneralOptionsConfigGroup so
     // chord name ruler can have different settings (and so don't
@@ -2268,12 +2292,17 @@ MatrixView::slotAlternateMinors()
                                alternateMinors);
 
     m_matrixWidget->setNoteNamesAlternateMinors(alternateMinors);
-    m_matrixWidget->getScene()->updateNoteLabels();
+    m_matrixWidget->getScene()
+                  ->updateNotes(MatrixScene::UpdateNotes::FORCE,   // labels
+                                MatrixScene::UpdateNotes::CHECK);  // colors
 }
 
 void
 MatrixView::slotHighlight()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "MatrixView::slotHighlight()";
+#endif
     QSettings settings;
     settings.beginGroup(MatrixViewConfigGroup);
     MatrixScene::HighlightType previousHighlightType =

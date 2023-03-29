@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -158,6 +158,7 @@ MatrixTool::handleRightButtonPress(const MatrixMouseEvent *e)
                                     get<Int>(BaseProperties::
                                               TRIGGER_SEGMENT_ID));
 #else
+
             RosegardenMainWindow::
             self()->
             getView()->
@@ -279,6 +280,7 @@ MatrixTool::ready()
 #if 0   // No, this varies among tools
     m_isFinished = false;
 #endif
+
 }
 
 void
@@ -294,6 +296,7 @@ MatrixTool::stow()
         // self to temporarilly switch to another tool
     m_isFinished = true;
 #endif
+
 }
 
 void
@@ -428,7 +431,7 @@ MatrixTool::createMenu()
         if (!(m_menu = findMenu("MatrixTool"))) return;
     }
 
-    for (auto segmentAction : m_segmentActions) {
+    for (const auto &segmentAction : m_segmentActions) {
         m_menu->removeAction(segmentAction.second);
         delete segmentAction.second;
     }
@@ -450,6 +453,7 @@ MatrixTool::createMenu()
 #if 0   // SIGNAL_SLOT abuse: Called explicitly from handleRightButtonPress()
     connect(menu, &QMenu::aboutToShow, this, &MatrixTool::updateMenu);
 #endif
+
 }
 
 void
@@ -457,8 +461,6 @@ MatrixTool::changeActiveSegment(const Segment *segment)
 {
     m_widget->getScene()->setCurrentSegment(segment); // MW::UTCS should do
     m_widget->clearSelection();
-    m_widget->updateToCurrentSegment(true, segment);  // true == set instrument
-    m_widget->generatePitchRuler(); //in case normal->drum or vice-versa
 
     MatrixMouseEvent matrixMouseEvent;
     if (m_scene->setupMouseEvent(matrixMouseEvent))

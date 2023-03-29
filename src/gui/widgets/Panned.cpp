@@ -3,7 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -328,20 +329,35 @@ Panned::processWheelEvent(QWheelEvent *e)
 
     QPoint angleDelta = e->angleDelta();
 
+    // Ctrl+Shift+wheel to zoom horizontally
+    if ((e->modifiers() & (Qt::CTRL | Qt::SHIFT)) == (Qt::CTRL | Qt::SHIFT)) {
+        if      (angleDelta.y() > 0) emit zoomVertical( 1);
+        else if (angleDelta.y() < 0) emit zoomVertical(-1);
+        return;
+    }
+
+    else if ((e->modifiers() & (Qt::CTRL | Qt::ALT)) == (Qt::CTRL | Qt::ALT)) {
+        if      (angleDelta.x() > 0) emit zoomHorizontal( 1);
+        else if (angleDelta.x() < 0) emit zoomHorizontal(-1);
+        return;
+    }
+
     // Ctrl+wheel to zoom
-    if (e->modifiers() & Qt::CTRL) {
+    else if (e->modifiers() & Qt::CTRL) {
         // Wheel down
         if (angleDelta.y() > 0)
             emit zoomOut();
         else if (angleDelta.y() < 0)  // Wheel up
             emit zoomIn();
-
         return;
     }
 
     // Shift+wheel to scroll left/right.
     // If shift is pressed and we are scrolling vertically...
-    if ((e->modifiers() & Qt::SHIFT)  &&  angleDelta.y() != 0) {
+    else if ((e->modifiers() & Qt::SHIFT)  &&  angleDelta.y() != 0) {
+        // The following works in track and notation editors, but
+        // does nothing in matrix ...
+
         // Transform the incoming vertical scroll event into a
         // horizontal scroll event.
 
@@ -379,6 +395,11 @@ Panned::processWheelEvent(QWheelEvent *e)
 #endif
         // Let baseclass handle as usual.
         QGraphicsView::wheelEvent(&e2);
+
+        // ... so do this for matrix editor
+
+        if      (angleDelta.y() > 0) emit panLeftRight( 1);
+        else if (angleDelta.y() < 0) emit panLeftRight(-1);
 
         return;
     }

@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -106,6 +106,8 @@ SequenceManager::~SequenceManager()
 {
     RG_DEBUG << "dtor...";
 
+    freeRefreshStatusIds();
+
     if (m_doc)
         m_doc->getComposition().removeObserver(this);
 }
@@ -124,8 +126,7 @@ SequenceManager::setDocument(RosegardenDocument *doc)
     disconnect(CommandHistory::getInstance(), &CommandHistory::commandExecuted,
                this, &SequenceManager::update);
 
-    m_segments.clear();
-    m_triggerSegments.clear();
+    freeRefreshStatusIds();
 
     m_doc = doc;
 
@@ -1428,6 +1429,8 @@ void SequenceManager::refresh()
         }
     }
 
+    // This is OK (doesn't leak refresh IDs) because any pre-existing entries
+    // in m_triggerSegments were merely reused in newTriggerMap.
     m_triggerSegments = newTriggerMap;
 
 #if 0
@@ -1597,6 +1600,17 @@ void SequenceManager::segmentDeleted(Segment* s)
     // Remove from segments map
     // This uses "s" as an index.  It is not dereferenced.
     m_segments.erase(s);
+    m_triggerSegments.erase(s);
+}
+
+void SequenceManager::freeRefreshStatusIds()
+{
+    for (auto segment : m_segments)
+        segment.first->deleteRefreshStatusId(segment.second);
+    m_segments.clear();
+    for (auto triggerSegment : m_triggerSegments)
+        triggerSegment.first->deleteRefreshStatusId(triggerSegment.second);
+    m_triggerSegments.clear();
 }
 
 void SequenceManager::endMarkerTimeChanged(const Composition *, bool /*shorten*/)

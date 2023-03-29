@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -24,6 +24,7 @@
 
 #include "base/AnalysisTypes.h"
 #include "base/Composition.h"
+#include "base/ConflictingKeyChanges.h"
 #include "base/Instrument.h"
 #include "base/NotationQuantizer.h"
 #include "base/NotationTypes.h"
@@ -61,6 +62,10 @@
 #include <QWidget>
 #include <QWidgetAction>
 
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+#include <iomanip>
+#endif
+
 #include <limits>
 
 
@@ -68,25 +73,26 @@ namespace Rosegarden
 {
 
 // See documentation in .h file
-ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
+ChordNameRuler::ChordNameRuler(QWidget *parent,
+                               RulerScale *rulerScale,
                                RosegardenDocument *doc,
-                               bool keyChangingEnabled,
-                               bool chordCopyingEnabled,
+                               const ParentEditor parentEditor,
                                int height,
-                               QWidget *parent) :
+                               ConflictingKeyChanges *conflictingKeyChanges) :
         QWidget                          (parent),
         m_doc                            (doc),
         m_analyzer                       (new ChordAnalyzer),
-        m_showChords                     (keyChangingEnabled),   // !main_window
+        m_parentEditor                   (parentEditor),
+        m_conflictingKeyChanges          (conflictingKeyChanges),
+        m_ownConflictingKeyChanges       (!conflictingKeyChanges),
+        m_showChords                     (parentEditor != ParentEditor::TRACK),
         m_showKeyChanges                 (true),
-        m_keyChangingEnabled             (keyChangingEnabled),   // !main_window
-        m_chordCopyingEnabled            (chordCopyingEnabled),
+        m_hideKeyChanges                 (false),
         m_height                         (height),
         m_currentXOffset                 (0),
         m_width                          ( -1),
         m_rulerScale                     (rulerScale),
         m_composition                    (&doc->getComposition()),
-        m_compositionRefreshStatusId     (0),
         m_menu                           (nullptr),
         m_showChordsAction               (nullptr),
         m_quantizeAction                 (nullptr),
@@ -126,7 +132,6 @@ ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
         m_unarpeggiationWholeNoteAction       (nullptr),
         m_unarpeggiationWholeDotNoteAction    (nullptr),
         m_unarpeggiationDoubleNoteAction      (nullptr),
-        m_showKeysAction                 (nullptr),
         m_insertKeyChangeAction          (nullptr),
         m_chordCopyAction                (nullptr),
         m_pitchLetterAction              (nullptr),
@@ -142,14 +147,15 @@ ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
         m_offsetMinorKeys                (nullptr),
         m_altMinorKeys                   (nullptr),
         m_nonDiatonicChords              (nullptr),
-        m_enableChooseActiveSegments     (true),
         m_currentSegment                 (nullptr),
-        m_numActiveSegments              (0),
-        m_chordAndKeyNames               (new Segment()),
-        m_implicitSegments               (true),
-        m_conflictingKeyChanges          (false),
-        m_chordNameStylesUpdated         (false),
+        m_isVisible                      (false),
+        m_analyzeWhileHidden             (false),
         m_doUnarpeggiation               (false),
+        m_keysDirty                      (true),
+        m_notesDirty                     (true),
+        m_chordsDirty                    (true),
+        m_namingModeChanged              (false),
+        m_keyDependent                   (true),  // will be set in init()
         m_quantization                   (NoteDuration::NONE),
         m_unarpeggiation                 (NoteDuration::QUARTER),
         m_quantizationTime               (0),
@@ -159,65 +165,33 @@ ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
         m_fontMetrics                    (m_font),
         m_boldFontMetrics                (m_boldFont)
 {
-    m_font.setPointSize(11);
-    m_font.setPixelSize(12);
-    m_boldFont.setPointSize(11);
-    m_boldFont.setPixelSize(12);
-    m_boldFont.setBold(true);
-    m_fontMetrics     = QFontMetrics(m_font);
-    m_boldFontMetrics = QFontMetrics(m_boldFont);
-    m_compositionRefreshStatusId = m_composition->getNewRefreshStatusId();
-
-    createMenuAndTooltip();
-
-    // Populate m_chordNote with all segments in composition
-    // Used for main window -- matrix and notation register
-    //   explicit list of segments via other construtor.
-    const Studio &studio(doc->currentDocument->getStudio());
-    for (Composition::iterator   ci  = m_composition->begin() ;
-                                 ci != m_composition->end() ;
-                               ++ci) {
-        TrackId ti = (*ci)->getTrack();
-        Instrument *instr = studio.getInstrumentById(  m_composition
-                                                     ->getTrackById(ti)
-                                                     ->getInstrument());
-
-        if (instr && instr->isPercussion())
-            continue;
-
-        m_segments.push_back(SegmentAndActive{*ci, true});
-
-        connect(*ci,  &Segment::contentsChanged,
-                this, &ChordNameRuler::slotSegmentContentsChanged);
-    }
-    m_numActiveSegments = m_segments.size();
-
-    resetActiveSegmentIndices();
-
-    analyzeChordsAndKeyChanges(false);  // don't emit chordAnalysisChanged()
+    std::vector<Segment*> segments;
+    for (Segment *segment : *m_composition) segments.push_back(segment);
+    init(segments);
 }
 
 // See documentation in .h file
-ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
+ChordNameRuler::ChordNameRuler(QWidget *parent,
+                               RulerScale *rulerScale,
                                RosegardenDocument *doc,
-                               std::vector<Segment *> &segments,
-                               bool keyChangingEnabled,
-                               bool chordCopyingEnabled,
+                               const std::vector<Segment *> &segments,
+                               const ParentEditor parentEditor,
                                int height,
-                               QWidget *parent) :
+                               ConflictingKeyChanges *conflictingKeyChanges) :
         QWidget                          (parent),
         m_doc                            (doc),
         m_analyzer                       (new ChordAnalyzer),
-        m_showChords                     (keyChangingEnabled),   // !main_window
+        m_parentEditor                   (parentEditor),
+        m_conflictingKeyChanges          (conflictingKeyChanges),
+        m_ownConflictingKeyChanges       (!conflictingKeyChanges),
+        m_showChords                     (parentEditor != ParentEditor::TRACK),
         m_showKeyChanges                 (true),
-        m_keyChangingEnabled             (keyChangingEnabled),   // !main_window
-        m_chordCopyingEnabled            (chordCopyingEnabled),
+        m_hideKeyChanges                 (false),
         m_height                         (height),
         m_currentXOffset                 (0),
         m_width                          ( -1),
         m_rulerScale                     (rulerScale),
         m_composition                    (&doc->getComposition()),
-        m_compositionRefreshStatusId     (0),
         m_menu                           (nullptr),
         m_showChordsAction               (nullptr),
         m_quantizeAction                 (nullptr),
@@ -257,7 +231,6 @@ ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
         m_unarpeggiationWholeNoteAction       (nullptr),
         m_unarpeggiationWholeDotNoteAction    (nullptr),
         m_unarpeggiationDoubleNoteAction      (nullptr),
-        m_showKeysAction                 (nullptr),
         m_insertKeyChangeAction          (nullptr),
         m_chordCopyAction                (nullptr),
         m_pitchLetterAction              (nullptr),
@@ -273,14 +246,15 @@ ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
         m_offsetMinorKeys                (nullptr),
         m_altMinorKeys                   (nullptr),
         m_nonDiatonicChords              (nullptr),
-        m_enableChooseActiveSegments     (false),
         m_currentSegment                 (nullptr),
-        m_numActiveSegments              (0),
-        m_chordAndKeyNames               (new Segment()),
-        m_implicitSegments               (false),
-        m_conflictingKeyChanges          (false),
-        m_chordNameStylesUpdated         (false),
+        m_isVisible                      (false),
+        m_analyzeWhileHidden             (false),
         m_doUnarpeggiation               (false),
+        m_keysDirty                      (true),
+        m_notesDirty                     (true),
+        m_chordsDirty                    (true),
+        m_namingModeChanged              (false),
+        m_keyDependent                   (true),  // will be set in init()
         m_quantization                   (NoteDuration::NONE),
         m_unarpeggiation                 (NoteDuration::QUARTER),
         m_quantizationTime               (0),
@@ -290,53 +264,94 @@ ChordNameRuler::ChordNameRuler(RulerScale *rulerScale,
         m_fontMetrics                    (m_font),
         m_boldFontMetrics                (m_boldFont)
 {
-    m_font.setPointSize(11);
-    m_font.setPixelSize(12);
-    m_boldFont.setPointSize(11);
-    m_boldFont.setPixelSize(12);
-    m_boldFont.setBold(true);
-    m_fontMetrics     = QFontMetrics(m_font);
-    m_boldFontMetrics = QFontMetrics(m_boldFont);
-
-    m_compositionRefreshStatusId = m_composition->getNewRefreshStatusId();
-
-    for (Segment *segment : segments) {
-        if (!segment->isPercussion()) {
-            m_segments.push_back(SegmentAndActive{segment, true});
-            connect(segment, &Segment::contentsChanged,
-                    this,    &ChordNameRuler::slotSegmentContentsChanged);
-        }
-    }
-    m_numActiveSegments = m_segments.size();
-    resetActiveSegmentIndices();
-
-    createMenuAndTooltip();
-
-    analyzeChordsAndKeyChanges(false);  // don't emit chordAnalysisChanged()
+    // Note won't be in this constructor if m_parentEditor == TRACK
+    init(segments);
 }
 
 ChordNameRuler::~ChordNameRuler()
 {
+    for (const auto &segment : m_segments)
+        if (m_parentEditor != ParentEditor::MATRIX)
+            const_cast<Segment*>(segment.first)->removeObserver(this);
+        // else was never added as observer if MATRIX
+
+    if (m_ownConflictingKeyChanges) delete m_conflictingKeyChanges;
+
     delete m_analyzer;
-    delete m_chordAndKeyNames;
+}
+
+void ChordNameRuler::init(
+const std::vector<Segment*> &segments)
+{
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "ChordNameRuler::init() @"
+             << static_cast<void*>(this)
+             << ' '
+             << segments.size()
+             << "segments  conflicting:"
+             << static_cast<void*>(m_conflictingKeyChanges)
+             << m_ownConflictingKeyChanges;
+#endif
+
+    // Must call at least once because ctor of static ChordMaps can't
+    // because Prefernces not set up yet at that time.
+    m_analyzer->updateChordNameStyles();
+
+    if (!m_conflictingKeyChanges)  // i.e. m_ownConflictingKeyChanges == true
+        m_conflictingKeyChanges = new ConflictingKeyChanges(segments);
+
+    for (Segment *segment : segments)
+        addSegment(segment);
+
+    m_font.setPointSize(11);
+    m_font.setPixelSize(12);
+    m_boldFont.setPointSize(11);
+    m_boldFont.setPixelSize(12);
+    m_boldFont.setBold(true);
+    m_fontMetrics     = QFontMetrics(m_font);
+    m_boldFontMetrics = QFontMetrics(m_boldFont);
+
+    createMenuAndToolTip();
+
+    if (m_parentEditor != ParentEditor::MATRIX)
+        connect( CommandHistory::getInstance(),
+                &CommandHistory::commandExecuted,
+                 this,
+                &ChordNameRuler::slotCommandExecuted);
+    // else matrix editor calls slots here  explicitly,
+    // in desired order with note label, etc. updates
+}  // init()
+
+void
+ChordNameRuler::updateToolTip()
+{
+    if (m_parentEditor == ParentEditor::TRACK)  // is in main window
+        setToolTip(tr("Use Chord/Key Ruler in matrix or notation\n"
+                      "editor to analyze chords and add/remove\n"
+                      "key signature changes."));
+    else if (m_showKeyChanges)
+        setToolTip(tr("Right-click for menu.\n"
+                      "Hold middle mouse button to hide key changes.\n"
+                      "Double-click to remove key change."));
+    else
+        setToolTip(tr("Right-click for menu.\n"
+                      "Double-click to remove key change."));
 }
 
 void
-ChordNameRuler::createMenuAndTooltip()
+ChordNameRuler::createMenuAndToolTip()
 {
-    // Must call AnalysisHelper::updateChordNameStyles() at least once
-    // because ctor of static ChordMaps can't, because Prefernces not
-    // set up yet at that time
-    if (!m_chordNameStylesUpdated) {
-        m_analyzer->updateChordNameStyles();
-        m_chordNameStylesUpdated = true;
-    }
-
     if (m_menu) return;
+
+    updateToolTip();
 
     m_menu = new QMenu(tr("Key changes and chord names"), this);
     QAction *action;
 
+    QLabel          *label;
+    QWidgetAction   *labelWidgetAction;
+    QString          style(QString("QLabel {color: gray; "
+                                   "padding-left: 1;}"));   // indent a little
 
     m_showChordsAction = m_menu->addAction("do_chords");
     m_showChordsAction->setText(tr("Analyze chords"));
@@ -345,6 +360,24 @@ ChordNameRuler::createMenuAndTooltip()
     connect(m_showChordsAction, &QAction::triggered,
             this,               &ChordNameRuler::slotShowChords);
 
+    action = m_menu->addAction(tr("choose_active_segments"));
+    action->setText(tr("Choose chord note segments..."));
+    connect(action, &QAction::triggered,
+            this,   &ChordNameRuler::slotChooseActiveSegments);
+
+    if (m_parentEditor == ParentEditor::NOTATION) {
+        m_chordCopyAction = m_menu->addAction(tr("copy_chords_to_text"));
+        m_chordCopyAction->setText(tr("Copy chords to text"));
+        connect(m_chordCopyAction, &QAction::triggered,
+                this,              &ChordNameRuler::slotCopyChords);
+    }
+
+    label = new QLabel(tr("Analysis mode:"));
+    label->setStyleSheet(style);
+    label->setForegroundRole(QPalette::ButtonText);
+    labelWidgetAction = new QWidgetAction(this);
+    labelWidgetAction->setDefaultWidget(label);
+    m_menu->addAction(labelWidgetAction);
 
     QActionGroup *algorithmActionGroup = new QActionGroup(m_menu);
 
@@ -369,7 +402,7 @@ ChordNameRuler::createMenuAndTooltip()
     else                    m_quantizeAction    ->setChecked(true);
 
 
-    QMenu *quantizeMenu = m_menu->addMenu(tr("Notes on/off quantization time"));
+    QMenu *quantizeMenu = m_menu->addMenu(tr("Note quantization time"));
     QActionGroup *quantizeActionGroup = new QActionGroup(m_menu);
 
 #define ADD_ACTION(ACTION, NAME, TEXT)                                  \
@@ -505,58 +538,19 @@ ChordNameRuler::createMenuAndTooltip()
 #undef CASE
     }
 
+    m_nonDiatonicChords = m_menu->addAction(tr("non_diatonic"));
+    m_nonDiatonicChords->setText(tr("Include non-diatonic chords"));
+    m_nonDiatonicChords->setCheckable(true);
+    connect(m_nonDiatonicChords, &QAction::triggered,
+            this,                &ChordNameRuler::slotNonDiatonicChords);
+    m_nonDiatonicChords->setChecked(Preferences::nonDiatonicChords.get());
 
-    // Optional menus
-    //
-
-    if (m_keyChangingEnabled || m_chordCopyingEnabled)
-        m_menu->addSeparator();
-
-    // Only supported in notation and matrix editors, not main/tracks window
-    if (!m_enableChooseActiveSegments) {
-        action = m_menu->addAction(tr("choose_active_segments"));
-        action->setText(tr("Choose chord note segments..."));
-        connect(action, &QAction::triggered,
-                this,   &ChordNameRuler::slotChooseActiveSegments);
-    }
-
-    // Only supported in notation and matrix editors, not main/tracks window
-    if (m_keyChangingEnabled) {
-        m_showKeysAction = m_menu->addAction("do_chords");
-        m_showKeysAction->setText(tr("Show key changes"));
-        m_showKeysAction->setCheckable(true);
-        m_showKeysAction->setChecked(m_showKeyChanges);
-        connect(m_showKeysAction, &QAction::triggered,
-                this,               &ChordNameRuler::slotShowKeys);
-
-        m_insertKeyChangeAction = m_menu->addAction(tr("insert_key_change"));
-        m_insertKeyChangeAction->setText(tr("Insert Key Change at "
-                                            "Playback Position..."));
-        connect(m_insertKeyChangeAction, &QAction::triggered,
-                this,                    &ChordNameRuler::slotInsertKeyChange);
-    }
-
-    if (m_chordCopyingEnabled) {
-        m_chordCopyAction = m_menu->addAction(tr("copy_chords_to_text"));
-        m_chordCopyAction->setText(tr("Copy chords to text"));
-        connect(m_chordCopyAction, &QAction::triggered,
-                this,              &ChordNameRuler::slotCopyChords);
-    }
-
-
-    // Back to always-enabled menus
-    //
-
-    QString style(QString("QLabel {color: gray; "
-                          "padding-left: 1;}"));    // indent a little
-    m_menu->addSeparator();
-
-    QLabel *namesLabel = new QLabel(tr("Chord root names:"));
-    namesLabel->setStyleSheet(style);
-    namesLabel->setForegroundRole(QPalette::ButtonText);
-    QWidgetAction *nameWidgetAction = new QWidgetAction(this);
-    nameWidgetAction->setDefaultWidget(namesLabel);
-    m_menu->addAction(nameWidgetAction);
+    label = new QLabel(tr("Chord root names:"));
+    label->setStyleSheet(style);
+    label->setForegroundRole(QPalette::ButtonText);
+    labelWidgetAction = new QWidgetAction(this);
+    labelWidgetAction->setDefaultWidget(label);
+    m_menu->addAction(labelWidgetAction);
 
     QActionGroup *chordNameActionGroup = new QActionGroup(m_menu);
 
@@ -601,27 +595,31 @@ ChordNameRuler::createMenuAndTooltip()
     switch (m_chordNameType) {
         case ChordNameType::PITCH_LETTER:
             m_pitchLetterAction->setChecked(true);
+            m_keyDependent = false;
             break;
 
         case ChordNameType::PITCH_INTEGER:
             m_pitchIntegerAction->setChecked(true);
+            m_keyDependent = false;
             break;
 
         case ChordNameType::KEY_ROMAN_NUMERAL:
             m_keyRomanNumeralAction->setChecked(true);
+            m_keyDependent = true;
             break;
 
         case ChordNameType::KEY_INTEGER:
             m_keyIntegerAction->setChecked(true);
+            m_keyDependent = true;
             break;
     }
 
-    QLabel *slashLabel = new QLabel(tr("Slash chords:"));
-    slashLabel->setStyleSheet(style);
-    slashLabel->setForegroundRole(QPalette::ButtonText);
-    QWidgetAction *slashWidgetAction = new QWidgetAction(this);
-    slashWidgetAction->setDefaultWidget(slashLabel);
-    m_menu->addAction(slashWidgetAction);
+    label = new QLabel(tr("Slash chords:"));
+    label->setStyleSheet(style);
+    label->setForegroundRole(QPalette::ButtonText);
+    labelWidgetAction = new QWidgetAction(this);
+    labelWidgetAction->setDefaultWidget(label);
+    m_menu->addAction(labelWidgetAction);
 
     QActionGroup *slashNameActionGroup = new QActionGroup(m_menu);
 
@@ -633,14 +631,15 @@ ChordNameRuler::createMenuAndTooltip()
             this,             &ChordNameRuler::slotChordSlashType);
 
     m_slashAbsRelAction = m_menu->addAction(tr("pitch_or_key_type"));
-    m_slashAbsRelAction->setText(tr("Concert pitch or key relative"));
+    m_slashAbsRelAction->setText(tr("Concert pitch or in-key"));
     m_slashAbsRelAction->setCheckable(true);
     slashNameActionGroup->addAction(m_slashAbsRelAction);
     connect(m_slashAbsRelAction, &QAction::triggered,
             this,                &ChordNameRuler::slotChordSlashType);
 
     m_slashChordToneAction = m_menu->addAction(tr("chord_tone_type"));
-    m_slashChordToneAction->setText(tr("Chord root relative"));
+    m_slashChordToneAction->setText(tr("Chord root relative (requires "
+                                       "in-key roman or integer)"));
     m_slashChordToneAction->setCheckable(true);
     slashNameActionGroup->addAction(m_slashChordToneAction);
     connect(m_slashChordToneAction, &QAction::triggered,
@@ -677,8 +676,8 @@ ChordNameRuler::createMenuAndTooltip()
                                                        false));
 
     m_preferSlashChordsAction = m_menu->addAction(tr("prefer_slash_type"));
-    m_preferSlashChordsAction->setText(tr(u8"Prefer slass chords (e.g."
-                                       " Cm/A\u266d vs A\u266dmaj7)"));
+    m_preferSlashChordsAction->setText(tr(u8"Prefer slash chords (e.g."
+                                       " Cm/A\u266d not A\u266dmaj7)"));
     m_preferSlashChordsAction->setCheckable(true);
     connect(m_preferSlashChordsAction, &QAction::triggered,
             this,                      &ChordNameRuler::slotPreferSlashChords);
@@ -688,9 +687,15 @@ ChordNameRuler::createMenuAndTooltip()
                                                           "prefer_slash_chords",
                                                            false));
 
+    setSlashChordMenus();  // Fix chord slash type as per chord name type
 
-    m_menu->addSeparator();
 
+    label = new QLabel(tr("Chord name options:"));
+    label->setStyleSheet(style);
+    label->setForegroundRole(QPalette::ButtonText);
+    labelWidgetAction = new QWidgetAction(this);
+    labelWidgetAction->setDefaultWidget(label);
+    m_menu->addAction(labelWidgetAction);
 
     m_cMajorFlats = m_menu->addAction(tr("c_major_flats"));
     m_cMajorFlats->setText(tr("C major flats"));
@@ -734,140 +739,415 @@ ChordNameRuler::createMenuAndTooltip()
                                                "alt_minors",
                                                false));
 
-    m_nonDiatonicChords = m_menu->addAction(tr("c_major_flats"));
-    m_nonDiatonicChords->setText(tr("Include non-diatonic chords"));
-    m_nonDiatonicChords->setCheckable(true);
-    connect(m_nonDiatonicChords, &QAction::triggered,
-            this,                &ChordNameRuler::slotNonDiatonicChords);
-    m_nonDiatonicChords->setChecked(Preferences::nonDiatonicChords.get());
-
     action = m_menu->addAction(tr("chord_name_styles"));
     action->setText(tr("Chord name styles..."));
     connect(action, &QAction::triggered,
             this,   &ChordNameRuler::slotSetNameStyles);
 
 
-    if (m_keyChangingEnabled)
-        setToolTip(tr("Right-click for key change insert, and chord name "
-                      "type, menu.\n"
-                      "Double-click for remove key change dialog."));
-    else
-        setToolTip(tr("Right-click for chord name type menu."));
+    // Key changes
 
+    m_menu->addSeparator();
+
+    m_showKeysAction = m_menu->addAction("do_keys");
+    m_showKeysAction->setText(tr("Show key changes"));
+    m_showKeysAction->setCheckable(true);
+    m_showKeysAction->setChecked(m_showKeyChanges);
+    connect(m_showKeysAction, &QAction::triggered,
+            this,               &ChordNameRuler::slotShowKeys);
+
+    m_insertKeyChangeAction = m_menu->addAction(tr("insert_key_change"));
+    m_insertKeyChangeAction->setText(tr("Insert Key Change at "
+                                        "Playback Position..."));
+    connect(m_insertKeyChangeAction, &QAction::triggered,
+            this,                    &ChordNameRuler::slotInsertKeyChange);
+
+}  // createMenuAndToolTip()
+
+void
+ChordNameRuler::setSlashChordMenus()
+{
+    if (   m_chordNameType == ChordNameType::PITCH_LETTER
+        || m_chordNameType == ChordNameType::PITCH_INTEGER)
+    {
+        // Disable because has no effect.
+        m_slashChordToneAction->setChecked(false);
+        m_slashChordToneAction->setEnabled(false);
+
+        if (m_chordSlashType == ChordSlashType::CHORD_TONE) {
+            // Leave slash chords on instead of turning off, but set
+            //   to workable mode.
+            // Unchecks m_slashChordToneAction (??)
+            m_slashAbsRelAction->setChecked(true);
+            m_chordSlashType = ChordSlashType::PITCH_OR_KEY;
+            // Save state
+            Preferences::setPreference(ChordAnalysisGroup,
+                                       "chord_slash_type",
+                                       static_cast<unsigned>(m_chordSlashType));
+        }
+        // Else leave as is: ChordSlashType::OFF or PITCH_OR_KEY
+    }
+    else   // is KEY_ROMAN_NUMERAL or KEY_INTEGER
+        // In case had been disabled.
+        m_slashChordToneAction->setEnabled  (true);
 }
 
 void
-ChordNameRuler::setCurrentSegment(const Segment *segment, bool forceRecalc)
+ChordNameRuler::setVisible(
+bool visible)
 {
-    if (   (segment && segment != m_currentSegment && m_conflictingKeyChanges)
-        || forceRecalc) {
-        m_currentSegment = segment;
-
-        if (isVisible()) analyzeChordsAndKeyChanges();
-
-        // For matrix editor to redraw key highlight stripes if mode requres
-        m_doc->signalKeySignaturesChanged(true);  // true==inserted, (arbitrary)
-
-#if 0   // t4os -- done in analyzeChordsAndKeyChanges(), don't redo
-        //         even though slightly nicer to do after signalKey
-        emit chordAnalysisChanged();
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "ChordNameRuler::setVisible()"
+             << (  m_parentEditor == ParentEditor::TRACK ? "TRACK"
+                 : m_parentEditor == ParentEditor::MATRIX ? "MATRIX"
+                 : m_parentEditor == ParentEditor::NOTATION ? "NOTATION"
+                 :                                            "<unknown>")
+             << '@'
+             << static_cast<void*>(this)
+             << (visible ? "visible" : "invisible");
 #endif
-    }
-    else
-        m_currentSegment = segment;
+
+    // Need this separate/internal flag because at start of parent
+    // editor QWidget::isVisible() returns false even though
+    // QWidget::setVisible(true) was called.
+    m_isVisible = visible;
+
+    QWidget::setVisible(visible);
+
+    if (visible) analyzeChords();
 }
+
+void
+ChordNameRuler::setAnalyzeWhileHidden(
+const bool analyze)
+{
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "ChordNameRuler::setAnalyzeWhileHidden()"
+             << (  m_parentEditor == ParentEditor::TRACK ? "TRACK"
+                 : m_parentEditor == ParentEditor::MATRIX ? "MATRIX"
+                 : m_parentEditor == ParentEditor::NOTATION ? "NOTATION"
+                 :                                            "<unknown>")
+             << '@'
+             << static_cast<void*>(this)
+             << analyze;
+#endif
+    m_analyzeWhileHidden = analyze;
+    if (analyze) analyzeChords();
+}
+
+void
+ChordNameRuler::setCurrentSegment(const Segment *segment)
+{
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "ChordNameRuler::setCurrentSegment()"
+             << (  m_parentEditor == ParentEditor::TRACK ? "TRACK"
+                 : m_parentEditor == ParentEditor::MATRIX ? "MATRIX"
+                 : m_parentEditor == ParentEditor::NOTATION ? "NOTATION"
+                 :                                            "<unknown>")
+             << (m_segments.find(segment) == m_segments.end() ? "UNKNOWN!"
+                                                              : "known")
+             << "\n  segs/conflicts:"
+             << m_conflictingKeyChanges->numSegments()
+             << m_conflictingKeyChanges->numConflicts()
+             << "conflicts\n  was:"
+             << static_cast<const void*>(m_currentSegment)
+             << (m_currentSegment ? m_currentSegment->getLabel() : "<nullptr>")
+             << "\n  new:"
+             << static_cast<const void*>(segment)
+             << (segment ? segment->getLabel() : "<nullptr>");
+#endif
+
+    if (segment == m_currentSegment)
+        return;
+
+    if (m_segments.find(segment) == m_segments.end())
+        return;  // shouldn't ever be called with segment before addSegment()
+
+    if (!segment || !m_currentSegment)
+        m_chordsDirty = m_keysDirty = true;
+    else if (   m_conflictingKeyChanges
+             && m_conflictingKeyChanges->hasConflicts()
+             && m_conflictingKeyChanges->areConflicting(m_currentSegment,
+                                                        segment))
+    {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+        qDebug() << "  conflicting";
+#endif
+        m_keysDirty = true;
+        if (m_keyDependent && m_isVisible)  // not needed if hidden in matrix
+            m_chordsDirty = true;
+    }
+
+    m_currentSegment = segment;  // after above conflicting check
+
+    if (!segment) {
+        m_chords.clear();
+        m_roots .clear();
+        update();
+    }
+    else if (m_parentEditor != ParentEditor::MATRIX)
+        analyzeChords();   // matrix editor handles separately
+}  // setCurrentSegment()
 
 // Remove from m_segments
 void
-ChordNameRuler::removeSegment(const Segment *segment)
+ChordNameRuler::removeSegment(Segment *segment)
 {
-    auto found  = findSegment(segment);
-    if (found != m_segments.end()) {
-        Segment *foundSegment = found->segment;
+    auto found = m_segments.find(segment);
 
-        if (found->active) --m_numActiveSegments;
+    if (found == m_segments.end()) return;
 
-        disconnect(found->segment,
-                   &Segment::contentsChanged,
-                   this,
-                   &ChordNameRuler::slotSegmentContentsChanged);
+    m_conflictingKeyChanges->removeSegment(segment);
 
-        m_segments.erase(found);
+    if (segment->size() && found->second.active)  // Segment had notes that
+        m_notesDirty = true;                      // were being used for
+                                                  // chord analysis.
 
-        if (m_segments.empty()) {
+    const Segment *prevCurrentSegment = m_currentSegment;
+
+    if (found->first == m_currentSegment) {
+        if (m_segments.size() == 1)
             m_currentSegment = nullptr;
-            return;
-        }
-
-        if (foundSegment == m_currentSegment)
-            m_currentSegment = m_segments[0].segment;
+        else
+            m_currentSegment = m_segments.begin()->first;
     }
 
-    analyzeChordsAndKeyChanges();
+    m_segments.erase(found);
+
+    removeOrderedSegment(segment);
+
+    if (m_parentEditor != ParentEditor::MATRIX)
+        segment->removeObserver(this);
+    // else was never added as observer if MATRIX
+
+    bool conflicting = (  m_currentSegment && prevCurrentSegment
+                        ? m_conflictingKeyChanges->areConflicting(
+                                                    prevCurrentSegment,
+                                                    m_currentSegment)
+                        : false);
+    if (conflicting) m_keysDirty = true;
+
+        m_conflictingKeyChanges->removeSegment(segment);
+
+    if (m_segments.empty()) {
+        m_chords.clear();
+        m_roots.clear();
+        return;
+    }
+
+    if (m_currentSegment == prevCurrentSegment)
+        return;
+
+    if (conflicting) analyzeChords();
+}
+
+void
+ChordNameRuler::segmentDeleted(     // SegmentObserver
+const Segment *segment)
+{
+    removeSegment(const_cast<Segment*>(segment));
 }
 
 void
 ChordNameRuler::addSegment(Segment *segment)
 {
-    if (segment->isPercussion()) return;
+    if (!segment) return;
 
-    m_segments.push_back(SegmentAndActive{segment, true});
-    ++m_numActiveSegments;
-    resetActiveSegmentIndices();  // Don't really need, only this only
-                                  // used my main window which doesn't
-                                  // allow choice of segments.
-    m_currentSegment = segment;   // Don't really need, ibid.
+    // Do want to know about all key changes, even in edge-case percussion
+    // segments.
+    m_conflictingKeyChanges->addSegment(segment);
 
-    analyzeChordsAndKeyChanges();
+    // Add to m_segments with appropriate active flag.
+    // See resetPercussionSegments() for why need own isPercussion.
+    bool    isPercussion = segment->isPercussion();
+    m_segments[segment].active       = !isPercussion;
+    m_segments[segment].isPercussion =  isPercussion;
 
-    connect(segment, &Segment::contentsChanged,
-            this,    &ChordNameRuler::slotSegmentContentsChanged);
+    // Do put in ordered segments because need full set to regenerate
+    // in edge cases of changing between percussion and normal.
+    m_orderedSegments.push_back(segment);
+
+    // But don't connect percussion segments. If ever change will
+    // regenerate and connect as necessary in resetPercussionSegments().
+    if (m_parentEditor != ParentEditor::MATRIX) {
+        // Still doing hybrid of both Observer notifications ...
+        segment->addObserver(this);
+        // ... and Qt signals
+        connect(segment, &Segment       ::keyAddedOrRemoved,
+                this,    &ChordNameRuler::slotKeyAddedOrRemoved);
+        if (!isPercussion) {
+            connect(segment, &Segment       ::noteAddedOrRemoved,
+                    this,    &ChordNameRuler::slotNoteAddedOrRemoved);
+            connect(segment, &Segment       ::noteModified,
+                    this,    &ChordNameRuler::slotNoteModified);
+        }
+    }
+}  // addSegment
+
+void
+ChordNameRuler::resetPercussionSegments()
+{
+    for (const Segment *segment : m_orderedSegments) {
+        bool    wasPercussion = m_segments[segment].isPercussion,
+                nowPercussion =            segment->isPercussion();
+
+        if (nowPercussion != wasPercussion) {
+            if (wasPercussion) {
+                disconnect(segment, &Segment        ::noteAddedOrRemoved,
+                           this,    &ChordNameRuler::slotNoteAddedOrRemoved);
+                disconnect(segment, &Segment        ::noteModified,
+                           this,    &ChordNameRuler::slotNoteModified);
+                // Leave keyAddedOrRemoved connected.
+            }
+            else {  // Must be isPercussion
+                connect(segment, &Segment       ::noteAddedOrRemoved,
+                        this,    &ChordNameRuler::slotNoteAddedOrRemoved);
+                connect(segment, &Segment       ::noteModified,
+                        this,    &ChordNameRuler::slotNoteModified);
+            }
+
+            m_segments[segment].isPercussion =  nowPercussion;
+            m_segments[segment].active       = !nowPercussion;
+        }
+    }
+
+    // Brute force, might not be necessary at all, but this is
+    // rare, non-realtime, edge case.
+    m_notesDirty = m_keysDirty = m_chordsDirty = true;
+    analyzeChords();
 }
 
-// See documentation in .h file
-const Key
-ChordNameRuler::keyAtTime(const timeT t)
-const
+void
+ChordNameRuler::removeOrderedSegment(
+const Segment *segment)
 {
-    if (m_keys.empty()) return Key();
-    auto upper = m_keys.upper_bound(t);
-    if (upper != m_keys.begin())
-        --upper;
-    return upper->second;
+    auto found = std::find(m_orderedSegments.begin(),
+                           m_orderedSegments.end(),
+                           segment);
+    if (found != m_orderedSegments.end())
+        // Expensive linear time, but rarely used.
+        m_orderedSegments.erase(found);
 }
 
-// See documentation in .h file
-timeT
-ChordNameRuler::getNextKeyTime(
-const timeT  currentKeyTime)
-const
+void
+ChordNameRuler::slotNoteAddedOrRemoved(
+const Segment   *segment,
+const Event     *event,
+bool             added)
 {
-    Composition &composition(m_doc->getComposition());
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "ChordNameRuler::slotNoteAddedOrRemoved()"
+             << (  m_parentEditor == ParentEditor::TRACK ? "TRACK"
+                 : m_parentEditor == ParentEditor::MATRIX ? "MATRIX"
+                 : m_parentEditor == ParentEditor::NOTATION ? "NOTATION"
+                 :                                            "<unknown>")
+             << (segment ? segment->getLabel() : "<nullptr>")
+             << (added   ? "added"             : "removed");
+#endif
 
-    if (m_keys.size() <= 1)
-        return composition.getMaxSegmentEndTime();
+    if (segment->isPercussion())  // Safety check, shouldn't ever happen.
+        return;
 
-    if (currentKeyTime < m_keys.begin()->first)
-        return m_keys.begin()->first;
+    auto found = m_segments.find(segment);
+    if (found == m_segments.end()) return;  // Can't happen, but check anyway
 
-    auto iter = m_keys.find(currentKeyTime);
-    if (iter == m_keys.end() || ++iter == m_keys.end())
-        return composition.getMaxSegmentEndTime();
+    if (added) found->second.   addNote(event);  // Update min/max/longest notes
+    else       found->second.removeNote(event);  //   "     "   "     "      "
 
-    return iter->first;
+    if (found->second.active)
+        m_notesDirty = true;
+}
+
+void
+ChordNameRuler::slotNoteModified(
+const Segment   *segment,
+const Event     *event)
+{
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\nChordNameRuler::slotNoteModified()"
+             << (  m_parentEditor == ParentEditor::TRACK ? "TRACK"
+                 : m_parentEditor == ParentEditor::MATRIX ? "MATRIX"
+                 : m_parentEditor == ParentEditor::NOTATION ? "NOTATION"
+                 :                                            "<unknown>")
+             << (segment ? segment->getLabel() : "<nullptr>");
+#endif
+
+    if (segment->isPercussion())  // Safety check, shouldn't ever happen.
+        return;
+
+    auto found = m_segments.find(segment);
+    if (found == m_segments.end()) return;  // Can't happen, but check anyway
+
+    found->second.addNote(event);  // Update min/max/longest notes
+
+    if (found->second.active)
+        m_notesDirty = true;
+}
+
+void
+ChordNameRuler::slotKeyAddedOrRemoved(
+const Segment   *segment,
+const Event     *,
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+bool            added
+#else
+bool
+#endif
+)
+{
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "ChordNameRuler::slotKeyAddedOrRemoved()"
+             << (  m_parentEditor == ParentEditor::TRACK ? "TRACK"
+                 : m_parentEditor == ParentEditor::MATRIX ? "MATRIX"
+                 : m_parentEditor == ParentEditor::NOTATION ? "NOTATION"
+                 :                                            "<unknown>")
+             << "\n "
+             << (segment ? segment->getLabel() : "<nullptr>")
+             << (added ? "added" : "removed");
+#endif
+
+    m_conflictingKeyChanges->updateSegment(segment);
+    m_keysDirty  = true;
+}
+
+void
+ChordNameRuler::startChanged(   // SegmentObserver
+const Segment   *segment,
+timeT          /* t */)
+{
+    m_conflictingKeyChanges->updateSegment(segment);
+    m_notesDirty = m_keysDirty = true;
+}
+
+void
+ChordNameRuler::endMarkerTimeChanged(   // SegmentObserver
+const Segment   *segment,
+bool             shortened)
+{
+    if (shortened) {  // Maybe don't need anyway, but too difficult to
+                      // check if notes/keys were affected.
+        m_conflictingKeyChanges->updateSegment(segment);
+        m_notesDirty = m_keysDirty = true;
+    }
 }
 
 // See documentation in .h file
 int
-ChordNameRuler::chordRootPitchAtTime(const timeT t)
+ChordNameRuler::chordRootPitchAtTime(timeT t)
 const
 {
-    if (m_roots.empty()) return -1;
-    auto upper = m_roots.upper_bound(t);
-    if (upper != m_roots.begin())
-        --upper;
-    return upper->second;
-}
+     if (m_doUnarpeggiation)
+        t = t - t % m_unarpeggiationTime;  // can never be zero
+     else if (m_quantizationTime != 0)
+        t = t - t % m_quantizationTime;    // is chords at notes on/off
+
+    auto lower = m_roots.lower_bound(t);
+    if (lower == m_roots.end())
+        return -1;
+    else
+        return lower->second;
+
+}  // chordRootPitchAtTime()
 
 // See documentation in .h file
 void
@@ -892,12 +1172,22 @@ ChordNameRuler::slotScrollHoriz(int x)
 }
 
 void
-ChordNameRuler::slotSegmentContentsChanged()
+ChordNameRuler::slotCommandExecuted()
 {
-    const Segment *segment = dynamic_cast<const Segment*>(sender());
-    auto found = findSegment(segment);
-    if (found != m_segments.end() && found->active)
-        analyzeChordsAndKeyChanges();
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\nChordNameRuler::slotCommandExecuted():"
+             << (  m_parentEditor == ParentEditor::TRACK ? "TRACK"
+                 : m_parentEditor == ParentEditor::MATRIX ? "MATRIX"
+                 : m_parentEditor == ParentEditor::NOTATION ? "NOTATION"
+                 :                                            "<unknown>")
+             << '@'
+             << static_cast<void*>(this)
+             << (  CommandHistory::getInstance()->macroCommandIsExecuting()
+                 ? "in_macro" : "plain");
+#endif
+
+    if (!CommandHistory::getInstance()->macroCommandIsExecuting())
+        analyzeChords();
 }
 
 // Qt ruler internals
@@ -928,6 +1218,10 @@ ChordNameRuler::minimumSizeHint() const
 void
 ChordNameRuler::slotInsertKeyChange()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotInsertKeyChange()";
+#endif
+
     emit insertKeyChange();
 }
 
@@ -948,68 +1242,115 @@ ChordNameRuler::slotChooseActiveSegments()
     // action connected to this slot.
     if (m_segments.empty()) return;
 
-    std::vector<Segment*> segments;
-    for (auto segment : m_segments) segments.push_back(segment.segment);
-
-    QString header(tr("Construct chords from notes in segments:"));
-
-    // Pop up dialog and abort if "Cancel" instead of "OK"
-    if (!chooseSegments(header, segments)) return;
-
-    // Set m_segments "active" flags  from user choices in dialog
-    // Also check to make sure m_currentSegment is in m_segments,
-    //   otherwise arbitrarily set to first one (unless empty in which
-    //   case set to nullptr.)
-    for (auto &seg : m_segments)
-        seg.active = false;
-    for (int index : m_activeSegmentIndices)
-        m_segments[index].active = true;
-    m_numActiveSegments = m_activeSegmentIndices.size();
-
-    auto foundCurrent = findSegment(m_currentSegment);
-    if (   foundCurrent != m_segments.end()   // should always be true
-        || !foundCurrent->active)
-        m_currentSegment = m_segments[0].segment;  // arbitrary choice
-
-    analyzeChordsAndKeyChanges();
-
-    // For matrix editor to redraw key highlight stripes if mode requres
-    // Need to do regardless of m_conflictingKeyChanges because
-    //   might have gone from conflicting to non-, or vice-versa.
-    m_doc->signalKeySignaturesChanged(true);  // true==inserted, (arbitrary)
-
-#if 0   // t4os -- already done in analyzeChordsAndKeyChanges();
-        //         in analyzeChordsAndKeyChanges() despite being
-        //         slightly nicer to wait until after signalKey
-    emit chordAnalysisChanged();
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotChooseActiveSegments()";
 #endif
-}
+
+    std::vector<Segment*>   segments;
+    std::vector<unsigned>   activeIndices,
+                            prevActives;
+    std::vector<QColor>     foregrounds,
+                            backgrounds;
+    QStringList             segmentNames;
+    std::vector<unsigned>   activeToOrdered;
+    unsigned                drumOffset  = 0;
+
+    activeToOrdered.reserve(m_orderedSegments.size());
+
+    for (unsigned ndx = 0 ; ndx < m_orderedSegments.size() ; ++ndx) {
+        const Segment *segment = m_orderedSegments[ndx];
+
+        if (segment->isPercussion()) {
+            // Would also be m_segments[segment].active       == false
+            // and           m_segments[segment].isPercussion == true
+            // but this is an easier check.
+            ++drumOffset;
+            continue;
+        }
+
+        segmentNames << QString::fromStdString(segment->getLabel());
+
+        QColor textColor = segment->getPreviewColour();
+        foregrounds.push_back(textColor);
+        backgrounds.push_back(segment->getColour());
+
+        if (m_segments[segment].active) {
+            activeIndices.push_back(ndx - drumOffset);
+            prevActives  .push_back(ndx - drumOffset);
+        }
+        activeToOrdered.push_back(ndx);
+    }
+
+    CheckableListDialog dialog(this,
+                               QString(tr("Construct chords from "
+                                          "notes in segments:")),
+                               segmentNames,
+                               foregrounds,
+                               backgrounds,
+                               activeIndices);
+
+    if (dialog.exec() == QDialog::Accepted && activeIndices != prevActives) {
+        // Set active/inactive segments
+        for (auto &segment : m_segments)
+            segment.second.active = false;
+
+        for (unsigned activeIndex : activeIndices)
+                m_segments[m_orderedSegments[activeToOrdered[activeIndex]]]
+              .active
+            = true;
+
+        m_chordsDirty = true;
+        analyzeChords();
+
+        // Inform e.g. matrix editor that chord roots might have changed
+        emit chordAnalysisChanged();
+    }
+}  // slotChooseActiveSegments()
 
 void
 ChordNameRuler::slotShowChords()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotShowChords()";
+#endif
+
     m_showChords = m_showChordsAction->isChecked();
 
     if (m_chordCopyAction)
         m_chordCopyAction->setEnabled(m_showChords);
 
-    analyzeChordsAndKeyChanges();
+    if (m_showChords && !m_analyzeWhileHidden) {
+        // Hadn't been analyzing chords and now need to.
+        m_chordsDirty = true;
+        analyzeChords();
+    }
+    else
+        update();  // Just clear out displayed chords
 }
 
 void
 ChordNameRuler::slotShowKeys()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotShowKeys()";
+#endif
+
     m_showKeyChanges = m_showKeysAction->isChecked();
 
     if (m_insertKeyChangeAction)
         m_insertKeyChangeAction->setEnabled(m_showKeyChanges);
 
-    analyzeChordsAndKeyChanges();
+    updateToolTip();
+    update();  // Just display (or not) key changes
 }
 
 void
 ChordNameRuler::slotSetAlgorithm()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotSetAlgorithm()";
+#endif
+
     if (sender() == m_quantizeAction)          m_doUnarpeggiation = false;
     else if (sender() == m_unarpeggiateAction) m_doUnarpeggiation = true;
     // nothing else possible
@@ -1018,12 +1359,20 @@ ChordNameRuler::slotSetAlgorithm()
                                "chord_name_unarpeggiate",
                                m_doUnarpeggiation);
 
-    analyzeChordsAndKeyChanges();
+    m_chordsDirty = true;  // Need re-analysis.
+    analyzeChords();
+
+    // Inform e.g. matrix editor that chord roots might have changed
+    emit chordAnalysisChanged();
 }
 
 void
 ChordNameRuler::slotSetQuantization()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotSetQuantization()";
+#endif
+
 #define IF_ELSE(ACTION, QUANTIZATION) \
     if (sender() == m_quantization##ACTION##NoteAction) \
         m_quantization = NoteDuration::QUANTIZATION
@@ -1052,12 +1401,21 @@ ChordNameRuler::slotSetQuantization()
                                static_cast<unsigned>(m_quantization));
 
     m_quantizationTime = noteDurationToMidiTicks(m_quantization);
-    analyzeChordsAndKeyChanges();
+    m_chordsDirty      = true;  // Need re-analysis.
+
+    analyzeChords();
+
+    // Inform e.g. matrix editor that chord roots might have changed
+    emit chordAnalysisChanged();
 }
 
 void
 ChordNameRuler::slotSetUnarpeggiation()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotSetUnarpeggiation()";
+#endif
+
 #define IF_ELSE(ACTION, UNARPEGGIATION) \
     if (sender() == m_unarpeggiation##ACTION##NoteAction) \
         m_unarpeggiation = NoteDuration::UNARPEGGIATION
@@ -1085,34 +1443,62 @@ ChordNameRuler::slotSetUnarpeggiation()
                                static_cast<unsigned>(m_unarpeggiation));
 
     m_unarpeggiationTime = noteDurationToMidiTicks(m_unarpeggiation);
-    analyzeChordsAndKeyChanges();
+    m_chordsDirty        = true;  // Need re-analysis.
+
+    analyzeChords();
+
+    // Inform e.g. matrix editor that chord roots might have changed
+    emit chordAnalysisChanged();
 }
 
 void
 ChordNameRuler::slotChordNameType()
 {
-    if (sender() == m_pitchLetterAction)
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotChordNameType()";
+#endif
+
+    if (sender() == m_pitchLetterAction) {
         m_chordNameType = ChordNameType::PITCH_LETTER;
-    else if (sender() == m_pitchIntegerAction)
+        m_keyDependent = false;
+    }
+    else if (sender() == m_pitchIntegerAction) {
         m_chordNameType = ChordNameType::PITCH_INTEGER;
-    else if (sender() == m_keyRomanNumeralAction)
+        m_keyDependent = false;
+    }
+    else if (sender() == m_keyRomanNumeralAction) {
         m_chordNameType = ChordNameType::KEY_ROMAN_NUMERAL;
-    else if (sender() == m_keyIntegerAction)
+        m_keyDependent  = true;
+    }
+    else if (sender() == m_keyIntegerAction) {
         m_chordNameType = ChordNameType::KEY_INTEGER;
+        m_keyDependent  = true;
+    }
     else
-        qWarning() << "ChordNameRuler::slotChordNameType() -- UNKNOWN";
+        qWarning() << "ChordNameRuler::slotChordNameType() UNKNOWN MENU CHOICE";
 
     Preferences::setPreference(ChordAnalysisGroup,
                                "chord_name_type",
                                static_cast<unsigned>(m_chordNameType));
 
+    setSlashChordMenus();
+
     m_analyzer->updateChordNameStyles();
-    analyzeChordsAndKeyChanges();
+
+    m_namingModeChanged = true;
+    m_chordsDirty       = true;
+    analyzeChords();
 }
 
 void
 ChordNameRuler::slotChordSlashType()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotChordSlashType()";
+#endif
+
+    bool wasOff = (m_chordSlashType == ChordSlashType::OFF);
+
     if (sender() == m_slashOffAction)
         m_chordSlashType = ChordSlashType::OFF;
     else if (sender() == m_slashAbsRelAction)
@@ -1125,36 +1511,69 @@ ChordNameRuler::slotChordSlashType()
     Preferences::setPreference(ChordAnalysisGroup,
                                "chord_slash_type",
                                static_cast<unsigned>(m_chordSlashType));
-
     m_analyzer->updateChordNameStyles();
-    analyzeChordsAndKeyChanges();
+
+    m_chordsDirty = true;  // Need re-analysis.
+    analyzeChords();
+
+    if (   ( wasOff && m_chordSlashType != ChordSlashType::OFF)
+        || (!wasOff && m_chordSlashType == ChordSlashType::OFF))
+        // Inform e.g. matrix editor that chord roots might have changed
+        emit chordAnalysisChanged();
 }
 
 void
 ChordNameRuler::slotChordAddedBass()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotChordAddedBass()";
+#endif
+
     Preferences::setPreference(ChordAnalysisGroup,
                                "added_bass",
                                m_slashAddedBassAction->isChecked());
 
     m_analyzer->updateChordNameStyles();
-    analyzeChordsAndKeyChanges();
+
+    if (m_chordSlashType != ChordSlashType::OFF) {
+        // Has no effect until ChordSlashType::PITCH_OR_KEY or CHORD_TONE
+        m_chordsDirty = true;  // Need re-analysis.
+        analyzeChords();
+        // Inform e.g. matrix editor that chord roots might have changed
+        emit chordAnalysisChanged();
+    }
 }
 
 void
 ChordNameRuler::slotPreferSlashChords()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotPreferSlashChords()";
+#endif
+
     Preferences::setPreference(ChordAnalysisGroup,
                                "prefer_slash_chords",
                                m_preferSlashChordsAction ->isChecked());
 
+
     m_analyzer->updateChordNameStyles();
-    analyzeChordsAndKeyChanges();
+
+    if (m_chordSlashType != ChordSlashType::OFF) {
+        // Has no effect until ChordSlashType::PITCH_OR_KEY or CHORD_TONE
+        m_chordsDirty = true;  // Need re-analysis.
+        analyzeChords();
+        // Inform e.g. matrix editor that chord roots might have changed
+        emit chordAnalysisChanged();
+    }
 }
 
 void
 ChordNameRuler::slotCMajorFlats()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotCMajorFlats()";
+#endif
+
     // Use ChordAnalysisGroup, not MatrixViewConfigGroup, so
     // notes in matrix editor grid can have different settings (and so
     // don't have to do live synchronization between the two).
@@ -1163,12 +1582,18 @@ ChordNameRuler::slotCMajorFlats()
                                m_cMajorFlats->isChecked());
 
     m_analyzer->updateChordNameStyles();
-    analyzeChordsAndKeyChanges();
+
+    m_chordsDirty = true;  // Need re-analysis.
+    analyzeChords();
 }
 
 void
 ChordNameRuler::slotOffsetMinors()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotOffsetMinors()";
+#endif
+
     // Use ChordAnalysisGroup, not MatrixViewConfigGroup, so
     // notes in matrix editor grid can have different settings (and so
     // don't have to do live synchronization between the two).
@@ -1177,12 +1602,18 @@ ChordNameRuler::slotOffsetMinors()
                                m_offsetMinorKeys->isChecked());
 
     m_analyzer->updateChordNameStyles();
-    analyzeChordsAndKeyChanges();
+
+    m_chordsDirty = true;  // Need re-analysis.
+    analyzeChords();
 }
 
 void
 ChordNameRuler::slotAltMinors()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotAltMinors()";
+#endif
+
     // Use ChordAnalysisGroup, not MatrixViewConfigGroup, so
     // notes in matrix editor grid can have different settings (and so
     // don't have to do live synchronization between the two).
@@ -1191,80 +1622,41 @@ ChordNameRuler::slotAltMinors()
                                m_altMinorKeys->isChecked());
 
     m_analyzer->updateChordNameStyles();
-    analyzeChordsAndKeyChanges();
+
+    m_chordsDirty = true;  // Need re-analysis.
+    analyzeChords();
 }
 
 void
 ChordNameRuler::slotNonDiatonicChords()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotNonDiatonicChords()";
+#endif
+
     Preferences::nonDiatonicChords.set(m_nonDiatonicChords->isChecked());
-    analyzeChordsAndKeyChanges();
+
+    m_chordsDirty = true;  // Need re-analysis.
+    analyzeChords();
+
+    // Inform e.g. matrix editor that chord roots might have changed
+    emit chordAnalysisChanged();
 }
 
 void
 ChordNameRuler::slotSetNameStyles()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nChordNameRuler::slotSetNameStyles()";
+#endif
+
     ChordNameStylesDialog chordNameStylesDialog(this);
     auto result = chordNameStylesDialog.exec();
     if (result == QDialog::Accepted) {
         m_analyzer->updateChordNameStyles();
-        analyzeChordsAndKeyChanges();
+        m_chordsDirty = true;  // Need re-analysis.
+        analyzeChords();
     }
-}
-
-// Pop up dialog for user to select segments' notes to use for chord analysis.
-// See slotChooseActiveSegments(), above.
-bool
-ChordNameRuler::chooseSegments(const QString               &header,
-                               const std::vector<Segment*> &possibleSegments)
-{
-    if (possibleSegments.empty())
-        return false;
-
-    std::vector<QColor> foregrounds,
-                        backgrounds;
-    QStringList         segmentNames;
-
-    for (Segment *segment : possibleSegments) {
-        segmentNames << QString::fromStdString(segment->getLabel());
-
-        QColor textColor = segment->getPreviewColour();
-        foregrounds.push_back(textColor);
-        backgrounds.push_back(segment->getColour());
-    }
-
-    CheckableListDialog dialog(this,
-                               header,
-                               segmentNames,
-                               foregrounds,
-                               backgrounds,
-                               m_activeSegmentIndices);
-
-    return dialog.exec() == QDialog::Accepted;
-}
-
-std::vector<ChordNameRuler::SegmentAndActive>::iterator
-ChordNameRuler::findSegment(
-const Segment *segment)
-{
-    struct Finder {
-        Finder(const Segment *seg) : m_seg(seg) {};
-        bool operator()(const SegmentAndActive &seg)
-                       { return seg.segment == m_seg ; }
-        const Segment *m_seg;
-    };
-
-    return std::find_if(m_segments.begin(),
-                        m_segments.end(),
-                        Finder(segment));
-}
-
-// Set all to inactive.
-void
-ChordNameRuler::resetActiveSegmentIndices()
-{
-    m_activeSegmentIndices.resize(m_segments.size());
-    std::iota(m_activeSegmentIndices.begin(), m_activeSegmentIndices.end(), 0);
 }
 
 timeT
@@ -1299,94 +1691,283 @@ const NoteDuration  noteDuration)
         return quantizationIter->second;
 }
 
-// Analyze chords and redraw ruler.
-void ChordNameRuler::analyzeChordsAndKeyChanges(bool emitSignal)
+// Analyze chords if needed.
+bool ChordNameRuler::analyzeChords()
 {
-    m_chordAndKeyNames->clear();
-    m_keys.clear();
-    m_roots.clear();
+    const CommandHistory *commandHistory = CommandHistory::getInstance();
 
-    std::vector<Segment*> segments;
-    for (auto segment : m_segments)
-        if (segment.active) segments.push_back(segment.segment);
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "ChordNameRuler::analyzeChords():"
+             << (  m_parentEditor == ParentEditor::TRACK ? "TRACK"
+                 : m_parentEditor == ParentEditor::MATRIX ? "MATRIX"
+                 : m_parentEditor == ParentEditor::NOTATION ? "NOTATION"
+                 :                                            "<unknown>")
+             << '@'
+             << static_cast<void*>(this)
+             << "\n  current segment:"
+             << (m_currentSegment ? m_currentSegment->getLabel() : "???")
+             << "\n "
+             << (m_showChords ? "shwChrds" : "noChrds")
+             << "  vis:"
+             << (isVisible() ? "QT"  : "!qt")
+             << (m_isVisible ? "OWN" : "!own")
+             << (m_analyzeWhileHidden ? "HIDDEN" : "!hidden")
+             << " "
+             << m_segments.size()
+             << "segments\n  cmd:"
+             << commandHistory->commandIsExecuting()
+             << commandHistory->macroCommandIsExecuting()
+             << "  dirty:"
+             << (m_keysDirty   ? "KEYS"   : "!keys")
+             << (m_notesDirty  ? "NOTES"  : "!notes")
+             << (m_chordsDirty ? "CHORDS" : "!chords")
+             << (m_keyDependent ? "KEYDEP" : "!keydep")
+             << (m_namingModeChanged ? "NAMCHG" : "namchg");
 
-    m_analyzer->labelChords(*m_chordAndKeyNames,
-                             m_keys,
-                             m_roots,
-                             m_conflictingKeyChanges,
-                             segments,
-                             m_currentSegment,
-                            !m_showChords,
-                             m_doUnarpeggiation ? m_unarpeggiationTime
-                                                : m_quantizationTime,
-                             m_doUnarpeggiation);
+    if (   m_currentSegment
+        && m_segments.find(m_currentSegment) != m_segments.end())
+        qDebug() << "  percussion:"
+                 << (m_currentSegment->isPercussion()          ? "DRUM"
+                                                               : "NOTES")
+                 << (m_segments[m_currentSegment].isPercussion ? "drum"
+                                                               : "notes");
+#endif
 
-    update();
+    if (   commandHistory->commandIsExecuting()
+        || commandHistory->macroCommandIsExecuting())
+        // Wait for all changes and re-analyze/display then.
+        return false;
 
-    if (emitSignal) emit chordAnalysisChanged();
-}
+    // Get and reset one-time flag
+    bool namingModeChanged = m_namingModeChanged;
+    m_namingModeChanged = false;
 
-// Pop up menu.
+    // Checks for if expensive ChordAnalyzer::labelChords() needs to be called.
+    // If not, will do so next time called via show(), setVisible(true),
+    //   setAnalyzeWhileHidden(true), etc. invoked.
+    //
+    if (m_isVisible) {
+        if (   (!m_showChords && !m_analyzeWhileHidden)
+            || (   !m_notesDirty
+                && !m_chordsDirty
+                && !m_keyDependent
+                && !namingModeChanged))
+        {
+            if (m_keysDirty) {
+                update();   // will just do keys
+                m_keysDirty = false;
+                return true;
+            }
+            else
+                return false;
+        }
+    }
+    else if (!m_analyzeWhileHidden) // matrix editor doesn't need chords
+        return false;
+    else if (!m_notesDirty && !m_chordsDirty)   // no need for chord reanalyzsis
+        return false;
+    else if (m_segments.size() == 0)  // rare (or impossible?), so check last
+        return false;
+
+
+    bool didAnalysis = false;
+    if (   (m_showChords || m_analyzeWhileHidden)
+        && (m_notesDirty || m_chordsDirty || (m_keysDirty && m_keyDependent))) {
+        timeT   maxDuration = LongestNotes::MINIMUM,
+                minTime     = std::numeric_limits<timeT>::max(),
+                maxTime     = std::numeric_limits<timeT>::min();
+        std::vector<const Segment*> segments;
+
+        bool haveChangedRanges = false;
+        for (const auto &segment : m_segments) {
+            if (!segment.second.active)
+                continue;
+
+            segments.push_back(segment.first);
+
+            const SegmentInfo &segmentInfo(segment.second);
+            if (segmentInfo.longestNotes.longest() > maxDuration)
+                maxDuration = segmentInfo.longestNotes.longest();
+
+            if (segmentInfo.haveChangedRange()) {
+                haveChangedRanges = true;
+
+                if (segmentInfo.minChangedTime < minTime)
+                    minTime = segmentInfo.minChangedTime;
+                if (segmentInfo.maxChangedTime > maxTime)
+                    maxTime = segmentInfo.maxChangedTime;
+            }
+        }
+
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+        qDebug() << "  enter:"
+                 << m_chords.size()
+                 << "chords "
+                 << m_roots.size()
+                 << "roots";
+
+        if (haveChangedRanges)
+            qDebug() << "  changes:"
+                     << haveChangedRanges
+                     << "  min/max:"
+                     << minTime
+                     << maxTime
+                     << maxDuration
+                     << minTime - maxDuration;
+        else
+            qDebug() << "  changes: whole composition";
+#endif
+
+        minTime -= maxDuration;  // OK if goes before start of composition
+
+        if (haveChangedRanges) {
+            m_chords.erase(m_chords.lower_bound(minTime),
+                           m_chords.lower_bound(maxTime));
+            m_roots .erase(m_roots .lower_bound(minTime),
+                           m_roots .lower_bound(maxTime));
+        }
+        else {
+            m_chords.clear();
+            m_roots .clear();
+        }
+
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+        qDebug() << "  befor:"
+                 << m_chords.size()
+                 << "chords "
+                 << m_roots.size()
+                 << "roots";
+#endif
+
+        m_analyzer->labelChords(m_chords,
+                                m_roots,
+                                segments,
+                                m_currentSegment,
+                                m_quantizationTime,
+                                m_unarpeggiationTime,
+                                m_doUnarpeggiation,
+                                !haveChangedRanges,
+                                minTime,
+                                maxTime);
+
+        didAnalysis = true;
+
+        for (auto &segment : m_segments)  // All, even ones that weren't active
+            segment.second.reset();
+    }
+
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "ChordNameRuler::analyzeChords() after:"
+             << m_chords.size()
+             << "chords,"
+             << m_roots.size()
+             << "roots";
+#endif
+
+    // Only as necessary, e.g. if Matrix and  not just m_analyzeWhileHidden
+    if (m_isVisible && (didAnalysis || m_keysDirty))
+        update();
+
+    m_keysDirty = m_notesDirty = m_chordsDirty = false;
+
+    return true;
+
+} // analyzeChords()
+
+// Pop up menu or temporarily hide key changes
 void
 ChordNameRuler::mousePressEvent(QMouseEvent *e)
 {
-    if (e->button() == Qt::RightButton)
-        m_menu->exec(QCursor::pos());
-}
-
-// Remove key change event.
-// Clumsy user interface: Removes event at or before time at mouse
-//   click time, even if way before time (including offscreen to left).
-// Really would prefer only if clicked on displayed key change
-//   text but difficult to implement (needs feedback about font size,
-//   displayed width of text, etc.)
-// Accepting this implementation because canonical case is user clicking
-//   on text, and even if not always pops up up dialog to specify which
-//   of possible multiple key changes in different segments to delete, so
-//   no risk of accidentally deleting off-screen key change(s).
-// Full solution would be to rewrite as QGraphicsScene with QGraphicsItems
-//   for chord and key change text names to use Qt item selection by
-//   mouse click.
-void
-ChordNameRuler::mouseDoubleClickEvent(QMouseEvent *e)
-{
-    if (!m_keyChangingEnabled) return;
-
-    if (!m_showKeyChanges) {
-        QMessageBox messageBox;
-        messageBox.setText(tr("Use right-click menu and\n"
-                              "check \"Show key changes\"\n"
-                              "to remove key changes(s)."));
-        messageBox.addButton(QMessageBox::Ok);
+    if (m_parentEditor == ParentEditor::TRACK) {
+        QMessageBox messageBox(QMessageBox::Information,
+                               tr("Chord/Key Ruler"),
+                               tr("Use Chord/Key Ruler in matrix or notation\n"
+                                  "editor to analyze chords and add/remove\n"
+                                  "key signature changes."),
+                                QMessageBox::Ok,
+                                this);
+        messageBox.move(e->globalPos());
         messageBox.exec();
         return;
     }
 
-    int   clickX       = e->pos().x();
-    timeT clickedAt    = m_rulerScale->getTimeForX(clickX + m_currentXOffset);
+    if (e->button() == Qt::RightButton)
+        m_menu->exec(QCursor::pos());
+    else if (e->button() == Qt::MiddleButton) {
+        m_hideKeyChanges = true;
+        update();
+    }
+}
 
-    // Can't happen. Early abort above if in main window, and
-    // impossible to be in matrix or notation editor without sesgments
-    if (m_segments.empty()) return;
+// Re-show temporarily hidden key changes
+void
+ChordNameRuler::mouseReleaseEvent(QMouseEvent *e)
+{
+    if (m_parentEditor == ParentEditor::TRACK)
+        return;
+    else if (e->button() == Qt::MiddleButton) {
+        m_hideKeyChanges = false;
+        update();
+    }
+}
 
-    // Segment::getKeyAtTime() searches backwards in time for key change.
-    // Only want those which match the most recent in any segment.
-    timeT maxKeyTime = std::numeric_limits<timeT>::min();
-    for (auto segment : m_segments) {
-        timeT keyTime;
-        Key key = segment.segment->getKeyAtTime(clickedAt, keyTime);
+void
+ChordNameRuler::mouseDoubleClickEvent(QMouseEvent *e)
+{
+    if (m_parentEditor == ParentEditor::TRACK) return;
 
-        if (key.getEvent() == nullptr)
-            continue;
-        else if (keyTime > maxKeyTime) maxKeyTime = keyTime;
+    if (!m_showKeyChanges) {
+        QMessageBox messageBox(QMessageBox::Information,
+                               tr("Chord/Key Ruler"),
+                               tr("Use right-click menu and\n"
+                                  "check \"Show key changes\"\n"
+                                  "to enable double-click removal\n"
+                                  "of key changes(s)."),
+                                QMessageBox::Ok,
+                                this);
+        messageBox.move(e->globalPos());
+        messageBox.exec();
+        return;
     }
 
+    const int   keyIndent = m_boldFont.pixelSize(), // really /2 but slop after
+                clickX    = e->pos().x() + m_currentXOffset;
+    const timeT clickedAt = m_rulerScale->getTimeForX(clickX);
+
+    // Can't happen. Early abort above if in main window, and
+    // impossible to be in matrix or notation editor without segments
+    if (m_segments.empty()) return;
+
+    if (!m_currentSegment) return;
+
+    timeT maxKeyTime = std::numeric_limits<timeT>::min();
+
+    auto keySig = m_currentSegment->getKeySignatureIterAtTime(clickedAt);
+    if (m_currentSegment->keySignatureIterIsValid(keySig)) {
+        timeT   keyTime    = keySig->first;
+        int     keyX       = m_rulerScale->getXForTime(keyTime);
+        QString keyName    (strtoqstr(keySig->second.getUnicodeName()));
+        QRect   textBounds = m_boldFontMetrics.boundingRect(keyName);
+        int delta          = clickX - keyX /* - keyIndent */;
+
+        if (   delta >= 0
+            && delta < textBounds.width() + keyIndent
+            && keyTime > maxKeyTime)
+            maxKeyTime = keyTime;
+    }
+
+    // This no longer happens as all segments in matrix and notation
+    // editors have explicit key changes at their starts (default
+    // C major added if missing) and main/track editor doesn't
+    // implement double-click.
+    // change at their starts (
     if (maxKeyTime == std::numeric_limits<timeT>::min()) {
-        QMessageBox messageBox;
-        messageBox.setText(tr("No key changes to delete at or\n"
-                              "before this time (or only implicit\n"
-                              "C major at composition start)."));
-        messageBox.addButton(QMessageBox::Ok);
+        QMessageBox messageBox(QMessageBox::Warning,
+                               tr("Chord/Key Ruler"),
+                               tr("Double-click on key change to delete."),
+                               QMessageBox::Ok,
+                               this);
+        messageBox.move(e->globalPos());
         messageBox.exec();
         return;
     }
@@ -1396,29 +1977,29 @@ ChordNameRuler::mouseDoubleClickEvent(QMouseEvent *e)
     std::vector<QColor> foregrounds,
                         backgrounds;
 
-    QStringList               keyChangesStrings;
-    std::vector<Segment*>     keyChangeSegments;
-    std::vector<const Event*> keyChangeEvents;
+    QStringList                 keyChangesStrings;
+    std::vector<Segment*>       keyChangeSegments;
+    std::vector<const Event*>   keyChangeEvents;
 
-    for (auto segment : m_segments) {
-        timeT keyTime;
-        Key          key   = segment.segment->getKeyAtTime(clickedAt, keyTime);
+    for (Segment *segment : m_orderedSegments)
+    {
+        timeT   keyTime;
+        Key      key   = segment->getKeyAtTime(clickedAt, keyTime);
         const Event *event = key.getEvent();
 
         if (keyTime != maxKeyTime || event == nullptr) continue;
 
-        keyChangeSegments.push_back(segment.segment);
+        keyChangeSegments.push_back(segment);
         keyChangeEvents  .push_back(event);
 
-        keyChangesStrings << (   QString::fromStdString(key.getName())
+        keyChangesStrings << (   QString::fromStdString(key.getUnicodeName())
                            + tr(" in segment ")
                            + QString::fromStdString(  segment
-                                                     .segment
                                                     ->getLabel()));
 
-        QColor textColor = segment.segment->getPreviewColour();
+        QColor textColor = segment->getPreviewColour();
         foregrounds.push_back(textColor);
-        backgrounds.push_back(segment.segment->getColour());
+        backgrounds.push_back(segment->getColour());
     }
 
     Composition &comp(RosegardenDocument::currentDocument->getComposition());
@@ -1452,8 +2033,9 @@ ChordNameRuler::mouseDoubleClickEvent(QMouseEvent *e)
         }
         CommandHistory::getInstance()->addCommand(macroCommand);
 
-        analyzeChordsAndKeyChanges();
-        emit chordAnalysisChanged();
+#if 0   // will get triggered when command executes
+        analyzeChords();
+#endif
     }
 
 }  // ChordNameRuler::mouseDoubleClickEvent(QMouseEvent *e)
@@ -1473,10 +2055,6 @@ ChordNameRuler::mouseDoubleClickEvent(QMouseEvent *e)
 // But always does display tick mark for chords or full-height bar for
 //   key changes even if not displaying text, so information to user
 //   not totally lost.
-// Have experimented with displaying key changes in preference to
-//   chord names (when space conflicts) but full implementation would
-//   require O(N-squared) search at each text event, and code is
-//   performance-critical (per mouse movement when scrolling).
 // Plus really should redesign UI to have separate key change and
 //   chord name rulers, and/or other way to always display current
 //   key regardless of whether most recent key change is visible
@@ -1485,11 +2063,40 @@ ChordNameRuler::mouseDoubleClickEvent(QMouseEvent *e)
 //   prior practice with printed sheet music has key signature at
 //   beginning of each staff as measures are broken up by page width
 //   constraints.)
+// Update: New "extantKeyLabels" solve above problem.
+// Update: New hold-middle-mouse temporary hide key changes eliminate need
+//   for proposed "wide gray key change text underneath transparent
+//   background chord texts".
 void
 ChordNameRuler::paintEvent(QPaintEvent* e)
 {
     if (!m_composition)
         return ;
+
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "ChordNameRuler::paintEvent()"
+             << (  m_parentEditor == ParentEditor::TRACK    ? "TRACK"
+                 : m_parentEditor == ParentEditor::MATRIX   ? "MATRIX"
+                 : m_parentEditor == ParentEditor::NOTATION ? "NOTATION"
+                 :                                            "???")
+             << '@'
+             << static_cast<void*>(this)
+             << "\n  show:"
+             << (m_showChords ? "chords" : "-")
+             << (m_showKeyChanges ? "keys" : "-")
+             << (m_hideKeyChanges ? "hide" : "-")
+             << " chs/kys:"
+             << m_chords.size()
+             << (  m_currentSegment
+                 ? m_currentSegment->keySignatureMap().size()
+                 : 0)
+             << " x:"
+             << m_currentXOffset
+             << "\n  segment:"
+             << (m_currentSegment ? m_currentSegment->getLabel() : "???")
+             << '@'
+             << static_cast<const void*>(m_currentSegment);
+#endif
 
     QPainter paint(this);
 
@@ -1504,73 +2111,160 @@ ChordNameRuler::paintEvent(QPaintEvent* e)
     paint.setClipRegion(e->region());
     paint.setClipRect(e->rect().normalized());
 
-    QRect clipRect = paint.clipRegion().boundingRect();
-
-    if (!m_chordAndKeyNames)
-        return ;
-
-    int   beginX    = m_currentXOffset,
-          endX      = beginX + clipRect.width();
-    timeT beginTime = m_rulerScale->getTimeForX(clipRect.x() + beginX),
-          endTime   = m_rulerScale->getTimeForX(clipRect.x() + endX);
-
+    QRect     clipRect        = paint.clipRegion().boundingRect();
     QRect     boundsForHeight = m_fontMetrics.boundingRect("^j|lM");
     const int fontHeight      = boundsForHeight.height(),
+              rulerHeight     = height(),
               textY           = (height() - 6) / 2 + fontHeight / 2,
-              keySpacing      = m_boldFont.pixelSize() / 2;
-    int       currentX        = clipRect.x();
+              keySpacing      = m_boldFont.pixelSize() / 3;
 
-    for (Segment::iterator   eventIter  =   m_chordAndKeyNames
-                                          ->findTime(beginTime);
-                             eventIter != m_chordAndKeyNames->findTime(endTime);
-                           ++eventIter) {
+    int   beginX    = 0,
+          currentX  = beginX,
+          endX      = beginX + clipRect.width();
+    timeT beginTime =   m_rulerScale->getTimeForX(beginX)
+                      + m_rulerScale->getTimeForX(m_currentXOffset),
+          endTime   =   m_rulerScale->getTimeForX(endX)
+                      + m_rulerScale->getTimeForX(m_currentXOffset);
+    auto  chordIter = m_chords.lower_bound(beginTime);
 
-        if (   !(*eventIter)->isa(Text::EventType)
-            || !(*eventIter)->has(Text::TextPropertyName)
-            || !(*eventIter)->has(Text::TextTypePropertyName))
-            continue;
+    auto timeToX = [this](const timeT time)
+    {
+        return   static_cast<int>(std::round( this
+                                             ->m_rulerScale
+                                             ->getXForTime(time)))
+               - this->m_currentXOffset;
+    };
 
-        std::string text((*eventIter)->get<String>(Text::TextPropertyName)),
-                    type((*eventIter)->get<String>(Text::TextTypePropertyName));
+    auto keyIterToX = [this, timeToX, endX](
+    const Segment::KeySignatureMap::const_iterator  iter)
+    {
+        if (this->m_currentSegment->keySignatureIterIsValid(iter))
+            return timeToX(iter->first);
+        else
+            return endX;
+    };
 
+    enum class Mode {
+        NONE = 0,
+        CHORDS_AND_KEYS,
+        ONLY_KEYS,
+        ONLY_CHORDS,
+    };
 
-        int textX =   static_cast<int>(
-                      std::round(  m_rulerScale
-                                 ->getXForTime(  (*eventIter)
-                                               ->getAbsoluteTime())))
-                    - m_currentXOffset;
+    const bool showChords =     m_showChords
+                            && !m_chords.empty(),
+               showKeys   =     m_currentSegment
+                            &&  m_showKeyChanges
+                            && !m_hideKeyChanges
+                            && !m_currentSegment->keySignatureMap().empty();
+    const Mode mode       = (  showChords && showKeys ? Mode::CHORDS_AND_KEYS
+                             :               showKeys ? Mode::ONLY_KEYS
+                             : showChords             ? Mode::ONLY_CHORDS
+                             :                          Mode::NONE);
 
-        if (textX < currentX) {
-            if (type == Text::KeyName)
-                paint.drawLine(textX, 0, textX, height());
-            else
-                paint.drawLine(textX, height() - 4, textX, height());
-            if (textX > currentX)
-                currentX = textX;
-            continue;
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "  mode:"
+             << (  mode == Mode::NONE            ? "NONE"
+                 : mode == Mode::CHORDS_AND_KEYS ? "CHORDS_AND_KEYS"
+                 : mode == Mode::ONLY_KEYS       ? "ONLY_KEYS"
+                 : mode == Mode::ONLY_CHORDS     ? "ONLY_CHORDS"
+                 :                                 "???");
+#endif
+
+    if (mode == Mode::NONE) return;
+
+    if (mode == Mode::ONLY_KEYS) {
+        Segment::KeySignatureMap::const_iterator
+            keysEnd = m_currentSegment->keySignatureMap().cend(),
+            keyIter = m_currentSegment->getKeySignatureIterAtTime(beginTime);
+
+        paint.setFont(m_boldFont);
+        for ( ;
+               keyIter != keysEnd && keyIter->first < endTime ;
+            ++keyIter) {
+            int keyX = keyIterToX(keyIter);
+
+            paint.drawLine(keyX, 0, keyX, rulerHeight);
+
+            if (keyX >= currentX) {
+                currentX = keyX + keySpacing;
+                QString keyName(strtoqstr(keyIter->second.getUnicodeName()));
+                paint.drawText(currentX, textY, keyName);
+                currentX = keyX + m_fontMetrics.boundingRect(keyName).width();
+            }
         }
-
-        currentX = textX;
-
-        QRect textBounds;
-
-        if (type == Text::KeyName && m_showKeyChanges) {
-            paint.drawLine(currentX, 0, currentX, height());
-            paint.setFont(m_boldFont);
-            currentX += keySpacing;
-            paint.drawText(currentX, textY, strtoqstr(text));
-            textBounds = m_boldFontMetrics.boundingRect(strtoqstr(text));
-        }
-        else if (type == Text::ChordName) {
-            paint.drawLine(currentX, height() - 4, currentX, height());
-            paint.setFont(m_font);
-            paint.drawText(currentX, textY, strtoqstr(text));
-            textBounds = m_fontMetrics.boundingRect(strtoqstr(text));
-        }
-
-        if ((currentX += textBounds.width()) > endX) break;
+        return;
     }
 
+    if (mode == Mode::CHORDS_AND_KEYS) {
+        Segment::KeySignatureMap::const_iterator
+            keysEnd  = m_currentSegment->keySignatureMap().cend(),
+            keyIter = m_currentSegment->getKeySignatureIterAtTime(beginTime);
+        int  nextKeyX = (keyIter == keysEnd ? endX : keyIterToX(keyIter));
+
+        while (currentX < endX) {
+            if (   keyIter != keysEnd
+                && (   chordIter == m_chords.end()
+                    || keyIter->first <= chordIter->first)) {
+                int keyX = keyIterToX(keyIter);
+                paint.drawLine(keyX, 0, keyX, rulerHeight);
+                if (keyX >= currentX) {
+                    paint.setFont(m_boldFont);
+                    QString keyName(strtoqstr(  keyIter
+                                              ->second
+                                               .getUnicodeName()));
+                    keyX += keySpacing;
+                    paint.drawText(keyX, textY, keyName);
+                    currentX =   keyX
+                               +  m_boldFontMetrics
+                                 .boundingRect(keyName)
+                                 .width();
+                }
+                nextKeyX = keyIterToX(++keyIter);
+            }
+            else if (chordIter != m_chords.end()) {
+                int chordX = timeToX(chordIter->first);
+                paint.drawLine(chordX, rulerHeight - 4, chordX, rulerHeight);
+                if (chordX >= currentX) {
+                    QString chordName(strtoqstr(chordIter->second));
+                    int     width  =  m_fontMetrics
+                                     .boundingRect(chordName)
+                                     .width();
+                    if (chordX + width < nextKeyX) {
+                        paint.setFont(m_font);
+                        paint.drawText(chordX, textY, chordName);
+                        currentX = chordX + width;
+                    }
+                    else currentX = chordX;
+
+                }
+                ++chordIter;
+            }
+
+            if (chordIter == m_chords.end() && keyIter == keysEnd)
+                break;;
+        }
+
+        return;
+    }
+
+    if (mode == Mode::ONLY_CHORDS) {
+        paint.setFont(m_font);
+        for ( ;
+             chordIter != m_chords.end() && chordIter->first <= endTime ;
+             ++chordIter) {
+            int     chordX = timeToX(chordIter->first);
+
+            paint.drawLine(chordX, rulerHeight - 4, chordX, rulerHeight);
+
+            if (chordX >= currentX) {
+                QString chordName(strtoqstr(chordIter->second));
+                paint.drawText(chordX, textY, chordName);
+                currentX =   chordX
+                           + m_fontMetrics.boundingRect(chordName).width();
+            }
+        }
+    }
 }  // ChordNameRuler::paintEvent(QPaintEvent* e)
 
 }  // namespace Rosegarden

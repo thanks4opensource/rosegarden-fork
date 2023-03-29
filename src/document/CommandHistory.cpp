@@ -3,7 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -43,7 +44,9 @@ CommandHistory::CommandHistory() :
     m_redoLimit(50),
     m_menuLimit(15),
     m_savedAt(0),
-    m_enableUndo(true)
+    m_enableUndo(true),
+    m_commandIsExecuting(false),
+    m_macroCommandIsExecuting(false)
 {
     // All Edit > Undo menu items share this QAction object.
     m_undoAction = new QAction(QIcon(":/icons/undo.png"), tr("&Undo"), this);
@@ -108,6 +111,7 @@ CommandHistory::addCommand(Command *command)
     if ((int)m_undoStack.size() < m_savedAt) m_savedAt = -1; // nope
 
     emit aboutToExecuteCommand();
+    m_commandIsExecuting = true;
 
     CommandInfo commInfo;
     commInfo.command = command;
@@ -118,10 +122,11 @@ CommandHistory::addCommand(Command *command)
     // Execute the command
     command->execute();
 
+    m_commandIsExecuting = false;
     emit updateLinkedSegments(command);
-    emit commandExecuted();
+    emit commandExecutedInitially();    // t4os: do this first ...
+    emit commandExecuted();             // ... before this (was after)
     //emit commandExecuted2(command);
-    emit commandExecutedInitially();
 
     updateActions();
     // pointerPositionAfter can not be updated here as the cursor
@@ -134,12 +139,20 @@ CommandHistory::undo()
     if (m_undoStack.empty()) return;
 
     RG_DEBUG << "undo()";
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nCommandHistory::undo()";
+#endif
+
+    emit aboutToExecuteCommand();
+    m_commandIsExecuting = true;
 
     CommandInfo commInfo = m_undoStack.top();
     commInfo.command->unexecute();
+
+    m_commandIsExecuting = false;
     emit updateLinkedSegments(commInfo.command);
-    emit commandExecuted();
-    emit commandUnexecuted(commInfo.command);
+    emit commandUnexecuted(commInfo.command);   // t4os: do this first ...
+    emit commandExecuted();                     // ... before this (was after)
     m_pointerPosition = commInfo.pointerPositionBefore;
     emit commandUndone();
 
@@ -157,13 +170,22 @@ CommandHistory::redo()
 {
     if (m_redoStack.empty()) return;
 
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\n\n\nCommandHistory::redo()";
+#endif
+
+    emit aboutToExecuteCommand();
+    m_commandIsExecuting = true;
+
     CommandInfo commInfo = m_redoStack.top();
     commInfo.command->execute();
+
+    m_commandIsExecuting = false;
+    m_pointerPosition = commInfo.pointerPositionAfter;  // t4os: do before emits
     emit updateLinkedSegments(commInfo.command);
-    emit commandExecuted();
+    emit commandRedone();                       // t4os: do this first ...
+    emit commandExecuted();                     //  ... before this (was after)
     //emit commandExecuted2(commInfo.command);
-    m_pointerPosition = commInfo.pointerPositionAfter;
-    emit commandRedone();
 
     m_undoStack.push(commInfo);
     m_redoStack.pop();
@@ -392,5 +414,22 @@ CommandHistory::getPointerPosition() const
 {
     return m_pointerPosition;
 }
+
+
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+QString
+CommandHistory::lastCommandExecuted()
+const {
+    if (m_undoStack.empty()) return "<NO COMMAND>";
+    else                     return m_undoStack.top().command->getName();
+}
+
+QString
+CommandHistory::lastCommandUnexecuted()
+const {
+    if (m_redoStack.empty()) return "<NO COMMAND>";
+    else                     return m_redoStack.top().command->getName();
+}
+#endif
 
 }

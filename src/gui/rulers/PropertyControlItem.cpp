@@ -3,7 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -48,10 +49,10 @@ PropertyControlItem::~PropertyControlItem()
 void PropertyControlItem::update()
 {
     if (!m_element) return;
-    // RulerScale *rulerScale = m_controlRuler->getRulerScale();    
+    // RulerScale *rulerScale = m_controlRuler->getRulerScale();
     double x0,x1;
 
-    long val = 0;    
+    long val = 0;
     MatrixElement *matrixelement = dynamic_cast<MatrixElement*>(m_element);
     if (matrixelement) {
         // Guarantee that matrixelement is up to date, otherwise data
@@ -69,7 +70,7 @@ void PropertyControlItem::update()
     if (m_propertyname == BaseProperties::VELOCITY) {
         m_colour = DefaultVelocityColour::getInstance()->getColour(val);
     }
-    
+
     m_y = m_controlRuler->valueToY(val);
 
     reconfigure(x0,x1,m_y);
@@ -81,12 +82,14 @@ void PropertyControlItem::setValue(float y)
     if (y < 0) y = 0;
 
     if (m_propertyname == BaseProperties::VELOCITY) {
-        MatrixElement *matrixelement = dynamic_cast<MatrixElement*> (m_element);       
-        if (matrixelement) {        
-            matrixelement->reconfigure(m_controlRuler->yToValue(y));
+        MatrixElement *matrixelement = dynamic_cast<MatrixElement*> (m_element);
+        if (matrixelement) {
+            matrixelement->reconfigure(m_controlRuler->yToValue(y),
+                                       true,
+                                       nullptr);
             matrixelement->setSelected(true);
         }
-        
+
         m_colour = DefaultVelocityColour::getInstance()->getColour(
                 m_controlRuler->yToValue(y));
     }

@@ -4,7 +4,8 @@
 /*
     Rosegarden
     A sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
     See the AUTHORS file for more details.
 
     This program is free software; you can redistribute it and/or
@@ -18,7 +19,7 @@
 #define RG_REFRESH_STATUS_H
 
 #include <QtGlobal>
-#include <vector>
+
 
 namespace Rosegarden
 {
@@ -65,6 +66,8 @@ template<class RS>
 class RefreshStatusArray
 {
 public:
+    RefreshStatusArray();
+
     /// Creates a new refresh status object for an observer.
     /**
      * Use the returned ID when calling getRefreshStatus() to check whether
@@ -74,7 +77,16 @@ public:
      */
     unsigned int getNewRefreshStatusId();
 
-    /// Returns the number of observers.
+    void deleteRefreshStatusId(const unsigned id);
+
+    // iterators to underlying std::map
+    typename std::map<unsigned, RS>::iterator       begin (),
+                                                    end   ();
+    typename std::map<unsigned, RS>::const_iterator cbegin(),
+                                                    cend  ();
+
+    bool haveRefreshStatus(unsigned int id) const;
+
     size_t size() const { return m_refreshStatuses.size(); }
 
     /// Returns the refresh status object for a particular observer.
@@ -82,14 +94,7 @@ public:
      * Observers can set or clear the flags via the reference that is
      * returned.
      */
-    RS& getRefreshStatus(unsigned int id)
-    {
-        Q_ASSERT_X(id < m_refreshStatuses.size(),
-                   "RefreshStatusArray::getRefreshStatus()",
-                   "ID out of bounds");
-
-        return m_refreshStatuses[id];
-    }
+    RS& getRefreshStatus(unsigned int id);  // see template, below
 
     /// Sets all the refresh flags to true.
     /**
@@ -98,15 +103,69 @@ public:
     void updateRefreshStatuses();
 
 protected:
-    std::vector<RS> m_refreshStatuses;
+    unsigned                m_nextId;   // continuously increment, never reused
+    std::map<unsigned, RS>  m_refreshStatuses;
 };
+
+template<class RS>
+RefreshStatusArray<RS>::RefreshStatusArray()
+:   m_nextId(0)
+{}
+
+template<class RS>
+typename std::map<unsigned, RS>::iterator RefreshStatusArray<RS>::begin()
+{
+    return m_refreshStatuses.begin();
+}
+
+template<class RS>
+typename std::map<unsigned, RS>::iterator RefreshStatusArray<RS>::end()
+{
+    return m_refreshStatuses.end();
+}
+
+template<class RS>
+typename std::map<unsigned, RS>::const_iterator RefreshStatusArray<RS>::cbegin()
+{
+    return m_refreshStatuses.cbegin();
+}
+
+template<class RS>
+typename std::map<unsigned, RS>::const_iterator RefreshStatusArray<RS>::cend()
+{
+    return m_refreshStatuses.cend();
+}
+
+template<class RS>
+RS& RefreshStatusArray<RS>::getRefreshStatus(unsigned int id)
+{
+    auto found = m_refreshStatuses.find(id);
+    Q_ASSERT_X(found != m_refreshStatuses.end(),
+               "RefreshStatusArray::getRefreshStatus()",
+               "ID out of bounds");
+    return found->second;
+}
+
+template<class RS>
+bool RefreshStatusArray<RS>::haveRefreshStatus(unsigned int id) const
+{
+    return m_refreshStatuses.find(id) != m_refreshStatuses.end();
+}
 
 template<class RS>
 unsigned int RefreshStatusArray<RS>::getNewRefreshStatusId()
 {
-    m_refreshStatuses.push_back(RS());
-    unsigned int res = m_refreshStatuses.size() - 1;
-    return res;
+    m_refreshStatuses[m_nextId] = RS();
+    return m_nextId++;
+}
+
+template<class RS>
+void RefreshStatusArray<RS>::deleteRefreshStatusId(
+const unsigned id)
+{
+    auto found = m_refreshStatuses.find(id);
+    if (found != m_refreshStatuses.end())
+        m_refreshStatuses.erase(found);
 }
 
 // Defined in Composition.cpp.
@@ -120,10 +179,9 @@ void RefreshStatusArray<RS>::updateRefreshStatuses()
     // Composition.cpp).
 
     // Set all the refresh flags to true.
-    for(unsigned int i = 0; i < m_refreshStatuses.size(); ++i)
-        m_refreshStatuses[i].setNeedsRefresh(true);
+    for (auto &status : m_refreshStatuses)
+        status.second.setNeedsRefresh(true);
 }
-
 
 }
 

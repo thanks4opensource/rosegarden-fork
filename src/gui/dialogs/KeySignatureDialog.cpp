@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -178,15 +178,24 @@ KeySignatureDialog::KeySignatureDialog(QWidget *parent,
             new QRadioButton(tr("Apply to all segments at this time"),
                              buttonFrame);
         buttonFrameLayout->addWidget(m_applyToAllButton);
-#if 0   // t4os
-        applyToOneButton->setChecked(true);
-#else
+
+        // Default m_applyToAllButton instead of applyToOneButton because:
+        // a) Makes more sense (very unusual to have different parts in
+        //    different keys at same time), and
+        // b) If different requires recompution in ChordNameRuler due to
+        //    ConflictingKeyChanges when scrolling through segments in matrix
+        //    editor to make each in turn currently active.
         m_applyToAllButton->setChecked(true);
-#endif
+
         m_noPercussionCheckBox =
             new QCheckBox(tr("Exclude percussion segments"), buttonFrame);
         buttonFrameLayout->addWidget(m_noPercussionCheckBox);
-        m_noPercussionCheckBox->setChecked(true);
+        // Default false because even though not applicable to non-pitched
+        // percussion segments, if different from normal/pitched segments
+        // requires unecessary recompution in ChordNameRuler due to
+        // ConflictingKeyChanges when scrolling through segments in matrix
+        // editor to make each in turn currently active.
+        m_noPercussionCheckBox->setChecked(false);
     } else {
         m_applyToAllButton = nullptr;
         buttonFrame->hide();

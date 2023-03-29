@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -38,7 +38,7 @@
 namespace Rosegarden
 {
 
-const int   PianoKeyboard::WHITE_KEY_WIDTH         = 48;
+const int   PianoKeyboard::WHITE_KEY_WIDTH         = 54;
 const float PianoKeyboard::BLACK_KEY_WIDTH         = 32.0;
 
 const std::array<PianoKeyboard::KeyColor, 12>
@@ -87,7 +87,7 @@ PianoKeyboard::KeyHeights =  {1.5,   //  0  C
 PianoKeyboard::PianoKeyboard(QWidget *parent, int pitchY, int keys)
         : PitchRuler(parent),
         m_pitchY(pitchY + 1),
-        m_keySize(48, m_pitchY * 2),
+        m_keySize(WHITE_KEY_WIDTH, m_pitchY * 2),
         m_nbKeys(keys),
         m_mouseDown(false),
         m_highlight(new QWidget(this)),
@@ -126,11 +126,11 @@ void PianoKeyboard::computeKeyPos()
         KeyGeom geom;
         unsigned note = ndx % 12;
 
-		y -= KeyHeights[note] * spacing;
+        y -= KeyHeights[note] * spacing;
 
-        if (KeyColors[note] == KeyColor::WHITE) 
-			geom.line = QLineF(0.0, y, WHITE_KEY_WIDTH, y);
-		else
+        if (KeyColors[note] == KeyColor::WHITE)
+            geom.line = QLineF(0.0, y, WHITE_KEY_WIDTH, y);
+        else
             geom.rect = QRectF(0.0,
                                y - blackKeyHalfHeight,
                                BLACK_KEY_WIDTH,
@@ -155,21 +155,21 @@ void PianoKeyboard::paintEvent(QPaintEvent*)
 
     // White keys
     paint.setPen(Qt::black);
-	for (unsigned pitch = 0 ; pitch < 128 ; ++pitch)
+    for (unsigned pitch = 0 ; pitch < 128 ; ++pitch)
         if (KeyColors[pitch % 12] == KeyColor::WHITE)
             paint.drawLine(m_keyGeoms[pitch].line);
 
-	// White key labels: MIDI octave number, on "C" keys
+    // White key labels: MIDI octave number, on "C" keys
     paint.setFont(*pFont);
-	unsigned textXPos    = BLACK_KEY_WIDTH * 17 / 16,
-			 textYOffset = m_pitchY 	   *  9 /  8;
-	for (unsigned pitch = 0 ; pitch < 128 ; ++pitch)
-		if (pitch % 12 == 0) {
-	        MidiPitchLabel label(pitch);
-	        paint.drawText(textXPos,
-						   m_keyGeoms[pitch].line.y1() + textYOffset,
-    	                   label.getQString());
-		}
+    unsigned textXPos    = BLACK_KEY_WIDTH * 17 / 16,
+             textYOffset = m_pitchY        *  9 /  8;
+    for (unsigned pitch = 0 ; pitch < 128 ; ++pitch)
+        if (pitch % 12 == 0) {
+            MidiPitchLabel label(pitch);
+            paint.drawText(textXPos,
+                           m_keyGeoms[pitch].line.y1() + textYOffset,
+                           label.getQString());
+        }
 
     // Black keys
     paint.setBrush(Qt::black);
@@ -202,14 +202,14 @@ void PianoKeyboard::showHighlight(int evPitch)
     if (m_lastHighlightPitch != evPitch) {
         m_lastHighlightPitch = evPitch;
 
-		if (KeyColors[evPitch % 12] == KeyColor::WHITE)
-			m_highlight->setFixedSize(WHITE_KEY_WIDTH - 8, 4);
-		else
-			m_highlight->setFixedSize(BLACK_KEY_WIDTH - 8, 4);
+        if (KeyColors[evPitch % 12] == KeyColor::WHITE)
+            m_highlight->setFixedSize(WHITE_KEY_WIDTH - 8, 4);
+        else
+            m_highlight->setFixedSize(BLACK_KEY_WIDTH - 8, 4);
 
-		m_highlight->move(0, (127.5  - evPitch) * m_pitchY - 2);
-		m_highlight->show();
-	}
+        m_highlight->move(0, (127.5  - evPitch) * m_pitchY - 2);
+        m_highlight->show();
+    }
 }
 
 void PianoKeyboard::hideHighlight()

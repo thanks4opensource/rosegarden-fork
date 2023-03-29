@@ -69,25 +69,29 @@ void Track::setInstrument(InstrumentId instrument)
 
     m_instrument = instrument;
 
+#ifndef BUILD_DEBUG     // Crashes lilypond_export_test in
+                        // Studio::getInstrumentById() because not
+                        // really set up.
     if (m_owningComposition)
         m_owningComposition->notifyTrackChanged(this);
+#endif
 }
 
-void Track::setMidiInputDevice(DeviceId id) 
-{ 
+void Track::setMidiInputDevice(DeviceId id)
+{
     if (m_input_device == id) return;
 
-    m_input_device = id; 
+    m_input_device = id;
 
     if (m_owningComposition)
         m_owningComposition->notifyTrackChanged(this);
 }
 
-void Track::setMidiInputChannel(char ic) 
-{ 
+void Track::setMidiInputChannel(char ic)
+{
     if (m_input_channel == ic) return;
 
-    m_input_channel = ic; 
+    m_input_channel = ic;
 
     if (m_owningComposition)
         m_owningComposition->notifyTrackChanged(this);

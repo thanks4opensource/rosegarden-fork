@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -16,6 +16,7 @@
     COPYING included with this distribution for more information.
 */
 
+#include "CommandHistory.h"
 #include "Command.h"
 
 namespace Rosegarden
@@ -62,19 +63,21 @@ MacroCommand::haveCommands() const
 void
 MacroCommand::execute()
 {
+    CommandHistory::getInstance()->setMacroCommandIsExecuting(true);
     for (size_t i = 0; i < m_commands.size(); ++i) {
         m_commands[i]->execute();
     }
-    postExecute();
+    CommandHistory::getInstance()->setMacroCommandIsExecuting(false);
 }
 
 void
 MacroCommand::unexecute()
 {
+    CommandHistory::getInstance()->setMacroCommandIsExecuting(true);
     for (size_t i = 0; i < m_commands.size(); ++i) {
         m_commands[m_commands.size() - i - 1]->unexecute();
     }
-    postUnexecute();
+    CommandHistory::getInstance()->setMacroCommandIsExecuting(false);
 }
 
 QString

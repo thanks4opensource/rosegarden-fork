@@ -3,11 +3,12 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
- 
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -30,16 +31,16 @@ void
 TransposeCommand::modifySegment()
 {
     EventContainer::iterator i;
-    
+
     for (i = m_selection->getSegmentEvents().begin();
          i != m_selection->getSegmentEvents().end(); ++i) {
-        
+
         if ((*i)->isa(Note::EventType)) {
-            
-            if (m_diatonic) { 
-            
+
+            if (m_diatonic) {
+
                 Pitch oldPitch(**i);
-        
+
                 timeT noteTime = (*i)->getAbsoluteTime();
                 Key key = m_selection->getSegment().getKeyAtTime(noteTime);
                 Pitch newPitch = oldPitch.transpose(key, m_semitones, m_steps);
@@ -54,6 +55,7 @@ TransposeCommand::modifySegment()
 
                 (*i)->set<Int>(BaseProperties::PITCH, newPitch.getPerformancePitch());
                 (*i)->set<String>(BaseProperties::ACCIDENTAL, newAccidental);
+                getSegment().eventModified(*i);
             } else {
                 try {
                     long pitch = (*i)->get<Int>(BaseProperties::PITCH);
@@ -67,9 +69,9 @@ TransposeCommand::modifySegment()
                     if ((m_semitones % 12) != 0) {
                         (*i)->unset(BaseProperties::ACCIDENTAL);
                     }
+                    getSegment().eventModified(*i);
                 } catch (...) { }
             }
-
         }
     }
 }

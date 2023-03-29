@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -33,23 +33,32 @@ class MatrixViewSegment : public ViewSegment
 {
 public:
     MatrixViewSegment(MatrixScene *,
-                      Segment *,
-                      bool drumMode);
+                      Segment*,
+                      const bool drumMode,
+                      const unsigned segmentIndex);
     ~MatrixViewSegment() override;
 
     // SegmentObserver (base class ViewSegment) notifications
-    void colourChanged(const Segment *segment) override;
-    void labelChanged(const Segment *segment) override;
+    void eventAdded          (const Segment*, Event*) override;
+    void eventRemoved        (const Segment*, Event*) override;
+    void endMarkerTimeChanged(const Segment*, bool)   override;
+    void startChanged        (const Segment*, timeT)  override;
+
+    void colourChanged(const Segment*) override;
+    void labelChanged(const Segment*) override;
+#if 0  // Respond to finer-grained colourChanged() and labelChanged() instead
     void appearanceChanged(const Segment *segment) override;
-    void endMarkerTimeChanged(const Segment *segment, bool shorten) override;
+#endif
 
     SegmentRefreshStatus &getRefreshStatus() const;
     void resetRefreshStatus();
 
     void updateElements(timeT from, timeT to);
 
-    void updateAll();
-    void updateAllColors();
+    void reconfigureNotes();
+    void updateNoteLabels();
+    void updateNoteColors();
+    void setNotesCurrentSegment(bool current);
 
     void updateTiedUntied(const EventContainer &notes);
 
@@ -72,21 +81,11 @@ protected:
      */
     bool wrapEvent(Event*) override;
 
-    /**
-     * Override from ViewSegment
-     */
-    void eventAdded(const Segment *, Event *) override;
-
-    /**
-     * Override from ViewSegment
-     * Let tools know if their current element has gone
-     */
-    void eventRemoved(const Segment *, Event *) override;
-
     ViewElement* makeViewElement(Event *) override;
 
     MatrixScene *m_scene;
     bool m_drum;
+    const unsigned m_segmentIndex;
     unsigned int m_refreshStatusId;
 };
 

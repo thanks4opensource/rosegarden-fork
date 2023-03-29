@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -38,6 +38,9 @@
 #include "NotationMouseEvent.h"
 #include "NoteFontFactory.h"
 
+#include "commands/edit/EventInsertionCommand.h"
+
+#include "document/Command.h"
 #include "document/CommandHistory.h"
 #include "document/RosegardenDocument.h"
 
@@ -110,6 +113,8 @@ NotationScene::~NotationScene()
       if (m_document) {
         if (!isCompositionDeleted()) { // implemented in CompositionObserver
             m_document->getComposition().removeObserver(this);
+            m_document->getComposition().deleteRefreshStatusId(
+                                         m_compositionRefreshStatusId);
         }
     }
     delete m_hlayout;
@@ -269,9 +274,7 @@ NotationScene::setCurrentStaff(NotationStaff *staff)
                 m_widget->setTrackInstrumentOverride();
                 if (m_widget->getChordNameRuler())
                     m_widget->getChordNameRuler()
-                            ->setCurrentSegment(&staff->getSegment(),
-                                                false);  // false == recalc
-                                                         //   only if needed
+                            ->setCurrentSegment(&staff->getSegment());
             }
             return;
         }
@@ -2281,27 +2284,22 @@ void
 NotationScene::copyRulerChords(
 const ChordNameRuler *ruler)
 {
-    const Segment *chordNames = ruler->chordNamesSegment();
+    const std::map<const timeT, const std::string> &chords(ruler->chordNames());
     Segment *textSegment = getCurrentSegment();
 
-    for (Event *chordName : *chordNames) {
-        // Shouldn't be anything but chords, but check anyway.
-        // In ruler is Text::ChordName, not Text::Chord
-        if (    chordName->getType() != Text::EventType
-            || !chordName->has(Text::TextPropertyName)
-            || !chordName->has(Text::TextTypePropertyName)
-            ||  chordName->getAsString(Text::TextTypePropertyName) !=
-                    Text::ChordName)
-            continue;
+    MacroCommand *macroCommand = new MacroCommand(tr("Copy chord names"));
 
+    for (auto &chord : chords)
+    {
         // Don't copy over existing chord name at time (might be user-edited)
-        timeT time = chordName->getAbsoluteTime();
+        timeT time(chord.first);
+
         Segment::const_iterator iter = textSegment->findTimeConst(time);
         bool existing = false;
 
         // In normal segment is Text::Chord, not Text::ChordName
-        while (    iter != textSegment->end()
-               && (*iter)->getAbsoluteTime() == time) {
+        while (      iter != textSegment->end()
+               &&  (*iter)->getAbsoluteTime() == time) {
             if (   (*iter)->getType() == Text::EventType
                 && (*iter)->has(Text::TextPropertyName)
                 && (*iter)->has(Text::TextTypePropertyName)
@@ -2317,12 +2315,21 @@ const ChordNameRuler *ruler)
         if (existing) continue;
 
         // Normal segments have Text::Chord, not Text::ChordName
-        Text copy(chordName->getAsString(Text::TextPropertyName), Text::Chord);
+        Text copy(chord.second, Text::Chord);
 
-        textSegment->insert(copy.getAsEvent(time));
+    //  Event event(copy.getAsEvent(time));
+
+        EventInsertionCommand
+        *command = new EventInsertionCommand(*textSegment,
+                                             copy.getAsEvent(time));
+        macroCommand->addCommand(command);
     }
 
-    checkUpdate();
+    CommandHistory::getInstance()->addCommand(macroCommand);
+
+    layout(getCurrentStaff(),
+           textSegment->getStartTime(),
+           textSegment->getEndTime());
 }
 
 ///YG: Only for debug

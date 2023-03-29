@@ -41,6 +41,8 @@ void
 TieNotesCommand::modifySegment()
 {
     Segment &segment(getSegment());
+    if (segment.isPercussion()) return;  // Don't allow tieing drum notes
+
     SegmentNotationHelper helper(segment);
 
     // Move part of this to SegmentNotationHelper?
@@ -70,6 +72,5 @@ TieNotesCommand::modifySegment()
     RosegardenDocument::currentDocument->signalNotesTied(m_selection->
                                                          getSegmentEvents());
 }
-
 
 }

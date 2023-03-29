@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -298,7 +298,6 @@ private:
                                 *segmentsToCheckExisting,
                             bool defaultOnly, bool selectedOnly);
 
-
 #if 0   // Now done in RosegardenMainWindow::focusInEvent so always happens
         // wnen entering main window, not just widget area.
         // Update: RosegardenMainWindow::changeEvent(), not focusInEvent()
@@ -310,13 +309,12 @@ private:
 
     //--------------- Data members ---------------------------------
 
-    SimpleRulerScale  *m_rulerScale;
-    TrackEditor                   *m_trackEditor;
+    SimpleRulerScale        *m_rulerScale;
+    TrackEditor             *m_trackEditor;
 
-    SegmentParameterBox           *m_segmentParameterBox;
-    InstrumentParameterBox        *m_instrumentParameterBox;
-    TrackParameterBox             *m_trackParameterBox;
-
+    SegmentParameterBox     *m_segmentParameterBox;
+    InstrumentParameterBox  *m_instrumentParameterBox;
+    TrackParameterBox       *m_trackParameterBox;
 };
 
 

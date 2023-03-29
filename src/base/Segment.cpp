@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
     See the AUTHORS file for more details.
 
     This program is free software; you can redistribute it and/or
@@ -61,6 +61,8 @@ Segment::Segment(SegmentType segmentType, timeT startTime) :
     m_endTime(startTime),
     m_trackId(0),
     m_type(segmentType),
+    m_isPercussion(false),
+    m_isPercussionSet(false),
     m_colourIndex(0),
     m_id(0),
     m_audioFileId(0),
@@ -111,6 +113,8 @@ Segment::Segment(const Segment &segment):
     m_endTime(segment.getEndTime()),
     m_trackId(segment.getTrack()),
     m_type(segment.getType()),
+    m_isPercussion(segment.isPercussion()),
+    m_isPercussionSet(segment.m_isPercussionSet),
     m_label(segment.getLabel()),
     m_colourIndex(segment.getColourIndex()),
     m_id(0),
@@ -147,6 +151,7 @@ Segment::Segment(const Segment &segment):
     m_excludeFromPrinting(segment.m_excludeFromPrinting)
 {
     RG_DEBUG << "cctor" << this;
+
     for (const_iterator it = segment.begin();
          it != segment.end(); ++it) {
         insert(new Event(**it));
@@ -169,14 +174,6 @@ Segment::cloneImpl() const
 Segment::~Segment()
 {
     RG_DEBUG << "dtor" << this;
-    if (!m_observers.empty()) {
-        RG_WARNING << "dtor: Warning: " << m_observers.size() << " observers still extant";
-        RG_WARNING << "Observers are:";
-        for (ObserverSet::const_iterator i = m_observers.begin();
-             i != m_observers.end(); ++i) {
-            RG_WARNING << " " << (void *)(*i) << " [" << typeid(**i).name() << "]";
-        }
-    }
 
     //unlink it
     SegmentLinker::unlinkSegment(this);
@@ -197,25 +194,31 @@ Segment::~Segment()
     delete m_endMarkerTime;
 }
 
-bool
-Segment::isPercussion()
-const
+void
+Segment::setIfIsPercussion()
 {
-    if (!isMIDI()) return false;
-
-    // Should not be called for segment not in composition.
-    if (!m_composition) return false;
+    if (!isMIDI() || !m_composition) {
+        m_isPercussion = false;
+        return;
+    }
 
     Track *track =  m_composition->getTrackById(getTrack());
-    if (!track) return false;
+    if (!track) {
+        m_isPercussion = false;
+        return;
+    }
 
     Instrument *instrument =   RosegardenDocument::currentDocument
                              ->getStudio()
                               .getInstrumentById(track->getInstrument());
-    if (!instrument) return false;
+    if (!instrument) {
+        m_isPercussion = false;
+        return;
+    }
 
     // Percussion instruments have key mappings (pitch to drum name)
-    return static_cast<bool>(instrument->getKeyMapping());
+    m_isPercussion    = static_cast<bool>(instrument->getKeyMapping());
+    m_isPercussionSet = true;
 }
 
 bool
@@ -336,6 +339,8 @@ Segment::setTrack(TrackId id)
         return;
     }
 
+    setIfIsPercussion();
+
     Composition *c = m_composition;
     if (c) c->weakDetachSegment(this); // sets m_composition to 0
     TrackId oldTrackId = m_trackId;
@@ -454,6 +459,8 @@ Segment::setStartTime(timeT t)
     base::clear();
 
     if (m_clefKeyList) { m_clefKeyList->clear(); }
+    m_keySignatureMap.clear();  // Could really have
+                                // updateKeySignatureMapTimes() method
 
     m_endTime = previousEndTime + dt;
     if (m_endMarkerTime) *m_endMarkerTime += dt;
@@ -610,8 +617,8 @@ Segment::updateRefreshStatuses(timeT startTime, timeT endTime)
 
     // For each observer, indicate that a refresh is needed for this time
     // span.
-    for(size_t i = 0; i < m_refreshStatusArray.size(); ++i)
-        m_refreshStatusArray.getRefreshStatus(i).push(startTime, endTime);
+    for (auto &refreshStatus : m_refreshStatusArray)
+        refreshStatus.second.push(startTime, endTime);
 }
 
 
@@ -760,6 +767,18 @@ Segment::eraseSingle(Event* e)
 
     } else return false;
 
+}
+
+void
+Segment::eventModified(const Event *e)
+{
+    timeT t0 = e->getAbsoluteTime();
+    timeT t1 = t0 + e->getGreaterDuration();
+
+    updateRefreshStatuses(t0, t1);
+
+    if (e->isa(Note::EventType))
+        emit noteModified(this, e); // false == removed
 }
 
 
@@ -1337,13 +1356,6 @@ Segment::setLabel(const std::string &label)
     notifyAppearanceChange();
 }
 
-bool
-Segment::ClefKeyCmp::operator()(const Event *e1, const Event *e2) const
-{
-    if (e1->getType() == e2->getType()) return Event::EventCmp()(e1, e2);
-    else return e1->getType() < e2->getType();
-}
-
 Clef
 Segment::getClefAtTime(timeT time) const
 {
@@ -1462,6 +1474,26 @@ Segment::getNextKeyTime(timeT time, timeT &nextTime) const
     return true;
 }
 
+// Returns iterator to begin()          if time <= beginTime
+//                  to std::prev(end()  if time >= endTime
+//                  to end()            if map is empty
+//                  to closest iter for iter.first <= time
+const Segment::KeySignatureMap::const_iterator
+Segment::getKeySignatureIterAtTime(const timeT  time)
+const
+{
+    Segment::KeySignatureMap::iterator iter =  m_keySignatureMap
+                                              .upper_bound(time);
+
+    if (iter == m_keySignatureMap.end()) {
+        if (m_keySignatureMap.empty()) return   iter;
+        else                           return --iter;
+    }
+
+    if (iter == m_keySignatureMap.begin()) return   iter;
+    else                                   return --iter;
+}
+
 void
 Segment::getFirstClefAndKey(Clef &clef, Key &key)
 {
@@ -1494,7 +1526,6 @@ Segment::getFirstClefAndKey(Clef &clef, Key &key)
         ++i;
     }
 }
-
 
 void
 Segment::enforceBeginWithClefAndKey()
@@ -1564,15 +1595,25 @@ Segment::getRepeatEndTime() const
     return endMarker;
 }
 
+
 void
 Segment::
 checkInsertAsClefKey(Event *e) const
 {
-    if (e->isa(Clef::EventType) || e->isa(Key::EventType)) {
+    bool isKey = e->isa(Key::EventType);
+    if (isKey || e->isa(Clef::EventType)) {
         if (!m_clefKeyList) m_clefKeyList = new ClefKeyList;
         m_clefKeyList->insert(e);
+
+        if (isKey) {
+            m_keySignatureMap[e->getAbsoluteTime()] = Key(*e);
+            emit keyAddedOrRemoved(this, e, true);  // true == added
+        }
     }
+    else if (e->isa(Note::EventType))
+        emit noteAddedOrRemoved(this, e, true);  // true == added
 }
+
 
 void
 Segment::notifyAdd(Event *e) const
@@ -1592,7 +1633,8 @@ Segment::notifyRemove(Event *e) const
 {
     Profiler profiler("Segment::notifyRemove()");
 
-    if (m_clefKeyList && (e->isa(Clef::EventType) || e->isa(Key::EventType))) {
+    bool isKey = e->isa(Key::EventType);
+    if (m_clefKeyList && (isKey || (e->isa(Clef::EventType)))) {
         ClefKeyList::iterator i;
         for (i = m_clefKeyList->find(e); i != m_clefKeyList->end(); ++i) {
             // fix for bug#1485643 (crash erasing a duplicated key signature)
@@ -1601,7 +1643,13 @@ Segment::notifyRemove(Event *e) const
                 break;
             }
         }
+        if (isKey) {
+            m_keySignatureMap.erase(e->getAbsoluteTime());
+            emit keyAddedOrRemoved(this, e, false);  // false == removed
+        }
     }
+    if (e->isa(Note::EventType))
+        emit noteAddedOrRemoved(this, e, false);    // false == removed
 
     for (ObserverSet::const_iterator i = m_observers.begin();
          i != m_observers.end(); ++i) {
@@ -1687,10 +1735,12 @@ Segment::notifyTransposeChange()
 void
 Segment::notifySourceDeletion() const
 {
-    for (ObserverSet::const_iterator i = m_observers.begin();
-         i != m_observers.end(); ++i) {
-        (*i)->segmentDeleted(this);
-    }
+    // Create copy of m_observers and iterate through that because
+    // observers' segmentDeleted() method can (and are intended to)
+    // call removeObserver() which invalidates m_observers iterators.
+    ObserverSet copyOfObservers(m_observers);
+    for (SegmentObserver *observer : copyOfObservers)
+        observer->segmentDeleted(this);
 }
 
 void
@@ -1825,7 +1875,6 @@ Segment::removeObserver(SegmentObserver *obs)
 }
 
 SegmentHelper::~SegmentHelper() { }
-
 
 void
 SegmentRefreshStatus::push(timeT from, timeT to)

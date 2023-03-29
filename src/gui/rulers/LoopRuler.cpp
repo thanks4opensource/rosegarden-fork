@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -370,6 +370,7 @@ void
 LoopRuler::doSingleClick()
 {
     const double x = mouseEventToSceneX(m_mouseEvent);
+    const QPoint mousePos = m_mouseEvent->globalPos();
 
     const bool leftButton = (m_mouseEvent->button() == Qt::LeftButton);
     const bool rightButton = (m_mouseEvent->button() == Qt::RightButton);
@@ -392,9 +393,14 @@ LoopRuler::doSingleClick()
     // start/end times of segments).
     if (((shift && leftButton) || rightButton)) {
         if (m_comp.getNbSegments() == 0) {
-            QMessageBox::warning(this,
-                                 tr("Loop Ruler"),
-                                 tr("Can't define loop range without segments"));
+            QMessageBox  messageBox(QMessageBox::Warning,
+                                    tr("Loop Ruler"),
+                                    tr("Can't define loop range "
+                                        "without segments"),
+                                    QMessageBox::Ok,
+                                    this);
+            messageBox.move(mousePos);
+            messageBox.exec();
             return;
         }
 

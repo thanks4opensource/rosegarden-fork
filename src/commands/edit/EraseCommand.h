@@ -1,10 +1,10 @@
-
 /* -*- c-basic-offset: 4 indent-tabs-mode: nil -*- vi:set ts=8 sts=4 sw=4: */
 
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
+    Copyright 2000-2023 the Rosegarden development team.
+    Copyright (c) 2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -48,8 +48,9 @@ public:
      * Return whether any deletions that affect later in the segment
      * were done, meaning key or clef deletions.
      */
-    static bool eraseInSegment(EventSelection *selection);
-    
+    static bool eraseInSegment(EventSelection *selection,
+                               Segment *segment = nullptr);
+
     timeT getRelayoutEndTime() override;
 
 protected:
@@ -65,6 +66,12 @@ private:
     EventSelection *m_selection2;
 
     timeT m_relayoutEndTime;
+
+    // For keySignaturesChanged() signal in postExecute() and postUnexecute().
+    // See postExecute() in .cpp file.
+    Segment *m_segment1,
+            *m_segment2;
+
 };
 
 

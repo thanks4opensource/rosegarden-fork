@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
     See the AUTHORS file for more details.
 
     This file is Copyright 2002
@@ -86,9 +86,6 @@ class ChordAnalyzer
     //   chord time.
     // Use notes in all "segments" name chords.
     // Use "currentSegment" for key at chord times.
-    // Set "conflictingKeyChanges" true if different key changes at
-    //   same times in different "segments" (or key change at
-    //   time in one or more and not in one or more others).
     // If "keysOnly", only fille "chordsAndKeys" with key changes
     //   (no chords).
     // Two different chord analysis algorithms:
@@ -96,15 +93,18 @@ class ChordAnalyzer
     //      period (aligned modulo that time). Includes arpeggiated
     //      chords.
     //   Else whenever any note or off, within timeWindow tolerance.
-    void labelChords(Segment                        &chordsAndKeys,
-                     std::map<timeT, const Key>     &keys,
-                     std::map<timeT, int>           &roots,
-                     bool                           &conflictingKeyChanges,
-                     const std::vector<Segment*>     segments,
+    void labelChords(std::map<const timeT,
+                              const std::string>    &chords,
+                     std::map<const timeT, int>     &roots,
+                     const std::vector<const Segment*>  &segments,
                      const Segment                  *currentSegment,
-                     const bool                      keysOnly,
-                     const timeT                     timeWindow,
-                     bool                            onePerTimePeriod);
+                     const timeT                     quantizationWindow,
+                     const timeT                     arpeggiationWindow,
+                     bool                            onePerTimePeriod
+                     ,
+                     const bool                      wholeComposition,
+                     const timeT                     beginTime,
+                     const timeT                     endTime);
 
   protected:
     // Private implemenation, to keep large amount of code and

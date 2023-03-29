@@ -3,7 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -87,22 +88,23 @@ RetrogradeCommand::modifySegment()
 
         // somewhat like the NoteOverlay part of PasteEventsCommand::modifySegment
         /* nah -- let's do a de-counterpoint afterwards perhaps
-        	if (m_useNotationTimings && toInsert[j]->isa(Note::EventType)) {
-        	    long pitch = 0;
-        	    Accidental explicitAccidental = NoAccidental;
-        	    toInsert[j]->get<String>(ACCIDENTAL, explicitAccidental);
-        	    if (toInsert[j]->get<Int>(PITCH, pitch)) {
-        		jtr = SegmentNotationHelper(segment).insertNote
-        		    (toInsert[j]->getAbsoluteTime(),
-        		     Note::getNearestNote(toInsert[j]->getDuration()),
-        		     pitch, explicitAccidental);
-        		delete toInsert[j];
-        		toInsert[j] = *jtr;
-        	    }
-        	} else {
+                if (m_useNotationTimings && toInsert[j]->isa(Note::EventType)) {
+                    long pitch = 0;
+                    Accidental explicitAccidental = NoAccidental;
+                    toInsert[j]->get<String>(ACCIDENTAL, explicitAccidental);
+                    if (toInsert[j]->get<Int>(PITCH, pitch)) {
+                        jtr = SegmentNotationHelper(segment).insertNote
+                            (toInsert[j]->getAbsoluteTime(),
+                             Note::getNearestNote(toInsert[j]->getDuration()),
+                             pitch, explicitAccidental);
+                        delete toInsert[j];
+                        toInsert[j] = *jtr;
+                    }
+                } else {
         */
         //Segment::iterator jtr = segment.insert(toInsert[j]);
-        //	}
+        segment.insert(toInsert[j]);
+        //      }
 
         // insert new event back into selection
         m_selection->addEvent(toInsert[j]);

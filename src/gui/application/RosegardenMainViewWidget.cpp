@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -28,6 +28,7 @@
 #include "misc/ConfigGroups.h"
 #include "gui/application/TransportStatus.h"
 #include "base/AudioLevel.h"
+#include "base/ColourMap.h"
 #include "base/Composition.h"
 #include "base/Instrument.h"
 #include "base/InstrumentStaticSignals.h"
@@ -95,6 +96,7 @@
 #include <QTextStream>
 #include <QScrollBar>
 
+#include <array>
 #include <random>
 
 #include "gui/editors/parameters/MIDIInstrumentParameterPanel.h"
@@ -1333,8 +1335,9 @@ void RosegardenMainViewWidget::slotShowTempoRuler(bool v)
 
 void RosegardenMainViewWidget::slotShowChordNameRuler(bool v)
 {
-    if (v) m_trackEditor->getChordNameRuler()->show();
-    else   m_trackEditor->getChordNameRuler()->hide();
+    m_trackEditor->getChordNameRuler()->setVisible(v);
+    m_trackEditor->getExtantKeyLabel()->setVisible(v);
+    m_trackEditor->setExtantKeyLabel();
 }
 
 void RosegardenMainViewWidget::slotShowPreviews(bool v)
@@ -2166,9 +2169,44 @@ void RosegardenMainViewWidget::recolorSegmentsInstrument(bool defaultOnly,
         Instrument  *instrument = document->getStudio().
                                         getInstrumentById(instrumentId);
         if (!instrument) continue;
-        std::string programName(instrument->getProgramName());
 
-        if (instrument->getNaturalChannel() == 9) programName = "drums";
+#if 0   // This doesn't work (doesn't find first program change) but does
+        // change track name (not "track label") from "General MIDI Device #N"
+        // to default/unset "Acoustic Grand Piano".
+        instrument->pickFirstProgram(instrument->getNaturalChannel() == 9);
+#endif
+
+        std::string programName(instrument->getProgramName());
+        if (instrument->getNaturalChannel() == 9)
+            programName = "drums";
+
+        // Maybe this should always be done (see if program change in
+        // segment will reset whatever set initial Instrument::getProgramName()
+        if (programName.empty()) {
+            // Likely that instrument hasn't been set but will be
+            // via program change, so search for it.
+
+            // First see if is MIDI (otherwise program change meaningless).
+            MidiDevice *device = dynamic_cast<MidiDevice*>(  instrument
+                                                           ->getDevice());
+            if (!device) continue;
+
+            int programChange = -1;
+            for (auto const &event : *segment) {
+             // if (event->isa(ProgramChange::EventType))
+                if (event->has(ProgramChange::PROGRAM)) {
+                    programChange = event->get<Int>(ProgramChange::PROGRAM);
+                    break;
+                }
+            }
+            if (programChange != -1) {
+                const MidiProgram &program(device->getPrograms()[programChange]);
+                programName = program.getName();
+            }
+        }
+
+        if (programName.empty())
+            continue;  // Wasn't found be various methods above -- give up.
 
         // Remove all punctuation and convert to lowercase for lookup.
         std::string canonicalName;

@@ -5,7 +5,7 @@
     A sequencer and musical notation editor.
     Copyright 2000-2022 the Rosegarden development team.
     See the AUTHORS file for more details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -617,7 +617,7 @@ MidiFile::convertToRosegarden(const QString &filename, RosegardenDocument *doc)
     RG_DEBUG << "convertToRosegarden(): MIDI COMP SIZE = " << m_midiComposition.size();
 
     if (m_timingFormat == MIDI_TIMING_SMPTE) {
-        
+
         // If we have SMPTE timecode (i.e. seconds and frames, roughly
         // equivalent to RealTime timestamps) then we need to add any
         // tempo change events _first_ before we can do any conversion
@@ -639,7 +639,7 @@ MidiFile::convertToRosegarden(const QString &filename, RosegardenDocument *doc)
             // For each event
             for (MidiTrack::const_iterator midiEvent = m_midiComposition[i].begin();
                  midiEvent != m_midiComposition[i].end();
-                 ++midiEvent) {        
+                 ++midiEvent) {
                 if ((*midiEvent)->isMeta()) {
                     // If we have a set tempo meta-event
                     if ((*midiEvent)->getMetaEventCode() == MIDI_SET_TEMPO) {
@@ -786,7 +786,7 @@ MidiFile::convertToRosegarden(const QString &filename, RosegardenDocument *doc)
                 // header (stored as m_subframes, m_fps).  We need to
                 // go through a realtime -> musical time conversion
                 // for these, having added our tempo changes earlier
-                
+
                 rosegardenTime = composition.getElapsedTimeForRealTime(
                     RealTime::frame2RealTime(midiAbsoluteTime,
                                              m_fps * m_subframes));
@@ -832,8 +832,16 @@ MidiFile::convertToRosegarden(const QString &filename, RosegardenDocument *doc)
 
                 case MIDI_TEXT_EVENT: {
                     std::string text = midiEvent.getMetaMessage();
+#if 1   // t4os -- Seems to work anyway.
                     rosegardenEvent =
                             Text(text).getAsEvent(rosegardenTime);
+#else
+                    // Create as lyric by default rather than generic
+                    // RG text event. Most MIDI files have lyrics
+                    // as this, not MIDI_LYRIC.
+                    rosegardenEvent =
+                            Text(text, Text::Lyric).getAsEvent(rosegardenTime);
+#endif
                     break;
                 }
 
@@ -931,10 +939,28 @@ MidiFile::convertToRosegarden(const QString &filename, RosegardenDocument *doc)
                     if (denominator == 0)
                         denominator = 4;
 
+#if 0   // t4os
                     composition.addTimeSignature(
                             rosegardenTime,
                             TimeSignature(numerator, denominator));
+#else
+                    // Hack: Are seeing timesignatures at midiAbsoluteTime==1
+                    //   which  converts to rosegardenTime==2 (because
+                    //   rosegardenPPQ==960, midiFilePPQ==480, midiToRgTime==2)
+                    //   which then plays havoc with e.g.  marker ruler
+                    //   measures and matrix editor grid display.
+                    // Fix by requiring to align to at least an eight note
+                    //   (should really be aligned to measure, but would
+                    //   require keeping track of cumulative ticks, signatures,
+                    //   and measures).
+                    timeT adjustedTime = rosegardenTime;
+                    if (adjustedTime % (midiFilePPQ / 2) != 0)
+                        adjustedTime -= adjustedTime % (midiFilePPQ / 2);
 
+                    composition.addTimeSignature(
+                            adjustedTime,
+                            TimeSignature(numerator, denominator));
+#endif
                     break;
                 }
 

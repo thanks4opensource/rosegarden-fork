@@ -30,6 +30,7 @@ Contents</h2>
 <li><a href="#marker_ruler">Marker Ruler</a></li>
 <li><a href="#chord_key_ruler">Chord/Key Ruler (formerly &quot;Chord Name Ruler&quot;)</a></li>
 </ul></li>
+<li><a href="#Screenshots">Screenshots</a></li>
 <li><a href="#further_information">Further information</a></li>
 <li><a href="#future_work">Future work</a></li>
 </ul>
@@ -239,6 +240,8 @@ off-screen, late occurring notes exist.</li>
 <a href="#percussion_matrix_editor_unification">above</a>, most of the fork's
 features pertain to the Matrix Editor.</p>
 
+<p><a name="note_display"></a></p>
+
 <h5>Note display</h5>
 
 <p>There are multiple new options/modes for displaying notes.</p>
@@ -276,8 +279,9 @@ of note naming options. Some are are dependent on the composition's
 key at the time of the note, such as &quot;In-key scale degree&quot; (1-7
 plus sharps/flats), &quot;Movable-do solfege&quot; (do- or la-based), and
 &quot;In-key integers&quot; (12-tone). Others are key-independent: &quot;Concert
-pitch&quot; (standard letter names), &quot;Fixed-do solfege&quot;, and &quot;Integer&quot;
-(12-tone) (all with MIDI octave number), and raw MIDI note numbers.</p></li>
+pitch&quot; (standard letter names), &quot;Fixed-do solfege&quot;, &quot;Integer&quot;
+(12-tone) (all with MIDI octave number), velocity, and raw MIDI
+note numbers.</p></li>
 <li><p>If the Chord/Key Ruler is active and a note belongs to a chord, it
 can also be labeled with an optional suffix describing the note's
 function within the chord (enabling the suffix also automatically
@@ -499,14 +503,25 @@ beats, and inter-beat grid timing.</p></li>
 <li><p>Percussion &quot;notes&quot; are created on the nearest vertical
 measure/beat/grid line instead of the nearest earlier time (matches
 semantics that drum hits occur on the beat, not between beats).</p></li>
-<li><p>Display of key in effect at first visible measure (left side of
-matrix grid). Shown to left of Chord/Key ruler if active, or to
-left of Marker and Loop Rulers if not. Similar to printed sheet
-music (but not Rosegarden's notation editor) which has key
-signature at beginning of each staff and only small number of
-measures in each. Shows key when Chord/Key Ruler not active or
+</ul>
+
+<p><a name="extant_key"></a></p>
+
+<ul>
+<li><p>&quot;Extant key&quot; display of key in effect at first visible measure
+(left side of matrix grid). Shown to left of Chord/Key ruler if
+active, or to left of Marker and Loop Rulers if not. Similar to
+printed sheet music (but not Rosegarden's notation editor) which
+has key signature at beginning of each staff and only small number
+of measures in each. Shows key when Chord/Key Ruler not active or
 when no key change in currently displayed range of measures (e.g.
 canonical case of single key for entire composition).</p></li>
+<li><p>Mouse scrollwheel in main grid area, with None/Ctrl/Shift/Alt key
+modifiers, singly or in various combinations, allows all possible
+pan and zoom movements (vertical, horizontal, both),</p></li>
+<li><p>Matrix editor marker (timeline) ruler and note grid correctly
+update when time signature is inserted or removed, even if done
+externally in main window or notation editor.</p></li>
 <li><p>The vertical piano keyboard at the left of the Matrix Editor window
 more accurately aligns with the note grid.</p></li>
 </ul>
@@ -640,11 +655,15 @@ changes include:</p>
 <li><p>Greatly increased number/types of chords: Extended chords through
 13ths, augmented/suspended/sixth/altered chords, omit note chords,
 etc.</p></li>
+<li><p>Show chords, key changes, or both (only key changes in main
+window). Key changes overwrite chords -- hold middle button to
+temporarily hide.</p></li>
 <li><p>Right-click menu action to insert key change (at playback position)
 in matrix and notation editors. (Was previously only possible via
 unrelated &quot;Segment&quot; menu or using the Event List Editor.)</p></li>
 <li><p>Two different chord analysis modes: When notes on/off, or all notes
-in a specified time range (supports analyzing arpeggios as chords).</p></li>
+in a specified time range (supports analyzing arpeggios as chords).
+Can specify quantization time for notes on/off mode.</p></li>
 <li><p>Extensive user menu/preferences for chord naming (concert pitch
 letters, roman numeral scale degrees), (&quot;m&quot;/&quot;min&quot;, &quot;aug&quot;/&quot;+&quot;,
 &quot;maj7&quot;/triangle7), (minor chord roman numerals &quot;IIm&quot; vs &quot;ii&quot;), etc.</p></li>
@@ -671,6 +690,8 @@ generation). Does not overwrite existing text, so individual chords
 can be hand-edited as desired. Or multiple/all chords can be
 drag-selected and deleted, chord analysis options changed, and the
 new chords copied to text in the missing positions.</p></li>
+<li><p>&quot;Extant key&quot; label (see <a href="#extant_key">above</a>) displayed in main
+window if chord/key ruler enabled.</p></li>
 <li><p>Choice of flats or sharps in key of C major.</p></li>
 <li><p>Chord label to right of tick mark (formerly only for key changes).
 Rationale: Chords start at time and continue for their note's
@@ -705,6 +726,12 @@ sophisticated multi-file versioning isn't applicable, and the
 RCS/CVS &quot;diff&quot; approach is more effective than attempting to
 re-compress already compressed files.</p></li>
 <li><p>True unicode sharp and flat symbols instead of ASCII &quot;#&quot; and &quot;b&quot;.</p></li>
+<li><p>Auto-save does <em>not</em> remove &quot;dirty&quot; flag (&quot;*&quot; in window title bar
+indicating that changes have been made since last save). Prevents
+losing changes if exit without save (because no warning, because
+auto-save happened) if offer to restore auto-save at next startup
+is ignored. (Auto-save is additional safety, not replacement for,
+manual saving.)</p></li>
 <li><p>The playback time cursor vertical line's visibility has been
 increased in the main window and the matrix editor.</p></li>
 <li><p>Codebase cleanup, simplification, and rationalization. First steps
@@ -720,16 +747,127 @@ Further information</h2>
 and/or the official Rosegarden links listed
 <a href="#acknowledgment_and_motivation">above</a>.</p>
 
+<h2><br> <a name="Screenshots"></a>
+Screenshots</h2>
+
+<p>The following screenshots illustrate some of the fork's features,
+particularly ones that are missing or differ from those
+in <a href="https://github.com/tedfelix/rosegarden-official">rosegarden-official</a>.
+Note that the images are intended to illustrate a single feature
+each but several options and settings may vary between them in an
+attempt to best do so. The important point is that the features are
+orthogonal/independent and need not be used in the combinations shown.</p>
+
+<p>Click on any thumbnail to see the full-sized original screenshot.</p>
+
+<h4>Segment colors</h4>
+
+<p>For full documentation see <a href="#color">color</a>, above.</p>
+
+<p>The new &quot;bright when selected&quot; color mode:</p>
+
+<p><a href="./screenshots/selected_bright.png"><img src="./screenshots/thumbnails/selected_bright.png" alt="selected_bright" title="Selected bright" /></a></p>
+
+<p>compared to the classic official Rosegarden scheme:</p>
+
+<p><a href="./screenshots/selected_dark.png"><img src="./screenshots/thumbnails/selected_dark.png" alt="selected_dark" title="Selected dark" /></a></p>
+
+<p>The new option to automatically color segments by type of instrument
+(or alternately with random colors or a set chosen for maximum visual
+differentiation).</p>
+
+<p><a href="./screenshots/instrument_colors.png"><img src="./screenshots/thumbnails/instrument_colors.png" alt="instrument_colors" title="Instrument Colors" /></a></p>
+
+<h4>Unified matrix/percussion editor</h4>
+
+<p>For full documentation see <a href="#percussion_matrix_editor_unification">matrix/percussion editor unification</a>, above.</p>
+
+<p>The single main window button to bring up the matrix editor:</p>
+
+<p><a href="./screenshots/unified_matrix_editor.png"><img src="./screenshots/thumbnails/unified_matrix_editor.png" alt="unified_matrix_editor" title="Unified Matrix Editor" /></a></p>
+
+<p>The new unified matrix editor simultaneously/correctly displaying
+percussion segment &quot;notes&quot; vs normal, pitched instrument notes:</p>
+
+<p><a href="./screenshots/percussion.png"><img src="./screenshots/thumbnails/percussion.png" alt="percussion" title="Percussion and normal segments" /></a></p>
+
+<h4>Looop ruler and matrix editor tools</h4>
+
+<p>For full documentation see <a href="#loop_ruler">loop ruler</a> and <a href="#features_in_all_tools">features in all editing tools</a>, above.</p>
+
+<p>Loop ruler showing loop range in green, times before/after in brown/blue, plus matrix tools right-click menu:</p>
+
+<p><a href="./screenshots/loop_ruler.png"><img src="./screenshots/thumbnails/loop_ruler.png" alt="loop_ruler" title="Loop ruler" /></a></p>
+
+<h4>Matrix editor note labeling and coloring options</h4>
+
+<p>For full documentation see <a href="#note_display">note display</a>, above.</p>
+
+<p>Notes with concert pitch letter names, colored by segment:</p>
+
+<p><a href="./screenshots/notes_letter_names.png"><img src="./screenshots/thumbnails/notes_letter_names.png" alt="notes_letter_names" title="Letter names" /></a></p>
+
+<p>Notes labeled with key/scale degree, colored by segment:</p>
+
+<p><a href="./screenshots/notes_scale_degrees.png"><img src="./screenshots/thumbnails/notes_scale_degrees.png" alt="notes_scale_degrees" title="Scale degree notes" /></a></p>
+
+<p>Notes labeled (and colored) with key-relative pitch:</p>
+
+<p><a href="./screenshots/pitch_colors.png"><img src="./screenshots/thumbnails/pitch_colors.png" alt="pitch_colors" title="Scale degree notes" /></a></p>
+
+<p>Notes labeled and colored with MIDI velocity:</p>
+
+<p><a href="./screenshots/velocity_colors_and_labels.png"><img src="./screenshots/thumbnails/velocity_colors_and_labels.png" alt="velocity_colors_and_labels" title="Velocity notes" /></a></p>
+
+<h4>Chord/key ruler features</h4>
+
+<p>For full documentation see <a href="#chord_key_ruler">chord/key ruler</a>, above.</p>
+
+<p>Chord analysis can be limited to notes from a subset of the displayed segments:</p>
+
+<p><a href="./screenshots/chord_note_segments.png"><img src="./screenshots/thumbnails/chord_note_segments.png" alt="chord_note_segments" title="Active chord analysis segments" /></a></p>
+
+<p>Various chord analysis/naming options ...</p>
+
+<p>Concert pitch letter names:</p>
+
+<p><a href="./screenshots/concert_pitch_chords.png"><img src="./screenshots/thumbnails/concert_pitch_chords.png" alt="concert_pitch_chords" title="Concert pitch chord names" /></a></p>
+
+<p>In-key roman numerals:</p>
+
+<p><a href="./screenshots/roman_numeral_chords.png"><img src="./screenshots/thumbnails/roman_numeral_chords.png" alt="roman_numeral_chords" title="Roman numeral chord names" /></a></p>
+
+<h4>Marker ruler enhancements</h4>
+
+<p>For full documentation see <a href="#marker_ruler">marker ruler</a>, above.</p>
+
+<p>Creating a new marker:</p>
+
+<p><a href="./screenshots/insert_marker.png"><img src="./screenshots/thumbnails/insert_marker.png" alt="insert_marker" title="Insert marker" /></a></p>
+
+<p>Jumping to a marker and/or editing markers:</p>
+
+<p><a href="./screenshots/markers.png"><img src="./screenshots/thumbnails/markers.png" alt="markers" title="Manage markers" /></a></p>
+
+<h4>Matrix editor panner &quot;fit notes&quot;</h4>
+
+<p>Automatic zoom/pan of matrix grid. For full documentation see <a href="#matrix_editor_panner_features">matrix
+editor panner features</a>, above.</p>
+
+<p><a href="./screenshots/fit_notes.png"><img src="./screenshots/thumbnails/fit_notes.png" alt="fit_notes" title="Fit visible notes" /></a></p>
+
 <h2><br> <a name="future_work"></a>
 Future work</h2>
 
 <ul>
-<li>Additional matrix editor note color mode: Notes colored by pitch
-class (all C notes one color, all D notes another, etc, regardless
-of octave).</li>
 <li>&quot;See-thru&quot; matrix editor notes for View -&gt; Notes -&gt; Color -&gt;
 Segment mode to show mulitple notes at same pitch from different
 segments/instruments (&quot;doubled&quot; notes).</li>
+<li>Replace current main window &quot;Segment Parameters, Color&quot; chooser
+with Qt QColorDialog and internal indexed ColourMap class with
+direct Qt QColor RGB (or other, more generalized) (16 bit or float
+values, better color space) values. May require revving &quot;.rg&quot;
+file format.</li>
 <li>User remapping of MIDI percussion notes to vertical position in
 matrix editor grid and notation editor staves. Would allow
 grouping of percussion instruments together and placement (in
@@ -764,4 +902,7 @@ longer (half, whole) notes, display as 4x quarter note width. If
 has shorter notes (eighth and/or below), scale horizontally so
 shortest note is same width as canonical measure's quarter note.
 Similar to standard notation (and notation editor).</li>
+<li>Add text/lyric ruler for viewing/editing lyrics (or more generic
+Rosegarden text events) in matrix editor (and optionally notation
+editor).</li>
 </ul>

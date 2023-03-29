@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -33,6 +33,7 @@
 #include "IsotropicTextItem.h"
 
 #include "base/BaseProperties.h"
+#include "base/ConflictingKeyChanges.h"
 #include "base/NotationRules.h"
 #include "base/RulerScale.h"
 #include "base/Selection.h"
@@ -63,6 +64,7 @@
 #include <QPointF>
 #include <QRectF>
 #include <QSettings>
+
 
 #if 0  // Failed experiments to use Alt or Tab for alternate tool switching
 // Not defined in any Qt header file.
@@ -97,32 +99,29 @@ MatrixScene::MatrixScene() :
     m_resolution(8),
     m_selection(nullptr),
     m_highlightType(HT_BlackKeys),
-    m_keySignaturesChanged(true)
+    m_notesChanged(false),
+    m_keysChanged(false),
+    m_currentSegmentKeysChanged(false),
+    m_segmentChanged(false),
+    m_timeSignatureChanged(false)
 {
-#if 1   // t4os
-    connect(CommandHistory::getInstance(), &CommandHistory::commandExecuted,
-            this, &MatrixScene::slotCommandExecuted);
-#else  // Respond to finer-grained signals instead.
-       // Canonical problem is that then need individual signals for every
-       //   command of interest.
+    connect(CommandHistory::getInstance(),
+            &CommandHistory::commandExecuted,
+            this,
+            &MatrixScene::slotCommandExecuted);
     connect(RosegardenDocument::currentDocument,
             &RosegardenDocument::notesTied,
             this,
-            &MatrixScene::slotNotesTied);
+            &MatrixScene::slotNotesTiedUntied);
     connect(RosegardenDocument::currentDocument,
             &RosegardenDocument::notesUntied,
             this,
-            &MatrixScene::slotNotesUntied);
-#endif
-
+            &MatrixScene::slotNotesTiedUntied);
     connect(RosegardenMainWindow::self(),
             &RosegardenMainWindow::midiOctaveOffsetChanged,
             this,
-            [this](){updateAllSegments(false);});
-    connect(RosegardenDocument::currentDocument,
-            &RosegardenDocument::keySignaturesChanged,
-            this,
-            &MatrixScene::slotKeySignaturesChanged);
+            [this](){updateNotes(UpdateNotes::FORCE,      // update labels
+                                 UpdateNotes::FORCE);});  // update colors
 
 #if 0  // Failed experiments to use Alt or Tab for alternate tool switching
     qt_set_sequence_auto_mnemonic(false);
@@ -185,6 +184,42 @@ MatrixScene::setSegments(RosegardenDocument *document,
     if (m_document && document != m_document) {
         m_document->getComposition().removeObserver(this);
         m_observerAdded = false;
+    }
+
+    for (Segment *segment : segments) {
+        // See m_isPercussion in Segment.h
+        // Need this crap because can't do true initialization.
+        // Calls non-const version which does the initialization and
+        //   allows all subsequent uses to use const version.
+        segment->isPercussion();
+
+#if 0   // t4os: No longer needed.
+        //
+        // Ensure that all segments have a key change at their starting time.
+        // Simplifies and makes safer various ChordNameRuler and
+        // ConflictingKeyChanges associated processes.
+
+        bool needDefaultKeyAtSegmentStart = true;
+        for (auto event : *segment) {
+            if (event->getAbsoluteTime() > segment->getStartTime())
+                break;
+            else if (event->isa(Key::EventType)) {
+                needDefaultKeyAtSegmentStart = false;
+                break;
+            }
+        }
+
+        if (needDefaultKeyAtSegmentStart) {
+            Key cMajor; // default is C major
+            segment->insert(cMajor.getAsEvent(segment->getStartTime()));
+        }
+#endif
+        connect(segment, &Segment    ::noteAddedOrRemoved,
+                this,    &MatrixScene::slotNoteAddedOrRemoved);
+        connect(segment, &Segment    ::noteModified,
+                this,    &MatrixScene::slotNoteModified);
+        connect(segment, &Segment    ::keyAddedOrRemoved,
+                this,    &MatrixScene::slotKeyAddedOrRemoved);
     }
 
     m_document = document;
@@ -272,7 +307,8 @@ MatrixScene::setSegments(RosegardenDocument *document,
 
         MatrixViewSegment *vs = new MatrixViewSegment(this,
                                                       m_segments[i],
-                                                      drumMode);
+                                                      drumMode,
+                                                      i);
 
         (void)vs->getViewElementList(); // make sure it has been created
         m_viewSegments.push_back(vs);
@@ -291,7 +327,7 @@ MatrixScene::setSegments(RosegardenDocument *document,
     }
 
     recreateLines();
-}
+}  // setSegments();
 
 Segment *
 MatrixScene::getCurrentSegment()
@@ -306,23 +342,82 @@ MatrixScene::getCurrentSegment()
 void
 MatrixScene::setCurrentSegment(const Segment* const segment)
 {
-    // t4os -- why does this have to be done?
-    // Unset old current segment
-    updateCurrentSegment(false);  // !isCurrent
+    // Abort if same as current segment.
+    const Segment* const previousSegment = getCurrentSegment();
+#ifndef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    if (previousSegment == segment) return;
+#endif
 
-    for (int i = 0; i < int(m_segments.size()); ++i) {
-        if (m_segments[i] == segment) {
-            m_currentSegmentIndex = i;
-            updateCurrentSegment(true);  // isCurrent
-            break;
-        }
+    int segmentIndex = findSegmentIndex(segment);
+#ifndef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    if (segmentIndex == -1) return;
+#endif
+
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "MatrixScene::setCurrentSegment()  segs/conflicts:"
+             << m_widget->conflictingKeyChanges()->numSegments()
+             << m_widget->conflictingKeyChanges()->numConflicts()
+             << "\n  was:"
+             << static_cast<const void*>(previousSegment)
+             << (previousSegment ? previousSegment->getLabel() : "<nullptr>")
+             << "\n  new:"
+             << static_cast<const void*>(segment)
+             << (segment ? segment->getLabel() : "<nullptr>");
+
+    if (previousSegment == segment || segmentIndex == -1) return;
+#endif
+
+    // Unset old current segment -- unsets "current" on segment's
+    //   MatrixElement notes to update (change note color, selected/unselected).
+    // Must do this before m_currentSegmentIndex = segmentIndex
+    updateCurrentSegment(false);     // false == is not current segment
+
+    // This is how the current segment is stored.
+    // Replace with a new Segment *m_currentSegment member and when
+    //   and index is needed (e.g. for accessing correct
+    //   m_viewSegments[ndx]) use findSegmentIndex().
+    // Accessing current segment far more frequent than above, so
+    //   makes sense to have inline getCurrentSegment() simply
+    //   returning m_currentSegment instead of accessing
+    //   m_segments[m_currentSegmentIndex] along with check
+    //   for validity.
+    // Validity check can be done at entrance here with std::find()
+    //   in m_segments[]. Should never fail, but even doing check
+    //   is less frequent here than in getCurrentSegment().
+    m_currentSegmentIndex = segmentIndex;
+
+    updateCurrentSegment(true);  // true == is current segment
+
+    if (!m_widget) return;  // Safety check, can't happen.
+    m_widget->clearSelection();
+
+    if (segment->isPercussion() != previousSegment->isPercussion())
+        m_widget->generatePitchRuler();
+
+    m_widget->updateToCurrentSegment(segment);
+
+    ChordNameRuler *chordNameRuler = m_widget->chordNameRuler();
+    const ConflictingKeyChanges   *conflictingKeyChanges
+                                = m_widget->conflictingKeyChanges();
+
+    if (chordNameRuler)  // safety check, should never fail
+        chordNameRuler->setCurrentSegment(segment);
+
+    if (   conflictingKeyChanges  // safety check, should never fail
+        && conflictingKeyChanges->areConflicting(segment, previousSegment)) {
+        // Knows whether analysis is required by current mode.
+        chordNameRuler->analyzeChords();
+        // UpdateNotes::CHECK for note labels uses
+        // MatrixWidget::needUpdateNoteLabels() which
+        // returns true if not MatrixWidget::ChordSpellingType::OFF
+        // (if showing note names) which isn't applicable in this case,
+        // so do own decision here.
+        updateNotes(    m_widget->getShowNoteNames()
+                     && m_widget->notesAreKeyDependent() ? UpdateNotes::FORCE
+                                                         : UpdateNotes::NEVER,
+                    UpdateNotes::CHECK);
     }
-
-    if (m_widget && m_widget->getChordNameRuler())
-          m_widget
-        ->getChordNameRuler()
-        ->setCurrentSegment(segment, false);  // false == recalc only if needed
-}
+}  // setCurrentSegment()
 
 Segment *
 MatrixScene::getPriorSegment()
@@ -590,31 +685,22 @@ MatrixScene::recreateKeyHighlights()
     Segment *segment = getCurrentSegment();
     if (!segment) return;
 
-    const ChordNameRuler *chordNameRuler = m_widget->getChordNameRuler();
-    if (!chordNameRuler || !chordNameRuler->isVisible())
-        chordNameRuler = nullptr;
-
     m_widget->getPanned()->setBackgroundBrush(QColor(128, 128, 128));
 
     timeT k0, k1, endTime;
-    if (chordNameRuler) {
-        k1 = k0 = m_document->getComposition().getMinSegmentStartTime();
-        endTime = m_document->getComposition().getMaxSegmentEndTime();
-    }
-    else {
-        k1 = k0 = segment->getClippedStartTime();
-        endTime = segment->getEndMarkerTime(true);
-    }
+    k0      = segment->getClippedStartTime();
+    endTime = segment->getEndMarkerTime(true);
+
+    auto &keysMap(segment->keySignatureMap());   // must be auto&
+    auto  keyIter(segment->getKeySignatureIterAtTime(k0));
 
     int i = 0;
     while (k0 < endTime) {
-        Rosegarden::Key key;
-        if (chordNameRuler) key = chordNameRuler->keyAtTime(k0);
-        else                key =        segment->getKeyAtTime(k0);
-
         // offset the highlights according to how far this key's tonic pitch is
         // from C major (0)
-        int offset = key.getTonicPitch();
+        int offset = (  keyIter == keysMap.end()
+                      ? 0
+                      : keyIter->second.getTonicPitch());
 
         // correct for segment transposition, moving representation the opposite
         // of pitch to cancel it out (C (MIDI pitch 0) in Bb (-2) is concert
@@ -627,16 +713,6 @@ MatrixScene::recreateKeyHighlights()
         offset -= correction;
         offset += 12;
         offset %= 12;
-
-        if (chordNameRuler)
-            k1 = chordNameRuler->getNextKeyTime(k0);
-        else if (!segment->getNextKeyTime(k0, k1))
-            k1 = segment->getEndMarkerTime(true); // true == clip to composition
-
-        if (k0 == k1) break;
-
-        double x0 = m_scale->getXForTime(k0);
-        double x1 = m_scale->getXForTime(k1);
 
         // calculate the highlights relative to C major, plus offset
         // (I think this enough to do the job.  It passes casual tests.)
@@ -651,7 +727,21 @@ MatrixScene::recreateKeyHighlights()
                                                QColor(224, 224, 224),
                                                QColor(224, 224, 224)};
 
-        const int *hsteps = key.isMinor() ? minorSteps : majorSteps;
+        const int *hsteps;
+
+        if (keyIter == keysMap.end()) {
+            hsteps = majorSteps;
+            k1     = endTime;
+        }
+        else {
+            hsteps = (keyIter->second.isMinor() ? minorSteps : majorSteps);
+
+            if (++keyIter == keysMap.end()) k1 = endTime;
+            else                            k1 = keyIter->first;
+        }
+
+        double x0 = m_scale->getXForTime(k0);
+        double x1 = m_scale->getXForTime(k1);
 
         for (int j = 0; j < HCOUNT; ++j) {
             QColor color(colors[j]);
@@ -692,7 +782,7 @@ MatrixScene::recreateKeyHighlights()
         m_highlights[i]->hide();
         ++i;
     }
-}
+}  // recreateKeyHighlights()
 
 void
 MatrixScene::recreateTriadHighlights()
@@ -792,7 +882,7 @@ MatrixScene::recreateTriadHighlights()
         m_highlights[i]->hide();
         ++i;
     }
-}
+}  // recreateTriadHighlights()
 
 void
 MatrixScene::recreateBlackkeyHighlights()
@@ -851,7 +941,7 @@ MatrixScene::recreateBlackkeyHighlights()
         m_highlights[i]->hide();
         ++i;
     }
-}
+}  // recreateBlackkeyHighlights()
 
 void
 MatrixScene::recreatePitchHighlights()
@@ -910,7 +1000,7 @@ MatrixScene::recreatePitchHighlights()
         }
 
     update();
-}
+}  // recreatePitchHighlights()
 
 void MatrixScene::setMouseEventElement(MatrixMouseEvent &mme)
 const
@@ -1268,17 +1358,80 @@ MatrixScene::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *e)
 void
 MatrixScene::slotCommandExecuted()
 {
-    checkUpdate();
-}
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "\nMatrixScene::slotCommandExecuted()"
+             << CommandHistory::getInstance()->lastCommandExecuted()
+             << "\n "
+             << (  CommandHistory::getInstance()->commandIsExecuting()
+                 ? "COMMAND" : "!command")
+             << (  CommandHistory::getInstance()->macroCommandIsExecuting()
+                 ? "MACRO" : "!macro")
+             << (m_notesChanged ? "NOTES" : "!notes")
+             << (m_keysChanged ? "KEYS" : "!keys")
+             << (m_currentSegmentKeysChanged ? "CURKEYS" : "!curKeys")
+             << (m_segmentChanged ? "SEGMENT" : "!segment")
+             << (m_timeSignatureChanged ? "TIMESIG" : "!timesig");
+#endif
+
+    // Have to check this for when editor being closed.
+    if (m_segments.empty())
+        return;
+
+    if (   m_notesChanged
+        || m_keysChanged
+        || m_segmentChanged
+        || m_timeSignatureChanged) {
+
+        if (m_timeSignatureChanged)
+            m_widget->updateStandardRulers();
+
+        // Doesn't do if not visible
+        m_widget->chordNameRuler()->analyzeChords();
+
+        checkUpdate();
+
+        if (   (m_keysChanged && m_highlightType != HT_BlackKeys)
+            || m_segmentChanged
+            || m_timeSignatureChanged)
+            recreateLines();  // also does recreatePitchHighlights()
+
+        if (m_keysChanged || m_notesChanged)
+            updateNotes(UpdateNotes::CHECK,   // labels
+                        UpdateNotes::CHECK);  // colors
+
+        if (m_currentSegmentKeysChanged)
+            m_widget->setExtantKeyLabel();
+
+          m_notesChanged
+        = m_keysChanged
+        = m_currentSegmentKeysChanged
+        = m_segmentChanged
+        = m_timeSignatureChanged
+        = false;
+    }
+}  // commandExecuted()
 
 void
 MatrixScene::checkUpdate()
 {
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "MatrixScene::checkUpdate(): "
+             << m_viewSegments.size()
+             << "view segments";
+#endif
+
     bool updateSelectionElementStatus = false;
 
     for (unsigned int i = 0; i < m_viewSegments.size(); ++i) {
-
         SegmentRefreshStatus &rs = m_viewSegments[i]->getRefreshStatus();
+
+#if 0  // #ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+        qDebug() << "MatrixScene::checkUpdate() refresh"
+                 << (rs.needsRefresh() ? "needs" : "unchanged")
+                 << rs.from()
+                 << "->"
+                 << rs.to();
+#endif
 
         if (rs.needsRefresh()) {
             // Refresh the required range.
@@ -1287,8 +1440,9 @@ MatrixScene::checkUpdate()
             m_viewSegments[i]->updateElements(rs.from(), rs.to());
 
             if (!updateSelectionElementStatus && m_selection) {
-                updateSelectionElementStatus =
-                    (m_viewSegments[i]->getSegment() == m_selection->getSegment());
+                  updateSelectionElementStatus
+                = (   m_viewSegments[i]->getSegment()
+                   == m_selection->getSegment());
             }
         }
 
@@ -1298,16 +1452,6 @@ MatrixScene::checkUpdate()
     if (updateSelectionElementStatus) {
         setSelectionElementStatus(m_selection, true);
     }
-}
-
-// This is invoked from Composition::addObserver() notifications
-// and/or by MatrixViewSegment::endMarkerTimeChanged() (in turn
-// invoked from notifications).
-void
-MatrixScene::segmentEndMarkerTimeChanged(const Segment *, bool)
-{
-    MATRIX_DEBUG << "MatrixScene::segmentEndMarkerTimeChanged";
-    recreateLines();
 }
 
 // This is invoked from Composition::addObserver() notifications.
@@ -1325,9 +1469,6 @@ MatrixScene::segmentRemoved(const Composition *, Segment *removedSegment)
     if (removedSegmentIndex == -1)
         return;
 
-    if (m_widget && m_widget->getChordNameRuler())
-        m_widget->getChordNameRuler()->removeSegment(removedSegment);
-
     // If we're about to remove the one they are looking at and
     // there is another to switch to...
     if (removedSegmentIndex == static_cast<int>(m_currentSegmentIndex) &&
@@ -1341,14 +1482,17 @@ MatrixScene::segmentRemoved(const Composition *, Segment *removedSegment)
         if (newSegmentIndex == m_segments.size())
             newSegmentIndex = m_currentSegmentIndex - 1;
         setCurrentSegment(m_segments[newSegmentIndex]);
-
-        if (m_widget) {
-            // true == set instrument playback override
-            m_widget->updateToCurrentSegment(true);
-        }
     }
 
-    emit segmentDeleted(removedSegment);
+    // Must do after setCurrentSegment()
+    if (m_widget) {  // all safety checks, shouldn't ever fail
+        if (m_widget->chordNameRuler())
+              m_widget
+            ->chordNameRuler()
+            ->removeSegment(const_cast<Segment*>(removedSegment));
+    }
+
+    emit segmentDeleted(const_cast<Segment*>(removedSegment));
 
     delete m_viewSegments[removedSegmentIndex];
     m_viewSegments.erase(m_viewSegments.cbegin() + removedSegmentIndex);
@@ -1399,7 +1543,10 @@ MatrixScene::trackChanged(const Composition *composition, Track *track)
     }
 
     if (currentSegmentChanged) {
-        if (trackDrumChanged) m_widget->generatePitchRuler();
+        if (trackDrumChanged) {
+            m_widget->generatePitchRuler();
+            recreatePitchHighlights();
+        }
 
         // Don't need to call MatrixWidget::updateToCurrent(true)
         // because that sets current instrument playback (with "true"
@@ -1408,49 +1555,112 @@ MatrixScene::trackChanged(const Composition *composition, Track *track)
         // doing normal (not override) setting of instrument playback.
         m_widget->setSegmentTrackInstrumentLabel(currentSegment);
     }
-}
 
+    if (trackDrumChanged)
+        m_widget->chordNameRuler()->resetPercussionSegments();
+}  // trackChanged()
+
+// This method is invoked from Composition::addObserver() notifications
+// when a segment is moved from one track to another.
 void MatrixScene::segmentTrackChanged(
 const Composition* /*composition*/,
 Segment *segment,
 TrackId /*trackId*/)
 {
-    // Only care if need to update current segment
-    if (segment == getCurrentSegment()) {
-        // true == set instrument souind
-        m_widget->updateToCurrentSegment(true, segment);
-        // Segment might have moved from pitched to drum track or vice-versa
-        m_widget->generatePitchRuler();
+    // Find MatrixViewSegment* for this Segment* and check if
+    // percussion has changed.
+    for (auto viewSegment : m_viewSegments) {
+        if (&viewSegment->getSegment() == segment)
+            if (viewSegment->isDrumMode() != segment->isPercussion()) {
+                // Changed, so update.
+                viewSegment->setDrumMode(segment->isPercussion());
+                m_widget->chordNameRuler()->resetPercussionSegments();
+                m_widget->generatePitchRuler();
+                recreatePitchHighlights();
+                break;  // can only "== segment" once
+            }
     }
+
+    // Don't need to do anything else because being invoked from main
+    // window, and any updates to current instrument playback, etc.
+    // occur when matrix gets focus back.
+
+}  // MatrixScene::segmentTrackChanged(()
+
+// This method is invoked from Composition::addObserver() notifications
+// when a time signature is added or removed.
+void
+MatrixScene::timeSignatureChanged(const Composition*)
+{
+    m_timeSignatureChanged = true;
 }
 
 void
-MatrixScene::handleEventAdded(Event *e)
+MatrixScene::slotNoteAddedOrRemoved(
+const Segment   *segment,
+      Event     *event,
+      bool       added)
 {
-    if (e->getType() == Rosegarden::Key::EventType) {
-        recreatePitchHighlights();
-    }
+    m_widget->chordNameRuler()->slotNoteAddedOrRemoved(segment, event, added);
+    m_notesChanged = true;
 }
 
 void
-MatrixScene::handleEventRemoved(Event *e)
+MatrixScene::slotNoteModified(
+const Segment   *segment,
+const Event     *event)
 {
-    if (m_selection && m_selection->contains(e))
-        m_selection->removeEvent(e);
+    m_widget->chordNameRuler()->slotNoteModified(segment, event);
+    m_notesChanged = true;
+}
 
-    // we can not use e here (already deleted) but if it was a
-    // Rosegarden::Key::EventType we must recreatePitchHighlights
+void
+MatrixScene::slotKeyAddedOrRemoved(
+const Segment   *segment,
+      Event     *event,
+      bool       added)
+{
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "MatrixScene::slotKeyAddedOrRemoved()"
+             << "\n "
+             << (segment ? segment->getLabel() : "<nullptr>")
+             << (added ? "added" : "removed");
+#endif
 
-    recreatePitchHighlights();
+    m_widget->chordNameRuler()->slotKeyAddedOrRemoved(segment, event, added);
 
-    // ??? Oddly, this causes refresh failures that leave deleted notes
-    //     up on the display (only when doing toolbar undo!?).  Removing
-    //     it seems to result in solid and correct updates in all cases.
-    //     Why?!  See discussion on mailing list early June 2022.
-    //update();
+    // Don't unset once set (for if changes keys in multiple segments)
+    m_currentSegmentKeysChanged =    m_currentSegmentKeysChanged
+                                  || (segment == getCurrentSegment());
+    m_keysChanged = true;
 
-    // Notify MatrixToolBox.
-    emit eventRemoved(e);
+    if (!added) {
+        if (m_selection && m_selection->contains(event))
+            m_selection->removeEvent(event);
+        emit eventRemoved(event);  // Notify MatrixToolBox.
+    }
+}
+
+// From SegmentObserver notification, forwarded from MatrixViewSegment
+// (Or from Composition::addObserver() notifications??)
+void
+MatrixScene::handleSegmentEndMarkerTimeChanged(
+const Segment *segment,
+bool           shortened)
+{
+    m_widget->chordNameRuler()->endMarkerTimeChanged(segment, shortened);
+    m_segmentChanged = true;
+}
+
+// From SegmentObserver notification, forwarded from MatrixViewSegment
+// (Or from Composition::addObserver() notifications??)
+void
+MatrixScene::handleSegmentStartChanged(
+const Segment *segment,
+timeT          time)
+{
+    m_widget->chordNameRuler()->startChanged(segment, time);
+    m_segmentChanged = true;
 }
 
 void
@@ -1598,13 +1808,7 @@ MatrixScene::updateCurrentSegment(bool isCurrent)
 
     MatrixViewSegment *vs = getCurrentViewSegment();
     if (vs) {
-        ViewElementList *vel = vs->getViewElementList();
-        for (ViewElementList::const_iterator j = vel->begin();
-                 j != vel->end(); ++j) {
-            MatrixElement *mel = dynamic_cast<MatrixElement *>(*j);
-            if (!mel) continue;
-            mel->setCurrent(isCurrent);
-        }
+        vs->setNotesCurrentSegment(isCurrent);
         emit currentViewSegmentChanged(m_viewSegments[m_currentSegmentIndex]);
     }
 
@@ -1731,27 +1935,55 @@ MatrixScene::setVerticalZoomFactor(double factor)
 }
 
 void
-MatrixScene::updateAllSegments(bool onlyPercussion)
+MatrixScene::updateNotes(
+const UpdateNotes checkIfLabelsNeeded,
+const UpdateNotes checkIfColorsNeeded)
 {
-    for (std::vector<MatrixViewSegment *>::iterator i = m_viewSegments.begin();
-         i != m_viewSegments.end(); ++i) {
-        if (onlyPercussion && !(*i)->isDrumMode()) {
-            continue;
-        }
-        (*i)->updateAll();
+    // true if FORCE, false if NEVER, will get changed correctly if CHECK
+    bool needLabelUpdate = (checkIfLabelsNeeded == UpdateNotes::FORCE),
+         needColorUpdate = (checkIfColorsNeeded == UpdateNotes::FORCE);
+
+    if (m_widget) {  // safety check, can't be nullptr
+        if (checkIfLabelsNeeded == UpdateNotes::CHECK)
+            needLabelUpdate = m_widget->needUpdateNoteLabels();
+        if (checkIfColorsNeeded == UpdateNotes::CHECK)
+            needColorUpdate = m_widget->needUpdateNoteColors();
     }
-}
+
+#ifdef CHORD_NAME_RULER_AND_CONFLICTING_KEY_CHANGES_DEBUG
+    qDebug() << "MatrixScene::updateNotes() labels:"
+             << (  checkIfLabelsNeeded == UpdateNotes::CHECK ? "CHECK"
+                 : checkIfLabelsNeeded == UpdateNotes::FORCE ? "FORCE"
+                 : checkIfLabelsNeeded == UpdateNotes::NEVER ? "NEVER"
+                 :                                             "?????")
+             << " colors:"
+             << (  checkIfColorsNeeded == UpdateNotes::CHECK ? "CHECK"
+                 : checkIfColorsNeeded == UpdateNotes::FORCE ? "FORCE"
+                 : checkIfColorsNeeded == UpdateNotes::NEVER ? "NEVER"
+                 :                                             "?????")
+             << " need:"
+             << (needLabelUpdate     ? "label" : "-")
+             << (needColorUpdate     ? "color" : "-");
+#endif
+
+    if (needLabelUpdate)
+        for (auto &viewSegment : m_viewSegments)
+            viewSegment->updateNoteLabels();
+    if (needColorUpdate)
+        for (auto &viewSegment : m_viewSegments)
+            viewSegment->updateNoteColors();
+}  // MatrixScene::updateNotes()
 
 void
-MatrixScene::slotNotesTied(
-const EventContainer &notes)
+MatrixScene::updatePercussionNotes()
 {
-    MatrixViewSegment *viewSegment = getCurrentViewSegment();
-    if (viewSegment) viewSegment->updateTiedUntied(notes);
+    for (auto &viewSegment : m_viewSegments)
+        if (viewSegment->isDrumMode())
+            viewSegment->reconfigureNotes();
 }
 
 void
-MatrixScene::slotNotesUntied(
+MatrixScene::slotNotesTiedUntied(
 const EventContainer &notes)
 {
     MatrixViewSegment *viewSegment = getCurrentViewSegment();
@@ -1761,57 +1993,25 @@ const EventContainer &notes)
 void
 MatrixScene::updateNoteLabels()
 {
-    m_keySignaturesChanged = true;
-    updateAllSegments();
-    m_keySignaturesChanged = false;
+    for (auto &viewSegment : m_viewSegments)
+        viewSegment->updateNoteLabels();
 }
 
 void
-MatrixScene::slotKeySignaturesChanged()
+MatrixScene::updateNoteColors()
 {
-    // Do *not* call (or do similar internally) updateNoteLabels()
-    // as that gets triggered independently.
-
-    if (m_highlightType == HT_Key)
-        recreateKeyHighlights();
-
-    if (    m_widget
-        &&  m_widget->getChordNameRuler()
-        && !m_widget->getChordNameRuler()->isVisible()
-        &&  m_widget->needUpdateNoteLabels()
-        &&  m_widget->getChordNameRuler()->conflictingKeyChanges())
-        updateNoteLabels();
+    for (auto &viewSegment : m_viewSegments)
+        viewSegment->updateNoteColors();
 }
 
-void
-MatrixScene::updateAllSegmentsColors()
-{
-    for (std::vector<MatrixViewSegment *>::iterator i = m_viewSegments.begin();
-         i != m_viewSegments.end(); ++i) {
-        (*i)->updateAllColors();
-    }
-}
-
-void
-MatrixScene::updateCurrentSegmentNames()
-{
-    if (!m_viewSegments.empty()) {
-        setKeySignaturesChanged(true);
-        m_viewSegments[m_currentSegmentIndex]->updateAll();
-        setKeySignaturesChanged(false);
-    }
-}
 
 int
 MatrixScene::findSegmentIndex(const Segment *segment) const
 {
-    for (int i = 0; i < static_cast<int>(m_segments.size()); ++i) {
-        if (m_segments[i] == segment)
-            return i;
-    }
-
-    // Not found.
-    return -1;
+    auto iter = std::find(m_segments.cbegin(), m_segments.cend(), segment);
+    return   iter == m_segments.cend()
+           ? -1
+           : iter - m_segments.cbegin();
 }
 
-}
+}   // namespace Rosegarden

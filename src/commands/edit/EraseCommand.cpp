@@ -3,11 +3,12 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
- 
+    Copyright 2000-2023 the Rosegarden development team.
+    Copyright (c) 2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
- 
+
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2 of the
@@ -19,11 +20,12 @@
 
 #include "EraseCommand.h"
 
-#include "misc/Debug.h"
 #include "base/NotationTypes.h"
 #include "base/Selection.h"
 #include "base/BaseProperties.h"
+#include "document/RosegardenDocument.h"
 #include "gui/editors/notation/NotationProperties.h"
+#include "misc/Debug.h"
 
 
 namespace Rosegarden
@@ -32,13 +34,16 @@ namespace Rosegarden
 
 EraseCommand::EraseCommand(
         EventSelection *selection1,
-        EventSelection *selection2) :
+        EventSelection *selection2
+    ) :
     BasicCommand(tr("&Erase"),
                  selection1 ? *selection1 : *selection2,  // assume both selections are in the same Segment
                  true),  // bruteForceRedo
     m_selection1(selection1),
     m_selection2(selection2),
-    m_relayoutEndTime(getEndTime())
+    m_relayoutEndTime(getEndTime()),
+    m_segment1(nullptr),
+    m_segment2(nullptr)
 {
     // nothing else
 }
@@ -52,22 +57,24 @@ EraseCommand::~EraseCommand()
 void
 EraseCommand::modifySegment()
 {
-    const bool needRelayOut = eraseInSegment(m_selection1)  ||
-                              eraseInSegment(m_selection2);
+    if (m_selection1) m_segment1 = &m_selection1->getSegment();
+    if (m_selection2) m_segment2 = &m_selection2->getSegment();
+
+
+    const bool needRelayOut = eraseInSegment(m_selection1, m_segment1) ||
+                              eraseInSegment(m_selection2, m_segment2);
 
     if (needRelayOut)
         m_relayoutEndTime = getSegment().getEndTime();
 }
 
 bool
-EraseCommand::eraseInSegment(EventSelection *selection)
+EraseCommand::eraseInSegment(EventSelection *selection, Segment *segment)
 {
     //RG_DEBUG << "eraseInSegment()";
 
-    if (!selection)
-        return false;
-
-    Segment &segment = selection->getSegment();
+    if (!selection) return false;
+    if (!segment) segment = &selection->getSegment();
 
     bool erasedLongEffectEvent = false;
 
@@ -92,7 +99,7 @@ EraseCommand::eraseInSegment(EventSelection *selection)
                 // Adjust suborderings of any existing grace notes if necessary.
 
                 Segment::iterator h, j;
-                segment.getTimeSlice((*i)->getAbsoluteTime(), h, j);
+                segment->getTimeSlice((*i)->getAbsoluteTime(), h, j);
                 for (Segment::iterator k = h; k != j; ++k) {
                     if ((*k)->has(BaseProperties::IS_GRACE_NOTE)) {
                         if ((*k)->getSubOrdering() < indicationSubOrdering) {
@@ -131,16 +138,16 @@ EraseCommand::eraseInSegment(EventSelection *selection)
                         }
                     }
                     for (std::vector<Event *>::iterator k = toErase.begin();
-                         k != toErase.end(); ++k) segment.eraseSingle(*k);
+                         k != toErase.end(); ++k) segment->eraseSingle(*k);
                     for (std::vector<Event *>::iterator k = toInsert.begin();
-                         k != toInsert.end(); ++k) segment.insert(*k);
+                         k != toInsert.end(); ++k) segment->insert(*k);
                 }
 
                 Indication indication(**i);
                 if (indication.isOttavaType()) {
 
-                    for (Segment::iterator j = segment.findTime ((*i)->getAbsoluteTime());
-                         j != segment.findTime
+                    for (Segment::iterator j = segment->findTime ((*i)->getAbsoluteTime());
+                         j != segment->findTime
                              ((*i)->getAbsoluteTime() + indication.getIndicationDuration());
                          ++j) {
                         (*j)->unset(NotationProperties::OTTAVA_SHIFT);
@@ -161,10 +168,10 @@ EraseCommand::eraseInSegment(EventSelection *selection)
     }
 
     for (size_t j = 0; j < toErase.size(); ++j) {
-        segment.eraseSingle(toErase[j]);
+        segment->eraseSingle(toErase[j]);
     }
 
-    segment.normalizeRests(selection->getStartTime(), selection->getEndTime());
+    segment->normalizeRests(selection->getStartTime(), selection->getEndTime());
 
     return erasedLongEffectEvent;
 }
@@ -175,5 +182,4 @@ EraseCommand::getRelayoutEndTime()
     return m_relayoutEndTime;
 }
 
-
-}
+}  // namespace Rosegarden

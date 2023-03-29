@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
     See the AUTHORS file for more details.
 
     This program is free software; you can redistribute it and/or
@@ -504,7 +504,7 @@ int main(int argc, char *argv[])
         theApp.installTranslator(&qtTranslator);
         RG_DEBUG << "Qt translations loaded successfully.";
     } else {
-        RG_WARNING << "Qt translations not loaded.";
+        RG_DEBUG << "Qt translations not loaded.";
     }
 
     QTranslator rgTranslator;

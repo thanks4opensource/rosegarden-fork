@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -41,6 +41,7 @@
 #include <QFont>
 #include <QFontMetrics>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPen>
 #include <QPoint>
 #include <QMenu>
@@ -296,7 +297,7 @@ MarkerRuler::addMarker(timeT time)
     if (Preferences::getPreference(EDIT_WHEN_CREATED_PREF_GROUP,
                                    EDIT_WHEN_CREATED_PREFERENCE,
                                    true)) {
-        doModifyDialog(m_newestMarker);
+        doModifyDialog(m_newestMarker, true); // true == delete if "Cancel"
         m_newestMarker = nullptr;
     }
 }
@@ -345,7 +346,7 @@ MarkerRuler::slotEditMarker()
     // the above comment. It was a lovely party -- thank you for
     // having me as a guest.
 
-    doModifyDialog(marker);
+    doModifyDialog(marker, false);  // false == don't delete marker on "Cancel"
 }
 
 timeT
@@ -448,66 +449,39 @@ MarkerRuler::paintEvent(QPaintEvent*)
 
     painter.drawLine(m_currentXOffset, 0, clipRect.width(), 0);
 
-    float minimumWidth = 25.0;
-    float testSize = ((float)(m_rulerScale->getBarPosition(firstBar + 1) -
-                              m_rulerScale->getBarPosition(firstBar)))
-                     / minimumWidth;
+    // need these to calculate displayed widths of bar numbers and marker tags
+    QFontMetrics metrics = fontMetrics();
 
-    const int barHeight = height();
-
-    int every = 0;
-    int count = 0;
-
-    if (testSize < 1.0) {
-        every = (int(1.0 / testSize));
-
-        if (every % 2 == 0)
-            every++;
-    }
+    const int yText     = painter.fontMetrics().ascent(),
+              barHeight = height();
+    double currentX     = std::numeric_limits<double>::lowest();
 
     for (int i = firstBar; i <= lastBar; ++i) {
-
         double x = m_rulerScale->getBarPosition(i) + m_currentXOffset;
-
-        // avoid writing bar numbers that will be overwritten
-        if (i < lastBar) {
-            double nextx = m_rulerScale->getBarPosition(i+1) + m_currentXOffset;
-            if ((nextx - x) < 0.0001) continue;
-        }
 
         if (x > clipRect.x() + clipRect.width())
             break;
 
-        // always the first bar number
-        if (every && i != firstBar) {
-            if (count < every) {
-                count++;
-                continue;
-            }
+        painter.drawLine(static_cast<int>(x),
+                         0,
+                         static_cast<int>(x),
+                         barHeight);
 
-            // reset count if we passed
-            count = 0;
+        if (x >= currentX) {
+            QString text(QString("%1").arg(i + 1));
+
+            const QPoint textDrawPoint(static_cast<int>(x + 4.5), yText);
+            painter.drawText(textDrawPoint, text);
+
+            int width =   static_cast<int>(    metrics
+                                             .boundingRect(text)
+                                             .width()
+                                           + 0.5);
+
+            currentX  = x + width;
         }
-
-        // adjust count for first bar line
-        if (every == firstBar)
-            count++;
-
-        if (i != lastBar) {
-            painter.drawLine(static_cast<int>(x), 0, static_cast<int>(x), barHeight);
-
-            if (i >= 0) {
-                const int yText = painter.fontMetrics().ascent();
-                const QPoint textDrawPoint(static_cast<int>(x + 4), yText);
-                painter.drawText(textDrawPoint, QString("%1").arg(i + 1));
-            }
-        } else {
-            const QPen normalPen = painter.pen();
-            QPen endPen(Qt::black, 2);
-            painter.setPen(endPen);
-            painter.drawLine(static_cast<int>(x), 0, static_cast<int>(x), barHeight);
-            painter.setPen(normalPen);
-        }
+        else if (x > currentX)
+                 currentX = x;
     }
 
     if (m_doc) {
@@ -518,22 +492,29 @@ MarkerRuler::paintEvent(QPaintEvent*)
         timeT start = comp.getBarStart(firstBar);
         timeT end = comp.getBarEnd(lastBar);
 
+        currentX = std::numeric_limits<double>::lowest();
+
         QFontMetrics metrics = painter.fontMetrics();
         QBrush brush(Qt::blue);
 
         for (it = markers.begin(); it != markers.end(); ++it) {
+            double x =   m_rulerScale->getXForTime((*it)->getTime())
+                       + m_currentXOffset;
+
             if ((*it)->getTime() >= start && (*it)->getTime() < end) {
-                QString name(strtoqstr((*it)->getName()) + "   ");
+                QString name(strtoqstr((*it)->getName()));
 
-                double x = m_rulerScale->getXForTime((*it)->getTime())
-                           + m_currentXOffset;
+                int width =   static_cast<int>(   metrics
+                                                 .boundingRect(name)
+                                                 .width()
+                                               + 0.5)
+                            + 8;
 
-                painter.fillRect(static_cast<int>(x), 1,
-                                 static_cast<int>(
-                                    metrics.boundingRect(name).width() + 5),
-                                 barHeight - 2,
-                                 QBrush(GUIPalette::getColour(
-                                    GUIPalette::MarkerBackground)));
+                if (x >= currentX)
+                    painter.fillRect(static_cast<int>(x), 1,
+                                     width, barHeight - 2,
+                                     QBrush(GUIPalette::getColour(
+                                        GUIPalette::MarkerBackground)));
 
 #if 0  // Draw almost invisible line indicating exact time of marker.
                 painter.drawLine(int(x), 1, int(x), barHeight - 2);
@@ -547,10 +528,16 @@ MarkerRuler::paintEvent(QPaintEvent*)
                 path.addPolygon(poly);
                 painter.fillPath(path, brush);
 #endif
-                const QPoint textDrawPoint(static_cast<int>(x + 6),
-                                           barHeight - 4);
-                painter.drawText(textDrawPoint, name);
+                if (x >= currentX) {
+                    const QPoint textDrawPoint(static_cast<int>(x + 4.5),
+                                               barHeight - 4);
+                    painter.drawText(textDrawPoint, name);
+                    currentX = x + width;
+                }
+
             }
+            else if (x > currentX)
+                currentX = x;
         }
     }
 }
@@ -616,7 +603,9 @@ MarkerRuler::mouseDoubleClickEvent(QMouseEvent *)
 }
 
 void
-MarkerRuler::doModifyDialog(Marker *marker)
+MarkerRuler::doModifyDialog(
+Marker *marker,
+bool    deleteIfCancel)
 {
     if (!marker) return;
 
@@ -639,6 +628,13 @@ MarkerRuler::doModifyDialog(Marker *marker)
                                         qstrtostr(dialog.getDescription()));
             CommandHistory::getInstance()->addCommand(command);
         }
+    }
+    else if (deleteIfCancel) {
+        RemoveMarkerCommand *command =
+            new RemoveMarkerCommand(m_doc,
+                                    &m_doc->getComposition(),
+                                    marker->getID());
+        CommandHistory::getInstance()->addCommand(command);
     }
 }
 

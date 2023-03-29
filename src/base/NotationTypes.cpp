@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
     See the AUTHORS file for more details.
 
     This program is free software; you can redistribute it and/or
@@ -436,8 +436,6 @@ Event *Clef::getAsEvent(timeT absoluteTime) const
 // Key
 //////////////////////////////////////////////////////////////////////
 
-Key::KeyDetailMap Key::m_keyDetailMap = Key::KeyDetailMap();
-
 const string Key::EventType = "keychange";
 const int Key::EventSubOrdering = -200;
 const PropertyName Key::KeyPropertyName = "key";
@@ -447,18 +445,18 @@ const Key Key::UndefinedKey = Key("undefined");
 Key::Key() :
     m_event(nullptr),
     m_name(DefaultKey.m_name),
-    m_accidentalHeights(nullptr)
+    m_unicodeName(DefaultKey.m_name),
+    m_keyDetails(&m_keyDetailMap.find("default")->second)
 {
-    checkMap();
 }
 
 
 Key::Key(const Event &e) :
     m_event(&e),
     m_name(""),
-    m_accidentalHeights(nullptr)
+    m_unicodeName(""),
+    m_keyDetails(&m_keyDetailMap.find("undefined")->second)
 {
-    checkMap();
     if (e.getType() != EventType) {
         std::cerr << Event::BadType
             ("Key model event", EventType, e.getType()).getMessage()
@@ -466,30 +464,37 @@ Key::Key(const Event &e) :
         return;
     }
     e.get<String>(KeyPropertyName, m_name);
-    if (m_keyDetailMap.find(m_name) == m_keyDetailMap.end()) {
-        std::cerr << BadKeyName
-            ("No such key as \"" + m_name + "\"").getMessage() << std::endl;
-        return;
+    setUnicodeName();
+    auto detail = m_keyDetailMap.find(m_name);
+    if (detail == m_keyDetailMap.end()) {
+        RG_DEBUG << "Key::Key(const Event&): No such key as" << m_name;
+        m_keyDetails = &m_keyDetailMap.find("undefined")->second;
+    }
+    else {
+        m_keyDetails = &detail->second;
+        setUnicodeName();
     }
 }
 
 Key::Key(const std::string &name) :
     m_event(nullptr),
     m_name(name),
-    m_accidentalHeights(nullptr)
+    m_unicodeName(name)
 {
-    if (name == "undefined") return;
-    checkMap();
-    if (m_keyDetailMap.find(m_name) == m_keyDetailMap.end()) {
-        throw BadKeyName("No such key as \"" + m_name + "\"");
+    auto detail = m_keyDetailMap.find(m_name);
+    if (detail == m_keyDetailMap.end()) {
+        RG_DEBUG << "Key::Key(const std::string&): No such key as" << m_name;
+        m_keyDetails = &m_keyDetailMap.find("undefined")->second;
+    }
+    else {
+        m_keyDetails = &detail->second;
+        setUnicodeName();
     }
 }
 
 Key::Key(int accidentalCount, bool isSharp, bool isMinor) :
-    m_event(nullptr),
-    m_accidentalHeights(nullptr)
+    m_event(nullptr)
 {
-    checkMap();
     for (KeyDetailMap::const_iterator i = m_keyDetailMap.begin();
          i != m_keyDetailMap.end(); ++i) {
         if ((*i).second.m_sharpCount == accidentalCount &&
@@ -497,6 +502,8 @@ Key::Key(int accidentalCount, bool isSharp, bool isMinor) :
             ((*i).second.m_sharps == isSharp ||
              (*i).second.m_sharpCount == 0)) {
             m_name = (*i).first;
+            setUnicodeName();
+            m_keyDetails = &i->second;
             return;
         }
     }
@@ -514,15 +521,15 @@ Key::Key(int accidentalCount, bool isSharp, bool isMinor) :
 // with that signature.  Not quite sure what's the best solution.
 
 Key::Key(int tonicPitch, bool isMinor) :
-    m_event(nullptr),
-    m_accidentalHeights(nullptr)
+    m_event(nullptr)
 {
-        checkMap();
     for (KeyDetailMap::const_iterator i = m_keyDetailMap.begin();
          i != m_keyDetailMap.end(); ++i) {
         if ((*i).second.m_tonicPitch == tonicPitch &&
             (*i).second.m_minor == isMinor) {
             m_name = (*i).first;
+            setUnicodeName();
+            m_keyDetails = &i->second;
             return;
         }
     }
@@ -535,35 +542,16 @@ Key::Key(int tonicPitch, bool isMinor) :
     throw BadKeySpec(os.str());
 }
 
-
-Key::Key(const Key &kc) :
-    m_event(kc.m_event),
-    m_name(kc.m_name),
-    m_accidentalHeights(nullptr)
-{
-}
-
-#if 0   // move inline in .h file
-Key& Key::operator=(const Key &kc)
-{
-    m_name = kc.m_name;
-    m_accidentalHeights = nullptr;
-    return *this;
-}
-#endif
-
 bool Key::isValid(const Event &e)
 {
     if (e.getType() != EventType) return false;
     std::string name;
     e.get<String>(KeyPropertyName, name);
-    if (m_keyDetailMap.find(name) == m_keyDetailMap.end()) return false;
-    return true;
+    return m_keyDetailMap.find(name) != m_keyDetailMap.end();
 }
 
 Key::KeyList Key::getKeys(bool minor)
 {
-    checkMap();
     KeyList result;
     for (KeyDetailMap::const_iterator i = m_keyDetailMap.begin();
          i != m_keyDetailMap.end(); ++i) {
@@ -586,12 +574,11 @@ Accidental Key::getAccidentalAtHeight(int height, const Clef &clef) const
 {
     checkAccidentalHeights();
     height = canonicalHeight(height);
-    for (size_t i = 0; i < m_accidentalHeights->size(); ++i) {
-        if (height ==static_cast<int>(canonicalHeight((*m_accidentalHeights)[i] +
-                                                     clef.getPitchOffset()))) {
+    for (size_t i = 0; i < m_accidentalHeights.size(); ++i)
+        if (   height
+            == static_cast<int>(canonicalHeight(   m_accidentalHeights[i]
+                                                 + clef.getPitchOffset())))
             return isSharp() ? Sharp : Flat;
-        }
-    }
     return NoAccidental;
 }
 
@@ -627,7 +614,7 @@ vector<int> Key::getAccidentalHeights(const Clef &clef) const
 {
     // staff positions of accidentals
     checkAccidentalHeights();
-    vector<int> v(*m_accidentalHeights);
+    vector<int> v(m_accidentalHeights);
     int offset = clef.getPitchOffset();
 
     for (unsigned int i = 0; i < v.size(); ++i) {
@@ -640,15 +627,15 @@ vector<int> Key::getAccidentalHeights(const Clef &clef) const
 
 void Key::checkAccidentalHeights() const
 {
-    if (m_accidentalHeights) return;
-    m_accidentalHeights = new vector<int>;
+    if (!m_accidentalHeights.empty()) return;
+    m_accidentalHeights.clear();
 
     bool sharp = isSharp();
     int accidentals = getAccidentalCount();
     int height = sharp ? 8 : 4;
 
     for (int i = 0; i < accidentals; ++i) {
-        m_accidentalHeights->push_back(height);
+        m_accidentalHeights.push_back(height);
         if (sharp) { height -= 3; if (height < 3) height += 7; }
         else       { height += 3; if (height > 7) height -= 7; }
     }
@@ -678,71 +665,123 @@ Event *Key::getAsEvent(timeT absoluteTime) const
     return e;
 }
 
+const Key::KeyDetailMap Key::m_keyDetailMap = {
+              //   sharps  minor num#s  equivlnt   /*rg2name*/       tonic
+              //   -----   ----- ----- ---------   /*-------*/           -----
+    {"A major",   {true,  false, 3,    "F# minor", /*"A  maj / F# min",*/  9}},
+    {"F# minor",  {true,  true,  3,    "A major",  /*"A  maj / F# min",*/  6}},
+    {"Ab major",  {false, false, 4,    "F minor",  /*"Ab maj / F  min",*/  8}},
+    {"F minor",   {false, true,  4,    "Ab major", /*"Ab maj / F  min",*/  5}},
+    {"B major",   {true,  false, 5,    "G# minor", /*"B  maj / G# min",*/ 11}},
+    {"G# minor",  {true,  true,  5,    "B major",  /*"B  maj / G# min",*/  8}},
+    {"Bb major",  {false, false, 2,    "G minor",  /*"Bb maj / G  min",*/ 10}},
+    {"G minor",   {false, true,  2,    "Bb major", /*"Bb maj / G  min",*/  7}},
+    {"C major",   {true,  false, 0,    "A minor",  /*"C  maj / A  min",*/  0}},
+    {"A minor",   {false, true,  0,    "C major",  /*"C  maj / A  min",*/  9}},
+    {"Cb major",  {false, false, 7,    "Ab minor", /*"Cb maj / Ab min",*/ 11}},
+    {"Ab minor",  {false, true,  7,    "Cb major", /*"Cb maj / Ab min",*/  8}},
+    {"C# major",  {true,  false, 7,    "A# minor", /*"C# maj / A# min",*/  1}},
+    {"A# minor",  {true,  true,  7,    "C# major", /*"C# maj / A# min",*/ 10}},
+    {"D major",   {true,  false, 2,    "B minor",  /*"D  maj / B  min",*/  2}},
+    {"B minor",   {true,  true,  2,    "D major",  /*"D  maj / B  min",*/ 11}},
+    {"Db major",  {false, false, 5,    "Bb minor", /*"Db maj / Bb min",*/  1}},
+    {"Bb minor",  {false, true,  5,    "Db major", /*"Db maj / Bb min",*/ 10}},
+    {"E major",   {true,  false, 4,    "C# minor", /*"E  maj / C# min",*/  4}},
+    {"C# minor",  {true,  true,  4,    "E major",  /*"E  maj / C# min",*/  1}},
+    {"Eb major",  {false, false, 3,    "C minor",  /*"Eb maj / C  min",*/  3}},
+    {"C minor",   {false, true,  3,    "Eb major", /*"Eb maj / C  min",*/  0}},
+    {"F major",   {false, false, 1,    "D minor",  /*"F  maj / D  min",*/  5}},
+    {"D minor",   {false, true,  1,    "F major",  /*"F  maj / D  min",*/  2}},
+    {"F# major",  {true,  false, 6,    "D# minor", /*"F# maj / D# min",*/  6}},
+    {"D# minor",  {true,  true,  6,    "F# major", /*"F# maj / D# min",*/  3}},
+    {"G major",   {true,  false, 1,    "E minor",  /*"G  maj / E  min",*/  7}},
+    {"E minor",   {true,  true,  1,    "G major",  /*"G  maj / E  min",*/  4}},
+    {"Gb major",  {false, false, 6,    "Eb minor", /*"Gb maj / Eb min",*/  6}},
+    {"Eb minor",  {false, true,  6,    "Gb major", /*"Gb maj / Eb min",*/  3}},
+    {"default",  {true,  false, 0,     "A minor",  /*"C  maj / A  min",*/  0}},
+    {"undefined", {true,  false, 0,    "A minor",  /*"C  maj / A  min",*/  0}},
+};
 
-void Key::checkMap() {
-    if (!m_keyDetailMap.empty()) return;
-
-    m_keyDetailMap["A major" ] = KeyDetails(true,  false, 3, "F# minor", "A  maj / F# min", 9);
-    m_keyDetailMap["F# minor"] = KeyDetails(true,  true,  3, "A major",  "A  maj / F# min", 6);
-    m_keyDetailMap["Ab major"] = KeyDetails(false, false, 4, "F minor",  "Ab maj / F  min", 8);
-    m_keyDetailMap["F minor" ] = KeyDetails(false, true,  4, "Ab major", "Ab maj / F  min", 5);
-    m_keyDetailMap["B major" ] = KeyDetails(true,  false, 5, "G# minor", "B  maj / G# min", 11);
-    m_keyDetailMap["G# minor"] = KeyDetails(true,  true,  5, "B major",  "B  maj / G# min", 8);
-    m_keyDetailMap["Bb major"] = KeyDetails(false, false, 2, "G minor",  "Bb maj / G  min", 10);
-    m_keyDetailMap["G minor" ] = KeyDetails(false, true,  2, "Bb major", "Bb maj / G  min", 7);
-    m_keyDetailMap["C major" ] = KeyDetails(true,  false, 0, "A minor",  "C  maj / A  min", 0);
-    m_keyDetailMap["A minor" ] = KeyDetails(false, true,  0, "C major",  "C  maj / A  min", 9);
-    m_keyDetailMap["Cb major"] = KeyDetails(false, false, 7, "Ab minor", "Cb maj / Ab min", 11);
-    m_keyDetailMap["Ab minor"] = KeyDetails(false, true,  7, "Cb major", "Cb maj / Ab min", 8);
-    m_keyDetailMap["C# major"] = KeyDetails(true,  false, 7, "A# minor", "C# maj / A# min", 1);
-    m_keyDetailMap["A# minor"] = KeyDetails(true,  true,  7, "C# major", "C# maj / A# min", 10);
-    m_keyDetailMap["D major" ] = KeyDetails(true,  false, 2, "B minor",  "D  maj / B  min", 2);
-    m_keyDetailMap["B minor" ] = KeyDetails(true,  true,  2, "D major",  "D  maj / B  min", 11);
-    m_keyDetailMap["Db major"] = KeyDetails(false, false, 5, "Bb minor", "Db maj / Bb min", 1);
-    m_keyDetailMap["Bb minor"] = KeyDetails(false, true,  5, "Db major", "Db maj / Bb min", 10);
-    m_keyDetailMap["E major" ] = KeyDetails(true,  false, 4, "C# minor", "E  maj / C# min", 4);
-    m_keyDetailMap["C# minor"] = KeyDetails(true,  true,  4, "E major",  "E  maj / C# min", 1);
-    m_keyDetailMap["Eb major"] = KeyDetails(false, false, 3, "C minor",  "Eb maj / C  min", 3);
-    m_keyDetailMap["C minor" ] = KeyDetails(false, true,  3, "Eb major", "Eb maj / C  min", 0);
-    m_keyDetailMap["F major" ] = KeyDetails(false, false, 1, "D minor",  "F  maj / D  min", 5);
-    m_keyDetailMap["D minor" ] = KeyDetails(false, true,  1, "F major",  "F  maj / D  min", 2);
-    m_keyDetailMap["F# major"] = KeyDetails(true,  false, 6, "D# minor", "F# maj / D# min", 6);
-    m_keyDetailMap["D# minor"] = KeyDetails(true,  true,  6, "F# major", "F# maj / D# min", 3);
-    m_keyDetailMap["G major" ] = KeyDetails(true,  false, 1, "E minor",  "G  maj / E  min", 7);
-    m_keyDetailMap["E minor" ] = KeyDetails(true,  true,  1, "G major",  "G  maj / E  min", 4);
-    m_keyDetailMap["Gb major"] = KeyDetails(false, false, 6, "Eb minor", "Gb maj / Eb min", 6);
-    m_keyDetailMap["Eb minor"] = KeyDetails(false, true,  6, "Gb major", "Gb maj / Eb min", 3);
-    m_keyDetailMap["undefined"] = KeyDetails(true,  false, 0, "A minor",  "C  maj / A  min", 0); //=default
-}
-
+const std::map<const std::string, const std::string>
+Key::m_unicodeNames = {
+    {"A major",   "A major"      },
+    {"F# minor",  "F\u266f minor"},
+    {"Ab major",  "A\u266d major"},
+    {"F minor",   "F minor"      },
+    {"B major",   "B major"      },
+    {"G# minor",  "G\u266f minor"},
+    {"Bb major",  "B\u266d major"},
+    {"G minor",   "G minor"      },
+    {"C major",   "C major"      },
+    {"A minor",   "A minor"      },
+    {"Cb major",  "C\u266d major"},
+    {"Ab minor",  "A\u266d minor"},
+    {"C# major",  "C\u266f major"},
+    {"A# minor",  "A\u266f minor"},
+    {"D major",   "D major"      },
+    {"B minor",   "B minor"      },
+    {"Db major",  "D\u266d major"},
+    {"Bb minor",  "B\u266d minor"},
+    {"E major",   "E major"      },
+    {"C# minor",  "C\u266f minor"},
+    {"Eb major",  "E\u266d major"},
+    {"C minor",   "C minor"      },
+    {"F major",   "F major"      },
+    {"D minor",   "D minor"      },
+    {"F# major",  "F\u266f major"},
+    {"D# minor",  "D\u266f minor"},
+    {"G major",   "G major"      },
+    {"E minor",   "E minor"      },
+    {"Gb major",  "G\u266d major"},
+    {"Eb minor",  "E\u266d minor"},
+    {"default",   "default"      },
+    {"undefined", "undefined"    },
+};
 
 Key::KeyDetails::KeyDetails()
-    : m_sharps(false), m_minor(false), m_sharpCount(0),
-      m_equivalence(""), m_rg2name(""), m_tonicPitch(0)
+:   m_sharps     (false),
+    m_minor      (false),
+    m_sharpCount (0),
+    m_equivalence(""),
+    m_tonicPitch (0)
 {
 }
 
-Key::KeyDetails::KeyDetails(bool sharps, bool minor, int sharpCount,
-                            std::string equivalence, std::string rg2name,
-                            int tonicPitch)
-    : m_sharps(sharps), m_minor(minor), m_sharpCount(sharpCount),
-      m_equivalence(equivalence), m_rg2name(rg2name), m_tonicPitch(tonicPitch)
+Key::KeyDetails::KeyDetails(
+bool            sharps,
+bool            minor,
+int             sharpCount,
+std::string     equivalence,
+int             tonicPitch)
+:   m_sharps     (sharps),
+    m_minor      (minor),
+    m_sharpCount (sharpCount),
+    m_equivalence(equivalence),
+    m_tonicPitch (tonicPitch)
 {
 }
 
-Key::KeyDetails::KeyDetails(const Key::KeyDetails &d)
-    : m_sharps(d.m_sharps), m_minor(d.m_minor),
-      m_sharpCount(d.m_sharpCount), m_equivalence(d.m_equivalence),
-      m_rg2name(d.m_rg2name), m_tonicPitch(d.m_tonicPitch)
+Key::KeyDetails::KeyDetails(
+const Key::KeyDetails &d)
+:   m_sharps     (d.m_sharps),
+    m_minor      (d.m_minor),
+    m_sharpCount (d.m_sharpCount),
+    m_equivalence(d.m_equivalence),
+    m_tonicPitch (d.m_tonicPitch)
 {
 }
 
-Key::KeyDetails& Key::KeyDetails::operator=(const Key::KeyDetails &d)
+Key::KeyDetails& Key::KeyDetails::operator=(
+const Key::KeyDetails &d)
 {
     if (&d == this) return *this;
-    m_sharps = d.m_sharps; m_minor = d.m_minor;
-    m_sharpCount = d.m_sharpCount; m_equivalence = d.m_equivalence;
-    m_rg2name = d.m_rg2name; m_tonicPitch = d.m_tonicPitch;
+
+    m_sharps      = d.m_sharps;
+    m_minor       = d.m_minor;
+    m_sharpCount  = d.m_sharpCount;
+    m_equivalence = d.m_equivalence;
+    m_tonicPitch  = d.m_tonicPitch;
+
     return *this;
 }
 

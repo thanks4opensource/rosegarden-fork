@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A MIDI and audio sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
     Other copyrights also apply to some parts of this work.  Please
     see the AUTHORS file and individual file headers for details.
@@ -239,18 +239,21 @@ void MatrixElement::initPixmaps()
 
 MatrixElement::MatrixElement(MatrixScene *scene, Event *event,
                              bool drum, long pitchOffset,
-                             const Segment *segment) :
+                             const Segment *segment,
+                             const unsigned segmentIndex) :
     ViewElement(event),
     m_scene(scene),
     m_event(event),
     m_drumMode(drum),
     m_drumDisplay(drum),
-    m_current(true),
+    m_current(false),
     m_selected(false),
-    m_prevShowName(ShowName::UNSET),
-    m_prevTime(std::numeric_limits<timeT>::min()),
+    m_showName(true),
+    m_time(std::numeric_limits<timeT>::min()),
+    m_pitch(-1),
     m_tonic(0),
     m_degree(0),
+    m_keyRelative(false),
     m_sharps(true),
     m_minor(false),
     m_offsetMinors(false),
@@ -262,21 +265,22 @@ MatrixElement::MatrixElement(MatrixScene *scene, Event *event,
     m_drumSelectItem(nullptr),
     m_tiedNoteItem(nullptr),
     m_pitchOffset(pitchOffset),
-    m_segment(segment)
+    m_segment(segment),
+    m_segmentIndex        (segmentIndex),
+    m_noteZ               (segmentNoteZ(segmentIndex)),
+    m_textZ               (segmentTextZ(segmentIndex)),
+    m_activeSegmentNoteZ  (segmentNoteZ(m_scene->segmentIndexEnd())),
+    m_activeSegmentTextZ  (m_activeSegmentNoteZ   + 1.0),
+    m_selectionBorderZ    (m_activeSegmentTextZ   + 1.0),
+    m_selectedSegmentNoteZ(m_activeSegmentTextZ   + SEGMENT_Z_INCREMENT),
+    m_selectedSegmentTextZ(m_selectedSegmentNoteZ + 1.0)
 {
-    if (segment && scene && segment != scene->getCurrentSegment()) {
-        m_current = false;
+    if (segment && scene && segment == scene->getCurrentSegment()) {
+        m_current = true;
     }
 
-    const ChordNameRuler *chordNameRuler =   m_scene
-                                           ->getMatrixWidget()
-                                           ->getChordNameRuler();
-    getKeyInfo(chordNameRuler,
-               (chordNameRuler ? chordNameRuler->isVisible() : false),
-               m_prevShowName,
-               m_prevTime);
-
-    reconfigure();
+    getKeyInfo(nullptr, m_showName, m_time, 0);
+    reconfigure(false);
 }
 
 MatrixElement::~MatrixElement()
@@ -290,43 +294,63 @@ MatrixElement::~MatrixElement()
 }
 
 void
-MatrixElement::reconfigure()
+MatrixElement::reconfigure(
+const bool          needKey,
+const Key* const    key)
 {
     timeT time = event()->getAbsoluteTime();
     timeT duration = event()->getDuration();
-    reconfigure(time, duration);
+    reconfigure(time, duration, needKey, key);
 }
 
 void
-MatrixElement::reconfigure(int velocity)
+MatrixElement::reconfigure(
+const int           velocity,
+const bool          needKey,
+const Key* const    key)
 {
     timeT time = event()->getAbsoluteTime();
     timeT duration = event()->getDuration();
     long pitch = 60;
     event()->get<Int>(BaseProperties::PITCH, pitch);
-    reconfigure(time, duration, pitch, velocity);
+    reconfigure(time, duration, pitch, velocity, needKey, key);
 }
 
 void
-MatrixElement::reconfigure(timeT time, timeT duration)
+MatrixElement::reconfigure(
+const timeT         time,
+const timeT         duration,
+const bool          needKey,
+const Key* const    key)
 {
     long pitch = 60;
     event()->get<Int>(BaseProperties::PITCH, pitch);
 
-    reconfigure(time, duration, pitch);
+    reconfigure(time, duration, pitch, needKey, key);
 }
 
 void
-MatrixElement::reconfigure(timeT time, timeT duration, int pitch)
+MatrixElement::reconfigure(
+const timeT         time,
+const timeT         duration,
+const int           pitch,
+const bool          needKey,
+const Key* const    key)
 {
     long velocity = 100;
     event()->get<Int>(BaseProperties::VELOCITY, velocity);
 
-    reconfigure(time, duration, pitch, velocity);
+    reconfigure(time, duration, pitch, velocity, needKey, key);
 }
 
 void
-MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
+MatrixElement::reconfigure(
+const timeT         time,
+const timeT         duration,
+const int           pitch,
+const int           velocity,
+const bool          needKey,
+const Key* const    key)
 {
     const RulerScale *scale = m_scene->getRulerScale();
     int resolution = m_scene->getYResolution();
@@ -341,32 +365,31 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
                      event()->has(BaseProperties::TIED_BACKWARD));
 
     // Have to do this before noteColorBrush() instead of later (and/or
-    //   only if showName == ShowName::SHOW)
+    //   only if showName)
     // Optional note name.
     // But no note names on diamond-shaped percussion notes.
-    ShowName showName =      m_scene->getMatrixWidget()->getShowNoteNames()
-                          && !m_drumDisplay
-                        ? ShowName::SHOW
-                        : ShowName::SKIP;
+    m_drumDisplay =     m_drumMode
+                    && !m_scene->getMatrixWidget()
+                               ->getShowPercussionDurations();
+    bool showName =    m_scene->getMatrixWidget()->getShowNoteNames()
+                    && !m_drumDisplay;
+
     const MatrixWidget::NoteColorType   noteColorType
                                       =   m_scene
                                         ->getMatrixWidget()
                                         ->getNoteColorType();
-    ChordNameRuler     *chordNameRuler
-                     = m_scene->getMatrixWidget()->getChordNameRuler();
-    bool haveKeyInfo = chordNameRuler && chordNameRuler->isVisible();
 
-    if (  showName == ShowName::SHOW
-        || noteColorType == MatrixWidget::NoteColorType::PITCH) {
-        if (   !haveKeyInfo
-            || showName != m_prevShowName
-            || time     != m_prevTime
-            || m_scene->getKeySignaturesChanged())
-            haveKeyInfo = getKeyInfo(chordNameRuler,
-                                     haveKeyInfo,
-                                     showName,
-                                     time,
-                                     pitch);
+    if (showName || noteColorType == MatrixWidget::NoteColorType::PITCH) {
+        if (   needKey
+            || showName != m_showName
+            || time     != m_time
+            || pitch    != m_pitch)     // really only need in pitch "modes"
+             getKeyInfo(key, showName, time, pitch);
+        else {
+            m_showName = showName;
+            m_time     = time;
+            m_pitch    = pitch;
+        }
     }
 
     const QBrush brush(noteBrush());
@@ -379,9 +402,6 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
     // set the Y position taking m_pitchOffset into account, subtracting the
     // opposite of whatever the originating segment transpose was
     double pitchy = (127 - pitch - m_pitchOffset) * (resolution + 1);
-
-    m_drumDisplay = m_drumMode &&
-        !m_scene->getMatrixWidget()->getShowPercussionDurations();
 
     // Only one of m_noteItem() or m_drumItem() active, depending
     // on various modes and settings. Is more efficient to have  both
@@ -407,26 +427,25 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
                 m_noteSelectItem = nullptr;
             }
         }
-        if (!m_drumItem) {
+        if (!m_drumItem)
             m_drumItem = m_scene->graphicsIsotropicDiamondPool.getFrom();
-        }
         m_drumItem->setSize(0.5 * fres, fres);
         m_drumItem->setPen(outlinePen());
         m_drumItem->setBrush(brush);
         m_drumItem->setPos(x0, pitchy);
         if (m_selected) {
-            m_drumItem->setZValue(SELECTED_SEGMENT_NOTE_Z);
+            m_drumItem->setZValue(m_selectedSegmentNoteZ);
             // First true is selected, second to force update if already
             // selected (extreme edge case of changing segment's track
             // from notes to drum while element is selected)
             setSelected(true, true);
-        } else {
-            m_drumItem->setZValue(m_current ? ACTIVE_SEGMENT_NOTE_Z
-                                            : NORMAL_SEGMENT_NOTE_Z);
         }
+        else
+            m_drumItem->setZValue(m_current ? m_activeSegmentNoteZ : m_noteZ);
         m_drumItem->setData(MatrixElementData,
                             QVariant::fromValue((void *)this));
-    } else {  // !m_drumDisplay, i.e. is pitched note segment
+    }
+    else {  // !m_drumDisplay, i.e. is pitched note segment
         if (m_drumItem) {
             // Very rare case of changing segment from percussion to pitched.
             // Could just m_drumItem->hide(), but even if changed back to
@@ -458,113 +477,20 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
         m_noteItem->setPos(x0, pitchy);
 
         if (m_selected) {
-            m_noteItem->setZValue(SELECTED_SEGMENT_NOTE_Z);
+            m_noteItem->setZValue(m_selectedSegmentNoteZ);
             // First true is selected, second to force update if already
             // selected (extreme edge case of changing segment's track
             // from notes to drum while element is selected)
             setSelected(true, true);
-        } else {
-            m_noteItem->setZValue(m_current ? ACTIVE_SEGMENT_NOTE_Z
-                                            : NORMAL_SEGMENT_NOTE_Z);
         }
+        else
+            m_noteItem->setZValue(m_current ? m_activeSegmentNoteZ : m_noteZ);
         m_noteItem->setData(MatrixElementData,
                             QVariant::fromValue((void *)this));
     }
 
-    if (showName == ShowName::SHOW) {
-        if (!m_textItem) m_textItem = m_scene->graphicsTextPool.getFrom();
-
-        // Draw text on top of note, see constants in .h file
-        if (m_selected)
-            m_textItem->setZValue(SELECTED_SEGMENT_TEXT_Z);
-        else
-            m_textItem->setZValue(m_current ? ACTIVE_SEGMENT_TEXT_Z
-                                            : NORMAL_SEGMENT_TEXT_Z);
-        m_textItem->setBrush(textColor(brush.color()));
-
-        const MatrixWidget *matrixWidget = m_scene->getMatrixWidget();
-
-        QString noteName;
-        switch (matrixWidget->getNoteNameType()) {
-            case MatrixWidget::NoteNameType::OFF:
-                noteName = "";
-                break;
-
-            case MatrixWidget::NoteNameType::CONCERT:
-                noteName = MidiPitchLabel(pitch, "", m_sharps).getQString();
-            break;
-
-            case MatrixWidget::NoteNameType::FIXED_DO:
-                noteName = MidiPitchLabel::fixedSolfege(pitch, m_sharps);
-            break;
-
-            case MatrixWidget::NoteNameType::INTEGER_ABSOLUTE:
-            noteName =  QString("%1:%2")
-                       .arg(pitch % 12)
-                       .arg(  pitch / 12
-                            + Preferences::midiOctaveNumberOffset.get());
-            break;
-
-            case MatrixWidget::NoteNameType::RAW_MIDI:
-                noteName = QString("%1").arg(pitch);
-            break;
-
-            case MatrixWidget::NoteNameType::DEGREE:
-                if (haveKeyInfo) {
-                    if (m_minor && !m_offsetMinors && m_alternateMinorNotes)
-                        noteName =   MidiPitchLabel
-                                   ::scaleDegreeMinorAlt(m_degree, m_sharps);
-                    else
-                        noteName = MidiPitchLabel::scaleDegreeMajor(m_degree,
-                                                                    m_sharps);
-                }
-                else
-                    noteName = "?";
-            break;
-
-            case MatrixWidget::NoteNameType::MOVABLE_DO:
-                if (haveKeyInfo)
-                    noteName = MidiPitchLabel::movableSolfege(m_degree,
-                                                              m_sharps);
-                else
-                    noteName = "?";
-            break;
-
-            case MatrixWidget::NoteNameType::INTEGER_KEY:
-                if (haveKeyInfo)
-                    noteName = QString("%1").arg(m_degree);
-                else
-                    noteName = "?";
-            break;
-        }
-
-        if (      matrixWidget->getChordSpellingType()
-               != MatrixWidget::ChordSpellingType::OFF
-            && chordNameRuler
-            && chordNameRuler->haveChords()) {
-            int rootDegree = chordNameRuler->chordRootPitchAtTime(time);
-            if (rootDegree != -1) {
-                unsigned chordDegree = (pitch + 12 - rootDegree) % 12;
-                if (   m_scene->getMatrixWidget()->getChordSpellingType()
-                    == MatrixWidget::ChordSpellingType::DEGREE)
-                    noteName =  QString("%1(%2)")
-                               .arg(noteName)
-                               .arg(  MidiPitchLabel
-                                    ::scaleDegreeMajor(chordDegree, m_sharps));
-                else
-                    noteName = QString("%1(%2)").arg(noteName)
-                                                .arg(chordDegree);
-            }
-        }
-
-        m_textItem->setText(noteName, m_noteItem->rect());
-        QFont font;
-        font.setPixelSize(resolution);
-        m_textItem->setFont(font);
-        m_textItem->setData(MatrixElementData,
-                            QVariant::fromValue((void *)this));
-        m_textItem->setPos(x0, pitchy - fres * 0.1);
-    }
+    if (showName && !m_drumMode)  // check is for "show percussion durations"
+        setLabel(time, pitch, x0, brush);
     else if (m_textItem) {
         // Could just m_textItem->hide() and then only ->show() above if
         // not doing getFrom(). But only additional optimization would be
@@ -600,11 +526,11 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
                     m_tiedNoteItem = m_scene->graphicsEllipsePool.getFrom();
 
                 if (m_selected)
-                    m_tiedNoteItem->setZValue(SELECTED_SEGMENT_TEXT_Z);
+                    m_tiedNoteItem->setZValue(m_selectedSegmentTextZ);
                 else
                     m_tiedNoteItem->setZValue(  m_current
-                                              ? ACTIVE_SEGMENT_TEXT_Z
-                                              : NORMAL_SEGMENT_TEXT_Z);
+                                              ? m_activeSegmentTextZ
+                                              : m_textZ);
 
                 m_tiedNoteItem->setBrush(textColor(brush.color()));
                 m_tiedNoteItem->setPen(Qt::NoPen);
@@ -631,78 +557,65 @@ MatrixElement::reconfigure(timeT time, timeT duration, int pitch, int velocity)
 
     setLayoutX(x0);
     setLayoutY(pitchy);
-}
+}  // reconfigure(timeT, timeT, int, int, bool, const Key* const)
 
 // See documentation in .h file
-bool
+void
 MatrixElement::getKeyInfo(
-const ChordNameRuler    *chordNameRuler,
-const bool               chordNameRulerIsVisible,
-const ShowName           showName,
-const timeT              time,
-const unsigned           pitch)
+const Key*          key,
+bool                showName,
+const timeT         time,
+const int           pitch)
 {
-    // Get key at time either from segment or from ChordNameRuler
-    //
-    Rosegarden::Key     key;
-
-    if (chordNameRulerIsVisible)
-        key = chordNameRuler->keyAtTime(time);
-    else {
-#if 1  // Don't key-relative label notes outside of current segment span
+    static const Key    defaultKey;
+    if (!key) {
         const Segment *segment = m_scene->getCurrentSegment();
-        if (!segment) return false;
-        if (   time <  segment->getClippedStartTime()
-            || time >= segment->getEndMarkerTime(true))
-            return false;
-        key = segment->getKeyAtTime(time);
-#else  // Do label, with note's segment's key at time ...
-       // ... but incorrectly gets previous non-overlappinng segment's
-       // key because Segment::getKeyAtTime() doesn't "clip" to
-       // segment start time.
-       // Reconsider if/when that fixed.
-        const Segment *currentSegment = m_scene->getCurrentSegment();
-        if (   currentSegment
-            && (   time >= currentSegment->getClippedStartTime()
-                || time <  currentSegment->getEndMarkerTime(true)))
-            key = currentSegment->getKeyAtTime(time);
-        else
-            key = m_segment->getKeyAtTime(time);
-#endif
+        if (!segment) return;  // Impossible, but check anyway.
+        auto keyIter = segment->getKeySignatureIterAtTime(time);
+        if (segment->keySignatureIterIsValid(keyIter))
+            key =  &keyIter->second;
+        else  // should never happen, but in case ..
+            key = &defaultKey;
     }
 
-    if (key.getAccidentalCount() == 0)
+    m_showName = showName;
+    m_time     = time;
+    m_pitch    = pitch;
+
+    const MatrixWidget *matrixWidget(m_scene->getMatrixWidget());
+    m_offsetMinors        = matrixWidget->getNoteNamesOffsetMinors   ();
+    m_alternateMinorNotes = matrixWidget->getNoteNamesAlternateMinors();
+    m_keyRelative         = matrixWidget->notesAreKeyDependent       ();
+
+    auto setDegree = [this, pitch]()
+    {
+        this->m_degree =   (  pitch
+                            + (   m_minor && m_offsetMinors
+                               ? 21   // C->A, +9 but make sure always positive
+                               : 12)  // make sure always positive
+                            - m_tonic)
+                         % 12;
+    };
+
+    if (key->getName() == m_keyName) {
+        setDegree();
+        return;  // no change
+    }
+    else
+        m_keyName = key->getName();
+
+    if (key->getAccidentalCount() == 0)
         m_sharps = !m_scene->getMatrixWidget()->getNoteNamesCmajFlats();
     else
-        m_sharps = key.isSharp();
+        m_sharps = key->isSharp();
 
-    m_tonic        = key.getTonicPitch();
-    m_minor        = key.isMinor();
-    m_offsetMinors = m_scene->getMatrixWidget()->getNoteNamesOffsetMinors();
+    m_tonic = key->getTonicPitch();
+    m_minor = key->isMinor();
 
-    m_alternateMinorNotes =   m_scene
-                            ->getMatrixWidget()
-                            ->getNoteNamesAlternateMinors();
+    setDegree();
 
-    m_degree =   (  pitch
-                  + (   m_minor && m_offsetMinors
-                     ? 21   // C->A, +9 but make sure always positive
-                     : 12)  // make sure always positive
-                  - m_tonic)
-               % 12;
+}  // getKeyInfo()
 
-
-    m_prevShowName = showName;
-    m_prevTime     = time;
-
-    return true;
-}
-
-bool
-MatrixElement::isNote() const
-{
-    return event()->isa(Note::EventType);
-}
 
 QAbstractGraphicsShapeItem*
 MatrixElement::getActiveItem()
@@ -730,12 +643,15 @@ MatrixElement::setSelected(bool selected, bool force)
     if (selected) {
         QColor selectionColor = selectionBorderColor(item);
         float res = m_scene->getYResolution() + 1;
-        item->setZValue(SELECTED_SEGMENT_NOTE_Z);
+        item->setZValue(m_selectedSegmentNoteZ);
         if (item == m_noteItem) {
-            if (m_textItem) m_textItem->setZValue(SELECTED_SEGMENT_TEXT_Z);
+            if (m_textItem)
+                m_textItem->setZValue(m_selectedSegmentTextZ);
+            if (m_tiedNoteItem)
+                m_tiedNoteItem->setZValue(m_selectedSegmentTextZ);
             if (!m_noteSelectItem) {
                 m_noteSelectItem = m_scene->graphicsIsotropicRectPool.getFrom();
-                m_noteSelectItem->setZValue(SELECTION_BORDER_Z);
+                m_noteSelectItem->setZValue(m_selectionBorderZ);
             }
             m_noteSelectItem->setRect(m_noteItem->rect());
             m_noteSelectItem->setPos(m_noteItem->pos());
@@ -747,7 +663,7 @@ MatrixElement::setSelected(bool selected, bool force)
             if (!m_drumSelectItem) {
                 m_drumSelectItem = m_scene->graphicsIsotropicDiamondPool.
                                    getFrom();
-                m_drumSelectItem->setZValue(SELECTION_BORDER_Z);
+                m_drumSelectItem->setZValue(m_selectionBorderZ);
                 m_drumSelectItem->setPen(Qt::NoPen);
             }
             m_drumSelectItem->setSize(res * 0.5 + DRUM_SELECT_BORDER_WIDTH,
@@ -761,8 +677,11 @@ MatrixElement::setSelected(bool selected, bool force)
         }
     } else {  // not selected
         if (item == m_noteItem) {
-            m_noteItem->setZValue(ACTIVE_SEGMENT_NOTE_Z);
-            if (m_textItem) m_textItem->setZValue(ACTIVE_SEGMENT_TEXT_Z);
+            m_noteItem->setZValue(m_activeSegmentNoteZ);
+            if (m_textItem)
+                m_textItem->setZValue(m_activeSegmentTextZ);
+            if (m_tiedNoteItem)
+                m_tiedNoteItem->setZValue(m_activeSegmentTextZ);
             if (m_noteSelectItem) {
                 // Definitely putBack() instead of hide(). See comments
                 // in reconfigure(timeT,timeT,int,int) above. If just
@@ -776,7 +695,7 @@ MatrixElement::setSelected(bool selected, bool force)
                 m_noteSelectItem = nullptr;
             }
         } else {   // item == m_drumItem
-            m_drumItem->setZValue(ACTIVE_SEGMENT_NOTE_Z);
+            m_drumItem->setZValue(m_activeSegmentNoteZ);
             m_drumItem->setPen(outlinePen());
             if (m_drumSelectItem) {
                 // See comment above
@@ -791,7 +710,7 @@ MatrixElement::setSelected(bool selected, bool force)
 void
 MatrixElement::setCurrent(bool current)
 {
-    if (m_current == current) return;
+    if (current == m_current ) return;
 
     m_current = current;  // must be done before call to noteColor()
 
@@ -802,12 +721,11 @@ MatrixElement::setCurrent(bool current)
     item->setBrush(brush);
     item->setPen(outlinePen());
 
-    item->setZValue(current ? ACTIVE_SEGMENT_NOTE_Z : NORMAL_SEGMENT_NOTE_Z);
+    item->setZValue(current ? m_activeSegmentNoteZ : m_noteZ);
 
     if (m_textItem) {
         m_textItem->setBrush(textColor(brush.color()));
-        m_textItem->setZValue(current ? ACTIVE_SEGMENT_TEXT_Z
-                                      : NORMAL_SEGMENT_TEXT_Z);
+        m_textItem->setZValue(current ? m_activeSegmentTextZ : m_textZ);
     }
 }
 
@@ -819,10 +737,139 @@ MatrixElement::getMatrixElement(QGraphicsItem *item)
     return static_cast<MatrixElement *>(v.value<void *>());
 }
 
-void MatrixElement::setColor()
+// See comment at setColor(), below. Always have current key info
+// when this being called.
+void MatrixElement::setLabel(
+const bool          keyDependent,
+const Key* const    key)
+{
+    if (m_drumMode) return;
+
+    if (!m_scene->getMatrixWidget()->getShowNoteNames()) {
+        if (m_textItem) {
+            m_scene->graphicsTextPool.putBack(m_textItem);
+            m_textItem = nullptr;
+        }
+        return;
+    }
+
+    if (keyDependent)
+        getKeyInfo(key, m_showName, m_time, m_pitch);
+
+    setLabel(m_time,
+             m_pitch,
+             m_scene->getRulerScale()->getXForTime(m_time),
+             noteBrush());
+}
+
+void MatrixElement::setLabel(
+const timeT      time,
+const int        pitch,
+const double     x0,
+const QBrush    &brush)
+{
+    int               resolution     = m_scene->getYResolution();
+    ChordNameRuler   *chordNameRuler = m_scene->getMatrixWidget()
+                                               ->chordNameRuler();
+
+    qreal   fres     (resolution + 1);
+    double  pitchy = (127 - pitch - m_pitchOffset) * (resolution + 1);
+
+    if (!m_textItem) m_textItem = m_scene->graphicsTextPool.getFrom();
+
+    // Draw text on top of note, see constants in .h file
+    if (m_selected)
+        m_textItem->setZValue(m_selectedSegmentTextZ);
+    else
+        m_textItem->setZValue(m_current ? m_activeSegmentTextZ : m_textZ);
+    m_textItem->setBrush(textColor(brush.color()));
+
+    const MatrixWidget *matrixWidget = m_scene->getMatrixWidget();
+
+    QString noteName;
+    switch (matrixWidget->getNoteNameType()) {
+        case MatrixWidget::NoteNameType::OFF:
+            noteName = "";
+            break;
+
+        case MatrixWidget::NoteNameType::CONCERT:
+            noteName = MidiPitchLabel(pitch, "", m_sharps).getQString();
+        break;
+
+        case MatrixWidget::NoteNameType::FIXED_DO:
+            noteName = MidiPitchLabel::fixedSolfege(pitch, m_sharps);
+        break;
+
+        case MatrixWidget::NoteNameType::INTEGER_ABSOLUTE:
+        noteName =  QString("%1:%2")
+                   .arg(pitch % 12)
+                   .arg(  pitch / 12
+                        + Preferences::midiOctaveNumberOffset.get());
+        break;
+
+        case MatrixWidget::NoteNameType::VELOCITY:
+            noteName = QString("%1").arg(m_velocity);
+        break;
+
+        case MatrixWidget::NoteNameType::RAW_MIDI:
+            noteName = QString("%1").arg(pitch);
+        break;
+
+        case MatrixWidget::NoteNameType::DEGREE:
+            if (m_minor && !m_offsetMinors && m_alternateMinorNotes)
+                noteName =   MidiPitchLabel
+                           ::scaleDegreeMinorAlt(m_degree, m_sharps);
+            else
+                noteName = MidiPitchLabel::scaleDegreeMajor(m_degree, m_sharps);
+        break;
+
+        case MatrixWidget::NoteNameType::MOVABLE_DO:
+            noteName = MidiPitchLabel::movableSolfege(m_degree, m_sharps);
+        break;
+
+        case MatrixWidget::NoteNameType::INTEGER_KEY:
+            noteName = QString("%1").arg(m_degree);
+        break;
+    }
+
+    if (      matrixWidget->getChordSpellingType()
+           != MatrixWidget::ChordSpellingType::OFF
+        && chordNameRuler
+        && chordNameRuler->haveChords()) {
+        int rootDegree = chordNameRuler->chordRootPitchAtTime(time);
+        if (rootDegree != -1) {
+            unsigned chordDegree = (pitch + 12 - rootDegree) % 12;
+            if (   m_scene->getMatrixWidget()->getChordSpellingType()
+                == MatrixWidget::ChordSpellingType::DEGREE)
+                noteName =  QString("%1(%2)")
+                           .arg(noteName)
+                           .arg(  MidiPitchLabel
+                                ::scaleDegreeMajor(chordDegree, m_sharps));
+            else
+                noteName = QString("%1(%2)").arg(noteName)
+                                            .arg(chordDegree);
+        }
+    }
+
+    m_textItem->setText(noteName, m_noteItem->rect());
+
+    QFont font;
+    font.setPixelSize(resolution);
+    m_textItem->setFont(font);
+    m_textItem->setData(MatrixElementData,
+                        QVariant::fromValue((void *)this));
+    m_textItem->setPos(x0, pitchy - fres * 0.1);
+}  // setLabel(const int, const bool, const QBrush&)
+
+void MatrixElement::setColor(
+const bool          keyDependent,
+const Key* const    key)
 {
     QAbstractGraphicsShapeItem *item = getActiveItem();
     if (!item) return;
+
+    if (keyDependent)
+        getKeyInfo(key, m_showName, m_time, m_pitch);
 
     const QBrush brush(noteBrush());
     item->setBrush(brush);
@@ -835,6 +882,8 @@ void MatrixElement::setColor()
         m_drumSelectItem->setBrush(selectionBorderColor(m_drumItem));
 }
 
+// See comment at setColor(), above. Always have current key info
+// when this being called.
 QBrush MatrixElement::noteBrush()
 const
 {
@@ -850,9 +899,14 @@ const
         return QBrush(colour);
     }
 
-    // For darkening non-current segment notes
-    static const int DARKEN  = 133, // >100 is darken  for QColor::darker()
-                     LIGHTEN = 133; // >100 is lighten for QColor::lighter()
+    // Never pitch-color drum "notes".
+    // Velocity as best choice because likely only on percussion
+    //   track (segments) so SEGMENT not useful.
+    // Velocity should likely stand out against PITCH notes.
+    // Full solution would be to keep "previousNoteColorType" updated
+    //   to anything but PITCH and use that, but more trouble than worth.
+    if (m_drumMode && noteColorType == MatrixWidget::NoteColorType::PITCH)
+        noteColorType = MatrixWidget::NoteColorType::VELOCITY;
 
     if (event()->has(BaseProperties::TRIGGER_SEGMENT_ID)) {
         // Was historically solid Qt::cyan as contrasting color to
@@ -862,14 +916,26 @@ const
         return *triggerNoteBrush;
     }
 
+#if 0   // Unused, see below
+    // For darkening non-current segment notes
+    static const int DARKEN  = 133, // >100 is darken  for QColor::darker()
+                     LIGHTEN = 133; // >100 is lighten for QColor::lighter()
+#endif
+
     if (noteColorType == MatrixWidget::NoteColorType::VELOCITY) {
         colour = DefaultVelocityColour::getInstance()->getColour(m_velocity);
+#if 0   // t4os: Removing this classic RG hack.
+        //       Is confusing (why is same velocity sometimes different color?)
+        //       Use "Only active" (color) if want to differentiate current
+        //         segment vs others.
         if (colorAllSegments) {
             // Change brightness to differentiate active segment vs others
             if (m_current) colour = colour.lighter(LIGHTEN);
             else           colour = colour.darker(DARKEN);
         }
         return QBrush(colour);
+#endif
+        return QBrush(colour.lighter());  // match what velocity ruler does
     }
     else if (noteColorType != MatrixWidget::NoteColorType::PITCH) {
         const RosegardenDocument* document = m_scene->getDocument();
@@ -888,16 +954,20 @@ const
         return QBrush(colour);
     }
     else {  // noteColorType == MatrixWidget::NoteColorType::PITCH)
-        if (m_minor) {
-            if (m_offsetMinors)
-                return *majorScaleBrushes[m_degree % 12];
+        if (m_keyRelative) {
+            if (m_minor) {
+                if (m_offsetMinors)
+                    return *majorScaleBrushes[m_degree % 12];
+                else
+                    return *minorScaleBrushes[m_degree];
+            }
             else
-                return *minorScaleBrushes[m_degree];
+                return *majorScaleBrushes[m_degree];
         }
         else
-            return *majorScaleBrushes[m_degree];
+            return *majorScaleBrushes[m_pitch % 12];
     }
-}
+}  // MatrixElement::noteBrush()
 
 QColor
 MatrixElement::textColor(
@@ -939,7 +1009,10 @@ const
                QColor::fromHsv((noteColor.hue() + 240) % 360,
                                mapTo128_255(noteColor.saturation()),
                                mapTo128_255(noteColor.value()),
-                               128);   // t4os -- alpha
+                               255);// alpha, was 128 to show non-active-
+                                    // segment notes, but reduces visibility
+                                    // and causes artifacts with contiguous
+                                    // and/or tied notes.
 
         return result;
     }

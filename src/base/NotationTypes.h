@@ -3,8 +3,8 @@
 /*
     Rosegarden
     A sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
-    Modifications and additions Copyright (c) 2022 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
     See the AUTHORS file for more details.
 
     This program is free software; you can redistribute it and/or
@@ -427,15 +427,44 @@ public:
      */
     Key(int tonicPitch, bool isMinor);
 
-    Key(const Key &kc);
+    Key(const Key &kc)
+    :   m_event            (kc.m_event),
+        m_name             (kc.m_name),
+        m_unicodeName      (kc.m_unicodeName),
+        m_keyDetails       (kc.m_keyDetails)
+    {
+#if 0   // To match semantics in master branch.
+        // Mysteriously causes segfault if enabled.
+        if (kc.m_accidentalHeights) {
+            m_accidentalHeights = new std::vector<int>(
+                                      kc.m_accidentalHeights->size());
+            for (unsigned ndx = 0 ; ndx < m_accidentalHeights->size() ; ++ndx)
+                m_accidentalHeights[ndx] = kc.m_accidentalHeights[ndx];
+        }
+#endif
+    }
 
     ~Key() {
-        delete m_accidentalHeights;
     }
 
     Key &operator=(const Key &kc) {
-        m_name = kc.m_name;
-        m_accidentalHeights = nullptr;
+        m_name              = kc.m_name;
+        m_unicodeName       = kc.m_unicodeName;
+        m_keyDetails        = kc.m_keyDetails;
+#if 0   // To match semantics in master branch.
+        // Mysteriously causes segfault if enabled.
+        if (kc.m_accidentalHeights) {
+            if (m_accidentalHeights)
+                m_accidentalHeights->reserve(kc.m_accidentalHeights->size());
+            else
+                m_accidentalHeights = new std::vector<int>(
+                                          kc.m_accidentalHeights->size());
+            for (unsigned ndx = 0 ; ndx < m_accidentalHeights->size() ; ++ndx)
+                m_accidentalHeights[ndx] = kc.m_accidentalHeights[ndx];
+        }
+        else
+#endif
+            m_accidentalHeights.clear();;
         return *this;
     }
 
@@ -450,7 +479,7 @@ public:
     // We only use this for map, which doesn't need an intelligent
     // ordering.
     bool operator<(const Key &b) const
-    { return this->getName() < b.getName(); }
+    { return this->m_name < b.m_name; }
 
     /**
      * Test whether the given event is a valid Key event.
@@ -463,7 +492,7 @@ public:
      * same signature.
      */
     bool isMinor() const {
-        return m_keyDetailMap[m_name].m_minor;
+        return m_keyDetails->m_minor;
     }
 
     /**
@@ -471,7 +500,7 @@ public:
      * sharps, false if flats.
      */
     bool isSharp() const {
-        return m_keyDetailMap[m_name].m_sharps;
+        return m_keyDetails->m_sharps;
     }
 
     /**
@@ -481,14 +510,14 @@ public:
      * e.g. 0 for the C in C major.
      */
     int getTonicPitch() const {
-        return m_keyDetailMap[m_name].m_tonicPitch;
+        return m_keyDetails->m_tonicPitch;
     }
 
     /**
      * Return the number of sharps or flats in the key's signature.
      */
     int getAccidentalCount() const {
-        return m_keyDetailMap[m_name].m_sharpCount;
+        return m_keyDetails->m_sharpCount;
     }
 
     /**
@@ -496,8 +525,12 @@ public:
      * major/minor mode.  For example if called on C major,
      * returns A minor.
      */
-    Key getEquivalent() const {
-        return Key(m_keyDetailMap[m_name].m_equivalence);
+     Key getEquivalent() const {
+        auto found = m_keyDetailMap.find(m_name);
+        if (found == m_keyDetailMap.end())
+            return Key();
+        else
+            return Key(found->second.m_equivalence);
     }
 
     const Event *getEvent() const { return m_event;}
@@ -510,12 +543,17 @@ public:
         return m_name;
     }
 
+    // Return the name of the key with good unicode "#" and "b" glyphs
+    std::string getUnicodeName() const { return m_unicodeName; }
+
+#if 0   // unused
     /**
      * Return the name of the key, in the form used by X11 RG2.1.
      */
     std::string getRosegarden2Name() const {
-        return m_keyDetailMap[m_name].m_rg2name;
+        return m_keyDetails->m_rg2name;
     }
+#endif
 
     /**
      * Return the accidental at the given height-on-staff
@@ -585,36 +623,50 @@ public:
     Key transpose(int pitchDelta, int heightDelta);
 
 private:
-    const Event* const m_event;
-    std::string m_name;
-    mutable std::vector<int> *m_accidentalHeights;
+    void setUnicodeName() {
+        auto found = m_unicodeNames.find(m_name);
+        if (found == m_unicodeNames.end())
+            m_unicodeName = m_name;
+        else
+            m_unicodeName = found->second;
+    }
+
+    const Event* const  m_event;
+    std::string         m_name,
+                        m_unicodeName;
 
     struct KeyDetails {
         bool   m_sharps;
         bool   m_minor;
         int    m_sharpCount;
         std::string m_equivalence;
-        std::string m_rg2name;
+     // std::string m_rg2name;  //  unused
         int    m_tonicPitch;
 
         KeyDetails(); // ctor needed in order to live in a map
 
-        KeyDetails(bool sharps, bool minor, int sharpCount,
-                   std::string equivalence, std::string rg2name,
-                                   int m_tonicPitch);
+        KeyDetails(bool sharps,
+                   bool         minor,
+                   int          sharpCount,
+                   std::string  equivalence,
+                // std::string  rg2name,  // unused
+                   int          m_tonicPitch);
 
         KeyDetails(const KeyDetails &d);
 
         KeyDetails &operator=(const KeyDetails &d);
     };
 
+    const KeyDetails         *m_keyDetails;
+    mutable std::vector<int>  m_accidentalHeights;
 
     typedef std::map<std::string, KeyDetails> KeyDetailMap;
-    static KeyDetailMap m_keyDetailMap;
-    static void checkMap();
-    void checkAccidentalHeights() const;
+    static const KeyDetailMap                   m_keyDetailMap;
+    static const std::map<const std::string,
+                          const std::string>    m_unicodeNames;
 
-};
+    void checkAccidentalHeights() const;
+};  // class Key
 
 
 /**

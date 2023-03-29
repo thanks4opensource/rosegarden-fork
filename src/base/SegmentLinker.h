@@ -4,7 +4,8 @@
 /*
     Rosegarden
     A sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
     See the AUTHORS file for more details.
 
     This program is free software; you can redistribute it and/or
@@ -74,6 +75,7 @@ private:
     struct LinkedSegmentParams
     {
         explicit LinkedSegmentParams(Segment *s);
+        ~LinkedSegmentParams();
         Segment *m_linkedSegment;
         uint m_refreshStatusId;
     };
