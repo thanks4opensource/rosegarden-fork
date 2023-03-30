@@ -25,7 +25,7 @@ Contents
     * [Loop Ruler](#loop_ruler)
     * [Marker Ruler](#marker_ruler)
     * [Chord/Key Ruler (formerly "Chord Name Ruler")](#chord_key_ruler)
-* [Screenshots](#Screenshots)
+* [Screenshots](#screenshots)
 * [Further information](#further_information)
 * [Future work](#future_work)
 
@@ -720,17 +720,7 @@ changes include:
 
 
 
-<br> <a name="further_information"></a>
-Further information
--------------------
-
-For further information see [README-official.md](README-official.md)
-and/or the official Rosegarden links listed
-[above](#acknowledgment_and_motivation).
-
-
-
-<br> <a name="Screenshots"></a>
+<br> <a name="screenshots"></a>
 Screenshots
 -----------
 
@@ -846,6 +836,16 @@ Automatic zoom/pan of matrix grid. For full documentation see [matrix
 editor panner features](#matrix_editor_panner_features), above.
 
 [![fit_notes](./screenshots/thumbnails/fit_notes.png 'Fit visible notes')](./screenshots/fit_notes.png)
+
+
+
+<br> <a name="further_information"></a>
+Further information
+-------------------
+
+For further information see [README-official.md](README-official.md)
+and/or the official Rosegarden links listed
+[above](#acknowledgment_and_motivation).
 
 
 
