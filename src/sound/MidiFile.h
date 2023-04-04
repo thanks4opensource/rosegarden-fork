@@ -2,7 +2,8 @@
 /*
   Rosegarden
   A sequencer and musical notation editor.
-  Copyright 2000-2022 the Rosegarden development team.
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License as
@@ -135,7 +136,7 @@ private:
     void findNextTrack(std::ifstream *midiFile);
     /// Combine each note-on/note-off pair into a single note event with a duration.
     void consolidateNoteEvents(TrackId trackId);
-    /// Configure the Instrument based on events in Segment at time 0.
+    /// Configure the Instrument based on programchange, etc. events.
     static void configureInstrument(
             Track *track, Segment *segment, Instrument *instrument);
 

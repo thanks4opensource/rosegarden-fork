@@ -357,6 +357,10 @@ protected:
     /// Make sure the rulers are in sync when we are shown.
     void showEvent(QShowEvent *event) override;
 
+    // Used by segmentTrackInstrumentLabel() and updateToCurrentSegment()
+    QString getInstrumentName(const Instrument* const,
+                              const Segment*    const);
+
 #if 0   // Now done in void MatrixScene::focusInEvent() so always happens
         // wnen entering matrix editor window, not just widget area.
         // Was:

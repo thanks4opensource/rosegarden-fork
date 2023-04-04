@@ -3,7 +3,8 @@
 /*
     Rosegarden
     A sequencer and musical notation editor.
-    Copyright 2000-2022 the Rosegarden development team.
+    Copyright 2000-2023 the Rosegarden development team.
+    Modifications and additions Copyright (c) 2022,2023 Mark R. Rubin aka "thanks4opensource" aka "thanks4opensrc"
     See the AUTHORS file for more details.
 
     This program is free software; you can redistribute it and/or
@@ -1180,7 +1181,9 @@ MidiFile::convertToRosegarden(const QString &filename, RosegardenDocument *doc)
                                        segmentStartTime);
         }
 
-        // Configure the Instrument based on events at time 0.
+        // Configure the Instrument based Program Change and Bank Change
+        //   events in the segment.
+        // t4os: Was "Configure the Instrument based on events at time 0."
         configureInstrument(track, segment,
                             studio.getInstrumentById(instrumentId));
 
@@ -1234,49 +1237,56 @@ void MidiFile::configureInstrument(
 
     track->setInstrument(instrument->getId());
 
-    Segment::iterator msbIter = segment->end();
-    Segment::iterator lsbIter = segment->end();
+    Segment::iterator           msbIter = segment->end(),
+                                lsbIter = segment->end(),
+                      programChangeIter = segment->end();
 
     // For each event in the segment
-    for (Segment::iterator i = segment->begin();
-         i != segment->end();
-         /* increment before use */) {
-        // Increment before use.  This allows us to delete events
-        // from the Segment.
-        Segment::iterator j = i++;
+    for (Segment::const_iterator   i = segment->cbegin();
+                                   i != segment->cend();
+                                 ++i)
+    {
+        const Event &event = **i;
 
-        const Event &event = **j;
-
+#if 0   // t4os -- NO! Not many MIDI files have Bank Select, ProgramChange
+        //         etc. *not* at time 0
         // We only care about events at time 0.
         if (event.getAbsoluteTime() > 0)
             break;
+#endif
 
         // If this is a Bank Select MSB, save it.
-        if (event.isa(Controller::EventType)  &&
-            event.get<Int>(Controller::NUMBER) ==
-                    MIDI_CONTROLLER_BANK_MSB) {
-            msbIter = j;
+        if (   msbIter == segment->end()
+            && event.isa(Controller::EventType)
+            && event.get<Int>(Controller::NUMBER) == MIDI_CONTROLLER_BANK_MSB)
+        {
+            msbIter = i;
             continue;
         }
 
         // If this is a Bank Select LSB, save it.
-        if (event.isa(Controller::EventType)  &&
-            event.get<Int>(Controller::NUMBER) ==
-                    MIDI_CONTROLLER_BANK_LSB) {
-            lsbIter = j;
+        if (   lsbIter == segment->end()
+            && event.isa(Controller::EventType)
+            && event.get<Int>(Controller::NUMBER) == MIDI_CONTROLLER_BANK_LSB)
+        {
+            lsbIter = i;
             continue;
         }
 
         // If this is a Program Change
-        if (event.isa(ProgramChange::EventType)) {
+        if (   programChangeIter == segment->end()
+            && event.isa(ProgramChange::EventType))
+        {
             // Configure the instrument.
             int program = event.get<Int>(ProgramChange::PROGRAM);
             instrument->setProgramChange(program);
             instrument->setSendProgramChange(true);
 
+#if 0   // t4os -- Why was this being done? Because thought was
+        //         not needed if change was at time 0?
             // Remove the program change from the Segment.
             segment->erase(j);
-
+#endif
             continue;
         }
 
@@ -1296,24 +1306,51 @@ void MidiFile::configureInstrument(
                         controller,
                         event.get<Int>(Controller::VALUE));
 
+#if 0   // t4os -- Why was this being done? Because thought was
+        //         not needed if controller was at time 0?
                 // Remove the event from the Segment.
                 segment->erase(j);
-
+#endif
                 continue;
             }
         }
     }
 
+    std::set<unsigned>  knownBanks;
+    auto                device = dynamic_cast<MidiDevice*>(  instrument
+                                                           ->getDevice());
+    if (device)
+        for (const auto &bank : device->getBanks())
+            knownBanks.emplace((bank.getMSB() << 8) | bank.getLSB());
+
     // If we have both msb and lsb for bank select
     if (msbIter != segment->end()  &&  lsbIter != segment->end()) {
+        unsigned msb  = (*msbIter)->get<Int>(Controller::VALUE),
+                 lsb  = (*lsbIter)->get<Int>(Controller::VALUE),
+                 bank = (msb << 8) | lsb;
+
+        if (knownBanks.find(bank) == knownBanks.end()) {
+            // Current instrument doesn't have bank specified in file,
+            // so use first (default?) or 0,0
+            if (knownBanks.empty())
+                msb = lsb = 0;
+            else {
+                msb = *(knownBanks.begin()) >> 8;
+                lsb = *(knownBanks.begin())  & 0xff;
+            }
+        }
+
         // Configure the Instrument
-        instrument->setMSB((*msbIter)->get<Int>(Controller::VALUE));
-        instrument->setLSB((*lsbIter)->get<Int>(Controller::VALUE));
+        instrument->setMSB(msb);
+        instrument->setLSB(lsb);
         instrument->setSendBankSelect(true);
 
+#if 0   // t4os -- Why was this being done? Because thought was
+        //         not needed if controller was at time 0?
         // Remove the events.
         segment->erase(msbIter);
         segment->erase(lsbIter);
+#endif
     }
 
     // Use the program name for a label if nothing else
@@ -1325,7 +1362,7 @@ void MidiFile::configureInstrument(
         if (segment->getLabel() == defaultTrackName)
             segment->setLabel(instrument->getProgramName());
     }
-}
+}  // configureInstrument()
 
 bool
 MidiFile::convertToMidi(RosegardenDocument *doc, const QString &filename)

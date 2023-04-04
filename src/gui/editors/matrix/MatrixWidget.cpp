@@ -928,7 +928,7 @@ const bool  xProvided)
 
     const Segment *currentSegment = m_scene->getCurrentSegment();
 
-    // t4osDEBUG: Don't really need this because will use new
+    // t4os: Don't really need this because will use new
     // Segment::getKeyAtTimeFast() which returns first key signature
     // regardless if time is before that, or even before start of
     // segment.
@@ -1172,6 +1172,39 @@ MatrixWidget::setCanvasCursor(const Qt::CursorShape cursorShape)
     if (m_panned) m_panned->viewport()->setCursor(cursorShape);
 }
 
+// Copied from RosegardenMainViewWidget::recolorSegmentsInstrument()
+QString MatrixWidget::getInstrumentName(
+const Instrument* const  instrument,
+const Segment*    const  segment)
+{
+    if (instrument->getNaturalChannel() == 9)
+        return tr("drums");
+
+    // First see if is MIDI (otherwise program change meaningless).
+    MidiDevice *device = dynamic_cast<MidiDevice*>(  instrument
+                                                   ->getDevice());
+    if (!device)
+        return tr("<unnamed>");
+
+    int programChange = -1;
+    for (auto const &event : *segment) {
+        if (event->isa(ProgramChange::EventType)) {
+            programChange = event->get<Int>(ProgramChange::PROGRAM);
+            break;
+        }
+    }
+
+    if (programChange == -1)
+        return tr("<unnamed>");
+
+    const MidiProgram &program(device->getPrograms()[programChange]);
+    const std::string  programName = program.getName();
+    if (programName == "")
+        return tr("<unnamed>");
+
+    return QString::fromStdString(program.getName());
+}
+
 QString MatrixWidget::segmentTrackInstrumentLabel(
 const QString formatString,
 const Segment* const segment)
@@ -1187,7 +1220,12 @@ const Segment* const segment)
     Instrument  *instrument = m_document->getStudio().
                                     getInstrumentById(track->getInstrument());
     QString programName = QString::fromStdString(instrument->getProgramName());
+#if 0   // t4osDEBUG
     if (programName == "") programName = tr("<unnamed>");
+#else
+    if (programName == "")
+        programName = getInstrumentName(instrument, segment);
+#endif
 
     QString fmt(formatString);
 
@@ -1704,9 +1742,13 @@ const Segment *segment)
     // calls segmentTrackInstrumentLabel() which goes through
     // extracting track/instrument/programName/etc which we
     // already have here.
-
     QString programName = QString::fromStdString(instrument->getProgramName());
+#if 0   // t4osDEBUG
     if (programName == "") programName = tr("<unnamed>");
+#else
+    if (programName == "")
+        programName = getInstrumentName(instrument, segment);
+#endif
 
     const QString segmentText = tr("Track %1: (%2) -- %3 -- %4    Segment: %5").
             arg(track->getPosition() + 1).
